@@ -1,9 +1,9 @@
-# 管理_AI運営者向け収集候補レビューUI仕様書
+# 管理 AI運営者向け収集候補レビューUI仕様書
 
 **バージョン**: v1.1
 **作成日**: 2026年3月16日
 **関連ドキュメント**:
-- [管理_審査ワークフロー仕様書](/document/specification/management/管理 審査ワークフロー仕様書.md)
+- /document/specification/management/管理 審査ワークフロー仕様書.md
 
 ## 目次
 

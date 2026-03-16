@@ -3,7 +3,7 @@
 **バージョン**: v1.1
 **作成日**: 2026年3月16日
 **関連ドキュメント**:
-- [ゲムコメ_技術スタック仕様書](/document/specification/common/技術スタック仕様書.md)
+- /document/specification/common/技術スタック仕様書.md
 
 ## 目次
 
@@ -307,7 +307,7 @@ Function C実行開始時に、当日の `collection_quota_logs` の累計消費
 
 ### 7.3 クォータ超過時の通知
 
-スキップが発生した場合は `admin_notifications` コレクションに通知レコードを作成し、オーナーに通知する（[管理_お知らせ管理仕様書](/document/specification/management/管理 お知らせ管理仕様書.md) 第3章に準ずる）。
+スキップが発生した場合は `admin_notifications` コレクションに通知レコードを作成し、オーナーに通知する（/document/specification/management/管理 お知らせ管理仕様書.md 第3章に準ずる）。
 
 ---
 
