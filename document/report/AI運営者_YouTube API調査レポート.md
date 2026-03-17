@@ -2,7 +2,11 @@
 
 **バージョン**: v1.0  
 **作成日**: 2026年3月15日  
-**関連ドキュメント**: ゲムコメ_AI運営者_企画書 / ゲムコメ_YouTube定期取得仕様書
+
+## 関連ドキュメント
+- /document/plan/AI運営者 企画書.md
+- /document/specification/common/共通 youtube定期取得仕様書.md
+
 
 ---
 

@@ -2,7 +2,13 @@
 
 **バージョン**: v1.0  
 **作成日**: 2026年3月15日  
-**関連ドキュメント**: ゲムコメ企画書 / 管理_審査ワークフロー仕様書 / 管理_ユーザー管理仕様書 / 管理_マスタ管理仕様書
+
+## 関連ドキュメント
+- /document/plan/ゲムコメ企画書.md
+- /document/specification/management/管理 審査ワークフロー仕様書.md
+- /document/specification/management/管理 ユーザー管理仕様書.md
+- /document/specification/management/管理 マスタ管理仕様書.md
+
 
 -----
 

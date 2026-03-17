@@ -2,7 +2,12 @@
 
 **バージョン**: v1.0  
 **作成日**: 2026年3月15日  
-**関連ドキュメント**: ゲムコメ_AI運営者_企画書 / AI運営者_YouTube API調査レポート / 管理_審査ワークフロー仕様書
+
+## 関連ドキュメント
+- /document/plan/AI運営者 企画書.md
+- /document/report/AI運営者_YouTube API調査レポート.md
+- /document/specification/management/管理 審査ワークフロー仕様書.md
+
 
 ---
 
