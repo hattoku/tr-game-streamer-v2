@@ -4,7 +4,7 @@
 **作成日**: 2026年3月12日
 **更新日**: 2026年3月17日
 **関連ドキュメント**:
-- /document/specification/トレーサビリティ・マトリクス.md
+- /document/specification/仕様書トレーサビリティ・マトリクス.md
 - /document/specification/page/ページ一覧仕様書.md
 - /document/specification/common/共通 ページレイアウト 仕様書.md
 - /document/specification/page/ページ ログイン アカウント登録・ログイン仕様書.md

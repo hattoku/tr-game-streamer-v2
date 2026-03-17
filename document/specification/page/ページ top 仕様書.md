@@ -7,7 +7,7 @@
 - /document/specification/common/共通 ページレイアウト 仕様書.md
 - /document/specification/page/ページ top 初めての方へ 仕様書.md
 - /document/plan/ゲムコメ企画書.md
-- /document/specification/トレーサビリティ・マトリクス.md
+- /document/specification/仕様書トレーサビリティ・マトリクス.md
 
 ---
 
