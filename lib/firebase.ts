@@ -4,12 +4,12 @@ import { getFirestore } from 'firebase/firestore';
 const isStg = process.env.NEXT_PUBLIC_APP_ENV === 'stg';
 
 const firebaseConfig = isStg ? {
-    apiKey: "AIzaSyCDq5H86zeDMPIRutPMF-FUg-v6J_UsCIU",
-    authDomain: "tr-game-streamer-stg.firebaseapp.com",
-    projectId: "tr-game-streamer-stg",
-    storageBucket: "tr-game-streamer-stg.firebasestorage.app",
-    messagingSenderId: "562598531589",
-    appId: "1:562598531589:web:533c79bc648ed9d10d426c",
+    apiKey: process.env.NEXT_PUBLIC_STG_FIREBASE_API_KEY,
+    authDomain: process.env.NEXT_PUBLIC_STG_FIREBASE_AUTH_DOMAIN || "tr-game-streamer-stg.firebaseapp.com",
+    projectId: process.env.NEXT_PUBLIC_STG_FIREBASE_PROJECT_ID || "tr-game-streamer-stg",
+    storageBucket: process.env.NEXT_PUBLIC_STG_FIREBASE_STORAGE_BUCKET || "tr-game-streamer-stg.firebasestorage.app",
+    messagingSenderId: process.env.NEXT_PUBLIC_STG_FIREBASE_MESSAGING_SENDER_ID || "562598531589",
+    appId: process.env.NEXT_PUBLIC_STG_FIREBASE_APP_ID || "1:562598531589:web:533c79bc648ed9d10d426c",
 } : {
     apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
     authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
