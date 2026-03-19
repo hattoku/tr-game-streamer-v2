@@ -1,0 +1,12 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '--tag'
+      - '$_IMAGE_URL'
+      - '--build-arg'
+      - 'NEXT_PUBLIC_APP_ENV=$_APP_ENV'
+      - '.'
+
+images:
+  - '$_IMAGE_URL'

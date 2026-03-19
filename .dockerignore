@@ -1,0 +1,15 @@
+node_modules
+npm-debug.log
+.next
+.git
+.github
+README.md
+.dockerignore
+Dockerfile
+.env*.local
+.env.development
+.env.test
+out
+build
+next-env.d.ts
+tsconfig.tsbuildinfo
