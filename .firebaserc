@@ -1,0 +1,23 @@
+{
+  "projects": {
+    "stg": "tr-game-streamer-stg",
+    "prod": "tr-game-streamer"
+  },
+  "targets": {
+    "tr-game-streamer-stg": {
+      "hosting": {
+        "app": [
+          "tr-game-streamer-stg"
+        ]
+      }
+    },
+    "tr-game-streamer": {
+      "hosting": {
+        "app": [
+          "tr-game-streamer"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}

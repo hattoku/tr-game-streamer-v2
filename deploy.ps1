@@ -37,6 +37,7 @@ gcloud run deploy "$ServiceName" `
 
 # 3. Firebase Hosting デプロイ
 Write-Host "Deploying to Firebase Hosting..." -ForegroundColor Green
-firebase deploy --only hosting --project "$ProjectId"
+# ターゲット名を指定してデプロイ
+firebase deploy --only hosting:app --project "$ProjectId"
 
 Write-Host "Done! Deployment to $Env is complete." -ForegroundColor Green

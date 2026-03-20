@@ -37,6 +37,7 @@ gcloud run deploy "$SERVICE_NAME" \
 
 # 3. Firebase Hosting デプロイ (Cloud Run へのリライト設定を反映)
 echo "Deploying to Firebase Hosting..."
-firebase deploy --only hosting --project "$PROJECT_ID"
+# ターゲット名を指定してデプロイ
+firebase deploy --only hosting:app --project "$PROJECT_ID"
 
 echo "Done! Deployment to $ENV is complete."
