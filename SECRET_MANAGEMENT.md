@@ -8,6 +8,8 @@
 |---------|------|
 | `lib/constants.ts` | YouTube API キー |
 | `lib/firebase.ts` | Firebase 認証情報 |
+| (Cloud Run 設定) | `STAGING_BASIC_AUTH_USER` (ステージング環境Basic認証) |
+| (Cloud Run 設定) | `STAGING_BASIC_AUTH_PASSWORD` (ステージング環境Basic認証) |
 
 新たに秘密情報を追加する場合も、同様の構成ファイルに追加する。
 
