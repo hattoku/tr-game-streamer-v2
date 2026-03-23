@@ -5,7 +5,7 @@
 **更新日**: 2026年3月23日
 **関連ドキュメント**:
 - /document/plan/AI運営者 企画書.md
-- /document/specification/management/管理_Ai運営者 コンテンツ収集機能仕様書.md
+- /document/specification/management/管理_AI運営者 コンテンツ収集機能仕様書.md
 - /document/specification/management/管理 審査ワークフロー仕様書.md
 - /document/specification/management/管理 マスタ管理仕様書.md
 
