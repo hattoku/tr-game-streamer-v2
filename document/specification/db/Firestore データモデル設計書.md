@@ -544,7 +544,7 @@ YouTubeチャンネルの情報。
 
 | フィールド | 型 | 必須 | 説明 |
 |-----------|-----|:---:|------|
-| `type` | string | ✅ | `"quota_exceeded"` / `"fraud_detected"` / `"review_lv2"` / `"collection_completed"` |
+| `type` | string | ✅ | `"quota_exceeded"` / `"fraud_detected"` / `"review_lv2"` / `"collection_completed"` / `"ai_review_error"` |
 | `title` | string | ✅ | 通知タイトル |
 | `body` | string | ✅ | 通知本文 |
 | `relatedId` | string? | — | 関連ドキュメントID |
@@ -790,3 +790,4 @@ ai_operators ──── (1) users
 | v1.3 | 2026-03-24 | games コレクションに rakutenItemName フィールドを追加 |
 | v1.4 | 2026-03-30 | AI運営者の1体統合に伴う定義更新。ai_operators のジャンルフィールド削除。collection_candidates のジャンルフィールドをコンテキストとして再定義。破損ドキュメントの復旧。 |
 | v1.5 | 2026-03-30 | 不要な `genre_search_keywords` コレクションの定義を削除。タイトルベース収集への移行に伴うクリーンアップ。 |
+| v1.6 | 2026-03-30 | admin_notifications に AI審査エラー通知タイプ（`ai_review_error`）を追加。 |
