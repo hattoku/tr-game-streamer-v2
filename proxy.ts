@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const isStaging = process.env.NEXT_PUBLIC_APP_ENV === 'stg';
   const authUser = process.env.STAGING_BASIC_AUTH_USER;
   const authPass = process.env.STAGING_BASIC_AUTH_PASSWORD;
