@@ -50,10 +50,19 @@
 
 優先度が高い順:
 
-1. **Firestoreセキュリティルールの本設計**（最優先・ブロッカー）
-   現在`if false`で全閉鎖中。`document/specification/db/Firestoreデータモデル設計書.md`
-   （29コレクション定義）と`document/specification/common/`配下の権限表を基に、実際に動く
-   ルールを設計する必要がある。
+1. ~~**Firestoreセキュリティルールの本設計**（最優先・ブロッカー）~~ → **2026-09-09対応済み**
+   `firestore.rules` / `firestore.indexes.json` を新規作成し、`firebase.json`に組み込んだ上で
+   本番プロジェクト（`tr-game-streamer`）にデプロイ済み。29コレクション全てに
+   `Firestoreデータモデル設計書.md`セクション6と`共通 機能別権限表 仕様書.md`に基づくルールを定義。
+   ロール判定はFirebase Auth Custom Claims（`role`）を正とする方針。
+   **積み残し・要確認事項**:
+   - レビュー一覧等で投稿者の`displayName`/`profileImageUrl`を表示する際、`users`ドキュメントを
+     本人・管理者以外は読めない設計にしたため、`reviews`側への非正規化コピーなど別の参照方法を
+     機能実装時に検討する必要あり。
+   - `collection_candidates`/`new_title_candidates`の承認操作を「オーナー限定」にすべきか
+     「管理者（オーナー・運営者）共通」にすべきかは仕様書に明記がなく、暫定的に管理者共通で許可。
+   - ステージング環境（`tr-game-streamer-stg`）へは未デプロイ（下記5.参照）。
+   - ルール詳細は`firestore.rules`冒頭コメント参照。
 2. **技術スタックのバージョン方針決定**
    - v1到達点: Next.js 16.1.1 / React 19.2.3
    - v2の`package.json`現状: Next.js 14.1.0 / React 18（まだ雛形段階）

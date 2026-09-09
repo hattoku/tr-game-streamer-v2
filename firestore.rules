@@ -1,0 +1,320 @@
+rules_version = '2';
+
+// プレミテ Firestore セキュリティルール
+//
+// 設計根拠:
+// - document/specification/db/Firestore データモデル設計書.md（v1.7）セクション6
+// - document/specification/common/共通 機能別権限表 仕様書.md（v1.1）
+//
+// ロール判定方針:
+// - Firebase Auth Custom Claims の `role` を正とする（users/{uid}.role はダッシュボード表示用ミラー）。
+//   Custom Claims は Cloud Functions からのみ設定されるため、クライアントからの偽装ができない。
+// - role: "user" | "operator" | "owner" | "ai_operator"
+// - AI運営者（ai_operator）は Cloud Functions（Admin SDK）経由でのみ書き込みを行う想定のため、
+//   このルールファイルでは AI運営者向けの特別な許可は設けない（Admin SDK はルールを常にバイパスする）。
+//
+// 未確定事項（フェーズ1で要検討、HANDOFF.md参照）:
+// - users ドキュメントの公開プロフィール（displayName/profileImageUrl）を他ユーザーがどう参照するか
+//   （レビュー一覧等での表示者名）は、reviews 側への非正規化コピーが未設計のため、現状は
+//   本人 or 管理者のみ読み取り可としている。UIで投稿者名を出す機能を実装する際に要再設計。
+// - collection_candidates / new_title_candidates のレビュー承認が「オーナーのみ」か
+//   「オーナー・運営者可」かは仕様書に明記がないため、暫定的に管理者（オーナー・運営者）共通で許可。
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------------------------------------------------------------------
+    // 共通ヘルパー
+    // ---------------------------------------------------------------------
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function role() {
+      return isSignedIn() ? request.auth.token.role : null;
+    }
+
+    function isAdmin() {
+      return role() == 'owner' || role() == 'operator';
+    }
+
+    function onlyChangedKeys(allowed) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowed);
+    }
+
+    // ---------------------------------------------------------------------
+    // users — アカウント情報（ドキュメントID = Firebase Auth UID）
+    // ---------------------------------------------------------------------
+    match /users/{userId} {
+      allow read: if isSelf(userId) || isAdmin();
+
+      allow create: if isSelf(userId)
+        && request.resource.data.uid == userId
+        && request.resource.data.role == 'user'
+        && request.resource.data.isAI == false
+        && request.resource.data.isBanned == false;
+
+      // 本人はプロフィール・設定系フィールドのみ変更可。role/BAN関連/集計値は管理者のみ変更可。
+      allow update: if isAdmin()
+        || (isSelf(userId) && onlyChangedKeys([
+              'displayName', 'profileImageUrl', 'bio', 'fcmTokens',
+              'isMylistPublic', 'isReviewHistoryPublic',
+              'showNewArrivalNotification', 'lastLoginAt'
+            ]));
+
+      allow delete: if isSelf(userId) || isAdmin();
+    }
+
+    // ---------------------------------------------------------------------
+    // playlists — 再生リスト
+    // ---------------------------------------------------------------------
+    match /playlists/{playlistId} {
+      allow read: if resource.data.isPublic == true || isAdmin();
+
+      allow create, delete: if isAdmin();
+
+      // 通常タグ（playlistTagIds）の追加・削除のみ一般ユーザーにも許可（固定タグ・本体情報は管理者のみ）。
+      allow update: if isAdmin()
+        || (isSignedIn() && onlyChangedKeys(['playlistTagIds']));
+    }
+
+    // ---------------------------------------------------------------------
+    // videos — 再生リスト内動画（公開情報。書き込みはバッチ／管理者のみ）
+    // ---------------------------------------------------------------------
+    match /videos/{videoId} {
+      allow read: if true;
+      allow write: if isAdmin();
+      // playStartCount の加算は不正防止のため Cloud Functions（Admin SDK）経由に限定する想定。
+    }
+
+    // ---------------------------------------------------------------------
+    // channels / games / genres / themes — マスタ系（公開読み取り、書き込みは管理者）
+    // ---------------------------------------------------------------------
+    match /channels/{channelId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /games/{gameId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /genres/{genreId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /themes/{themeId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ---------------------------------------------------------------------
+    // tags — 共通タグマスタ
+    // ---------------------------------------------------------------------
+    match /tags/{tagId} {
+      allow read: if true;
+
+      // 一般ユーザーは自分が作成する origin="user" のタグのみ新規作成可（使用件数0で作成）。
+      allow create: if isAdmin()
+        || (isSignedIn()
+            && request.resource.data.origin == 'user'
+            && request.resource.data.createdBy == request.auth.uid
+            && request.resource.data.usagePlaylistCount == 0
+            && request.resource.data.usageGameCount == 0);
+
+      // 使用件数カウンタは Cloud Functions が更新する想定のため、直接更新・削除は管理者のみ。
+      allow update, delete: if isAdmin();
+    }
+
+    // ---------------------------------------------------------------------
+    // reviews — レビュー（1ユーザー×1再生リスト）
+    // ---------------------------------------------------------------------
+    match /reviews/{reviewId} {
+      allow read: if true;
+
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+
+      // 本人は評価・コメント等のみ変更可。集計値（helpfulCount/trustScore等）は
+      // Cloud Functions（Admin SDK）が算出するため本人でも変更不可。
+      allow update: if isAdmin()
+        || (isSelf(resource.data.userId) && onlyChangedKeys([
+              'starRating', 'watchStatus', 'comment', 'hasSpoiler',
+              'lastOpenedEpisode', 'updatedAt'
+            ]));
+
+      allow delete: if isSelf(resource.data.userId) || isAdmin();
+    }
+
+    // ---------------------------------------------------------------------
+    // helpful_votes — 「参考になった」投票（1ユーザー×1レビュー）
+    // ---------------------------------------------------------------------
+    match /helpful_votes/{voteId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update: if false;
+      allow delete: if isSelf(resource.data.userId) || isAdmin();
+    }
+
+    // ---------------------------------------------------------------------
+    // mylist / watch_progress / watch_history — 個人データ（本人のみRW）
+    // ---------------------------------------------------------------------
+    match /mylist/{mylistId} {
+      allow read, update, delete: if isSelf(resource.data.userId) || isAdmin();
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+    }
+
+    match /watch_progress/{progressId} {
+      allow read, update, delete: if isSelf(resource.data.userId) || isAdmin();
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+    }
+
+    match /watch_history/{historyId} {
+      allow read, update, delete: if isSelf(resource.data.userId) || isAdmin();
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+    }
+
+    // ---------------------------------------------------------------------
+    // collections — ユーザー作成の「まとめ」
+    // ---------------------------------------------------------------------
+    match /collections/{collectionId} {
+      // unlisted はURLを知っている相手への限定公開のため、読み取り可否としては public と同様に扱う。
+      allow read: if resource.data.visibility in ['public', 'unlisted']
+        || isSelf(resource.data.userId)
+        || isAdmin();
+
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isSelf(resource.data.userId) || isAdmin();
+    }
+
+    // ---------------------------------------------------------------------
+    // workflows — 審査ワークフロー（提案・通報）
+    // ---------------------------------------------------------------------
+    match /workflows/{workflowId} {
+      allow read: if isAdmin() || (isSignedIn() && resource.data.submittedBy == request.auth.uid);
+
+      allow create: if isSignedIn()
+        && request.resource.data.submittedBy == request.auth.uid
+        && request.resource.data.status == 'reviewing_lv1';
+
+      // STEP1/STEP2の審査進行・履歴追記は管理者操作（AIによる一次判定はCloud Functions=Admin SDK経由）。
+      allow update, delete: if isAdmin();
+    }
+
+    // ---------------------------------------------------------------------
+    // notices — お知らせ（公開済みのみ一般公開）
+    // ---------------------------------------------------------------------
+    match /notices/{noticeId} {
+      allow read: if resource.data.status == 'published' || isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // ---------------------------------------------------------------------
+    // inquiries — お問い合わせ（ゲスト送信可）
+    // ---------------------------------------------------------------------
+    match /inquiries/{inquiryId} {
+      allow read: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+
+      // ゲスト（未ログイン）も送信可能。ログイン済みならuserIdの整合を要求。
+      allow create: if !isSignedIn()
+        || (request.resource.data.userId == request.auth.uid);
+
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+
+      match /messages/{messageId} {
+        allow read: if isAdmin()
+          || (isSignedIn() && get(/databases/$(database)/documents/inquiries/$(inquiryId)).data.userId == request.auth.uid);
+
+        allow create: if isAdmin()
+          || (isSignedIn()
+              && get(/databases/$(database)/documents/inquiries/$(inquiryId)).data.userId == request.auth.uid
+              && request.resource.data.senderType == 'user'
+              && request.resource.data.senderId == request.auth.uid);
+
+        allow update, delete: if isAdmin();
+      }
+    }
+
+    // ---------------------------------------------------------------------
+    // 管理・システム系ログ・内部データ — 管理者は閲覧のみ、書き込みはCloud Functions（Admin SDK）限定
+    // ---------------------------------------------------------------------
+    match /operation_logs/{logId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /admin_notifications/{notificationId} {
+      allow read: if isAdmin();
+      // isRead の更新のみ管理者に許可。生成はCloud Functions限定。
+      allow update: if isAdmin() && onlyChangedKeys(['isRead']);
+      allow create, delete: if false;
+    }
+
+    match /fraud_alerts/{alertId} {
+      allow read: if isAdmin();
+      allow update: if isAdmin() && onlyChangedKeys(['status', 'resolvedBy', 'resolvedAt']);
+      allow create, delete: if false;
+    }
+
+    match /batch_logs/{logId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /api_quota_logs/{logId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /collection_candidates/{candidateId} {
+      allow read: if isAdmin();
+      allow update: if isAdmin() && onlyChangedKeys(['status', 'reviewedAt', 'reviewedBy', 'reviewComment']);
+      allow create, delete: if false;
+    }
+
+    match /collection_batch_logs/{logId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /collection_quota_logs/{logId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /ai_operators/{aiOperatorId} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    match /ng_words/{ngWordId} {
+      // NGワード一覧をクライアントに公開しない（回避策を助長しないため）。判定はCloud Functions側で実施。
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    match /app_settings/{settingId} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    match /new_title_candidates/{candidateId} {
+      allow read: if isAdmin();
+      allow update: if isAdmin() && onlyChangedKeys(['status', 'reviewedAt', 'reviewedBy', 'reviewComment']);
+      allow create, delete: if false;
+    }
+
+    // ---------------------------------------------------------------------
+    // 上記以外のパスはすべて拒否
+    // ---------------------------------------------------------------------
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
