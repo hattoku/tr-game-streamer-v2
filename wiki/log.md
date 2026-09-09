@@ -1,5 +1,15 @@
 # 操作ログ
 
+## [2026-09-09] ingest | Firestoreセキュリティルール本設計・本番デプロイ
+`HANDOFF.md`未解決事項#1（ブロッカー）に対応。`firestore.rules`/`firestore.indexes.json`を新規作成し
+本番プロジェクトにデプロイ（コミット`4f4be9c`）。
+[[2026-09-09-firestore-security-rules]] / [[firestoreセキュリティルール方針]] を作成。
+
+## [2026-09-09] ingest | 技術スタックの最新化とバージョン固定
+`HANDOFF.md`未解決事項#2に対応。Next.js 16.3.4/React 19.2.8/TypeScript 7.0.2/firebase 12.18.0へ更新し、
+依存バージョンを完全固定。`middleware.ts`→`proxy.ts`移行も実施（コミット`98851e0`/`5561b06`/`488349d`）。
+[[2026-09-09-tech-stack-upgrade]] / [[依存バージョン固定方針]] / [[proxy]] を作成。`overview.md`のスタック情報を更新。
+
 ## [2026-09-08] create | Wiki骨格を作成
 Karpathyの「LLM Wiki」パターン
 (https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)
