@@ -14,6 +14,7 @@ tr-game-streamer-v2 の**コーディング支援用**Wiki（実装の変更履�
 ## Sources
 - [[2026-09-09-firestore-security-rules]] — Firestoreセキュリティルールの本設計・本番デプロイ
 - [[2026-09-09-tech-stack-upgrade]] — 技術スタックの最新化とバージョン固定
+- [[2026-09-09-phase1-plan-review]] — フェーズ1計画の妥当性レビューとHANDOFF.md更新
 
 ## Entities
 - [[proxy]] — proxy.ts（旧middleware.ts、Next.js 16のproxy規約対応）
@@ -21,6 +22,8 @@ tr-game-streamer-v2 の**コーディング支援用**Wiki（実装の変更履�
 ## Concepts
 - [[firestoreセキュリティルール方針]] — ロール判定・コレクション別ポリシー
 - [[依存バージョン固定方針]] — package.jsonのバージョン記法方針
+- [[マスタデータ投入方針]] — 投入対象の規模・ID採番ルール・Admin SDK必須の理由
+- [[ステージング環境運用方針]] — 設定は都度同期・データ検証はフェーズ4まで後回しの方針
 
 ## Analyses
 （まだページなし）
