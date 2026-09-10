@@ -100,10 +100,24 @@
    - `ゲームタイトルタグ初期登録データ一覧.md`の集計表と実際の列挙件数に2件の差異が残っている
      （`wiki/concepts/マスタデータ投入方針.md`参照）。投入スクリプトは冪等なので、原因判明後に
      ソース文書を修正して再実行すれば差分のみ反映される。
-5. 認証まわりの実装土台（Auth Context、ログイン/サインアップ画面）
-   - 加えて、新規ユーザー登録時にFirebase Auth Custom Claims（`role`）へ初期ロールを付与する仕組み
-     （Cloud Functions等）をスコープに含める。Firestoreルールのロール判定はCustom Claims前提のため、
-     これがないと本設計済みのルールが機能しない。
+5. ~~認証まわりの実装土台~~ → **2026-09-10対応済み（最小スコープ）**
+   - `contexts/AuthContext.tsx`（user/role追跡）、`app/api/auth/init-user/route.ts`
+     （Next.js API Route + Admin SDKでCustom Claims初期role付与。理由は
+     `wiki/sources/2026-09-10-auth-foundation.md`参照）、`app/login/page.tsx`
+     （メール/パスワードのログイン・新規登録・ログアウトのみの動作確認用ページ）を実装。
+   - **スコープ外**（ユーザーと合意の上、次フェーズ以降に先送り）: ソーシャルログイン
+     （Google/X）、パスキー、パスワード再発行、初期設定ウィザード（プロフィール設定・
+     ジャンル/タイトル選択・マイリスト追加）。`games`・マイリスト機能が未実装のため
+     現時点では動かせない。フル仕様は
+     `document/specification/page/ページ ログイン アカウント登録・ログイン仕様書.md`参照。
+   - `firestore.rules`冒頭コメントの「Custom ClaimsはCloud Functions経由でのみ設定」という
+     記述は実態と異なる（Cloud Functions基盤が存在しないためNext.js API Routeを採用した）。
+     次回`firestore.rules`を触る際にコメントを修正すること。
+   - 本番環境に対しEnd-to-Endで動作確認済み（テストユーザーは削除済み）。**副次的発見**:
+     ステージングのAuthenticationが未設定（`CONFIGURATION_NOT_FOUND`）であることを実際に
+     確認した。未解決事項5.のステージングリセットが必要。
+
+これでフェーズ1の項目は全て対応済み。次はフェーズ2（MVP機能実装）。
 
 ### フェーズ2: MVP機能実装（企画書の初期フェーズ核機能）
 - YouTube埋め込みプレーヤー（話数自動遷移）

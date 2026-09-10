@@ -1,5 +1,17 @@
 # 操作ログ
 
+## [2026-09-10] ingest | 認証まわりの実装土台（フェーズ1完了）
+`lib/firebase.ts`にauth追加、`lib/firebase-admin.ts`（サーバー専用Admin SDK初期化）、
+`contexts/AuthContext.tsx`、`app/api/auth/init-user/route.ts`（Custom Claims初期role
+付与、Next.js API Route+Admin SDK方式）、`app/login/page.tsx`（動作確認用最小ページ）を
+追加。スコープはユーザーと合意の上、ログイン/ログアウトの土台のみに限定（ソーシャル
+ログイン・初期設定ウィザードは対象外）。本番環境に対しFirebase Auth REST API経由で
+サインアップ→role付与→Firestoreドキュメント作成→冪等性のEnd-to-End検証を実施し、
+テストユーザーは削除済み。副次的に、ステージングのAuthenticationがまだ未設定
+（`CONFIGURATION_NOT_FOUND`）であることを確認（HANDOFF.md未解決事項5）。
+これでHANDOFF.mdフェーズ1ロードマップが全項目完了。
+[[2026-09-10-auth-foundation]]を作成。
+
 ## [2026-09-10] ingest | 本番へのマスタデータ投入完了（フェーズ1「マスタデータ投入実行」完了）
 ステージングでの確認後、本番（`tr-game-streamer`）にもジャンル9・テーマ40・タグ88件
 （合計137件）を投入。再実行して冪等性を確認、ステージングと内容が一致することを確認。
