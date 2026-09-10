@@ -1,5 +1,15 @@
 # 操作ログ
 
+## [2026-09-10] ingest | フェーズ2計画の精緻化
+「YouTube埋め込みプレーヤー」「マイリスト機能」「新着通知」の関連仕様書
+（YouTube定期取得・再生リスト追加・動画プレーヤー・マイリスト・通知機能）を調査。
+3項目が実質一直線の依存チェーンであること、games/YouTube API連携/再生リスト登録が
+前提として必要なこと、mylist・users・notificationsの3箇所にFirestoreスキーマ
+ギャップ（DB設計書未記載）があることが判明。ユーザーと相談し、定期取得バッチは
+Cloud Functions本格導入せず手動トリガーで代替、新規チャンネル登録時のAI説明文
+生成は今回手入力のみとする、の2点を決定。実装順序をHANDOFF.mdに反映。
+[[2026-09-10-phase2-plan]]を作成。
+
 ## [2026-09-10] ingest | 認証まわりの実装土台（フェーズ1完了）
 `lib/firebase.ts`にauth追加、`lib/firebase-admin.ts`（サーバー専用Admin SDK初期化）、
 `contexts/AuthContext.tsx`、`app/api/auth/init-user/route.ts`（Custom Claims初期role

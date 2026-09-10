@@ -17,6 +17,7 @@ tr-game-streamer-v2 の**コーディング支援用**Wiki（実装の変更履�
 - [[2026-09-09-phase1-plan-review]] — フェーズ1計画の妥当性レビューとHANDOFF.md更新
 - [[2026-09-10-master-data-seed-script]] — マスタデータ投入スクリプトの実装
 - [[2026-09-10-auth-foundation]] — 認証まわりの実装土台（AuthContext・init-user API）
+- [[2026-09-10-phase2-plan]] — フェーズ2計画の精緻化（依存チェーン・スキーマギャップ）
 
 ## Entities
 - [[proxy]] — proxy.ts（旧middleware.ts、Next.js 16のproxy規約対応）
