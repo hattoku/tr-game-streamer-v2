@@ -8,10 +8,14 @@
     "build": "next build",
     "build:stg": "cross-env NEXT_PUBLIC_APP_ENV=stg next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "seed:master:stg": "node scripts/seed-master-data.mjs --target=stg",
+    "seed:master:prod": "node scripts/seed-master-data.mjs --target=prod"
   },
   "dependencies": {
+    "@opentelemetry/api": "1.9.1",
     "firebase": "12.18.0",
+    "firebase-admin": "14.3.0",
     "next": "16.3.4",
     "react": "19.2.8",
     "react-dom": "19.2.8"
