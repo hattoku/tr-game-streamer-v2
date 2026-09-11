@@ -125,17 +125,58 @@
 「YouTube埋め込みプレーヤー」「マイリスト機能」「新着通知」は並列ではなく、実質
 一直線の依存チェーンになっていることが判明したため、以下の順序で実装する。
 
-1. **テスト用`games`データの投入**（依存なし）
-   再生リスト登録フォームは「既存ゲームタイトルを検索して選択」のみで、その場で
-   新規作成する導線がない（`ページ 再生リストを追加する 仕様書.md`）。マスタ投入と
-   同じ要領でテスト用に数件シードする。
-2. **YouTube Data API連携基盤**（`lib/youtube.ts`等、依存なし）
-   再生リスト登録フロー・将来のバッチ双方が使う共通クライアント。プレイリスト/
-   チャンネル/動画のsnippet取得ができればよい。
-3. **再生リスト登録フロー（管理者専用の最小版）**（依存: 1, 2）
+1. ~~**テスト用`games`データの投入**~~ → **2026-09-11対応済み**
+   `scripts/data/test-games.mjs`・`scripts/seed-test-games.mjs`を実装（既存のマスタ投入
+   スクリプトと同じ冪等パターン。`title`で既存照合）。実在タイトル5件（ゼルダの伝説
+   ティアーズ オブ ザ キングダム／ポケットモンスター スカーレット・バイオレット／
+   スプラトゥーン3／エルデンリング／モンスターハンターライズ）をステージング・本番の
+   両方に投入済み（`npm run seed:games:stg` / `seed:games:prod`）。楽天ブックスAPI連携が
+   未実装のため`rakutenItemCode`等はnull、genreId/themeIds/gameTagIdsは既存マスタを
+   名前で引き当てて解決している。
+2. ~~**YouTube Data API連携基盤**~~（`lib/youtube.ts`等、依存なし）→ **2026-09-11対応済み**
+   `lib/youtube.ts`（playlists/playlistItems/channels/videosのsnippet取得、REST fetchベース。
+   googleapisパッケージは追加せず）、`lib/constants.ts`（`YOUTUBE_API_KEY`を環境変数
+   `YOUTUBE_API_KEY`から供給）を実装。`npx tsc --noEmit`で型チェック済み。
+   v1時代のAPIキー2件（GCPコンソールに残存していたv1の旧キー、Cloud Run削除済みで
+   未使用）は削除し、新規キーを発行（API制限: YouTube Data API v3のみ）。`.env.local`の
+   `YOUTUBE_API_KEY`に設定済み。実データ（Google Developersチャンネルの公開再生リスト）で
+   channels/playlists/playlistItems/videosの4エンドポイント疎通確認済み、レスポンス形状が
+   `lib/youtube.ts`の型定義と一致することを確認済み。
+   **積み残し**: SECRET_MANAGEMENT.mdの「ソースに直書き」方針（Firebase同様の既定値埋め込み）
+   はまだ反映していない。現状は`.env.local`（gitignore対象）頼みのため、他の開発者と鍵を
+   共有する運用に切り替える際は方針通りlib/constants.tsへ直書きし表を更新すること。
+3. ~~**再生リスト登録フロー（管理者専用の最小版）**~~（依存: 1, 2）→ **2026-09-11対応済み**
    `ページ 再生リストを追加する 仕様書.md`準拠。新規チャンネル発見時のAI
-   （Gemini）による説明文自動生成は**今回スコープ外・手入力のみ**とする
-   （ユーザー確認済み。Gemini API連携・Secret Manager鍵管理は別途）。
+   （Gemini）による説明文自動生成は**スコープ外・手入力のみ**（ユーザー確認済み。
+   Gemini API連携・Secret Manager鍵管理は別途）。一般ユーザーの「提案」フロー・
+   ゲームタイトル追加提案モーダル（4.2.2節）も同様にスコープ外（管理者専用の最小版）。
+   実装:
+   - `lib/api-auth.ts`（Bearer IDトークン検証＋owner/operatorロール確認の共通ヘルパー）
+   - `app/api/playlists/preview/route.ts`（書き込みなし。URL blur時にYouTube APIで
+     再生リスト・チャンネル情報を取得し、公開状態・既存登録状況を返す）
+   - `app/api/playlists/register/route.ts`（本登録。プレビュー結果を信用せずサーバー側で
+     再取得し、`playlists`/`channels`/`videos`への書き込みと`games.playlistCount`の
+     加算をFirestoreバッチで実行）
+   - `app/playlists/new/page.tsx`（`login/page.tsx`と同様、スタイリングなしの動作確認用
+     ページ。ゲームタイトル選択は`games`コレクション全件をクライアントで取得し
+     タイトル部分一致でフィルタする簡易実装 — 全件検索用インフラは未整備のため）
+   - 「チャンネル一致」チェック（仕様書4.1.5節）は、再生リストのchannelIdでチャンネル
+     情報を取得している都合上、この実装では構造的に常にtrueになる。チャンネル詳細
+     ページ流入時の「流入元チャンネルとの一致」判定（5.2節）は、該当する流入導線
+     （チャンネル詳細ページ）自体が未実装のため今回は組み込んでいない。
+   
+   **E2E動作確認**（本番環境、一時テスト管理者アカウントを作成→確認後に削除）:
+   実在の公開再生リスト（Google Developersチャンネル）で登録→`playlists`/`channels`/
+   `videos`（16件）が仕様書3.2〜3.4節のスキーマ通りに書き込まれること、
+   `games.playlistCount`が加算されること、同一再生リストの再登録が`already_registered`
+   (409)で拒否されることを確認。確認後、作成したテストデータ・テストユーザーは
+   全て削除済み（本番DBへの影響は残っていない）。
+   
+   **副次的に発見・修正したバグ**: `.env.local`の`NEXT_PUBLIC_FIREBASE_API_KEY`が
+   無効な値（おそらくFirebase Webアプリ再登録前の旧キー）になっており、
+   `lib/firebase.ts`の`||`フォールバックより優先されるため、**ローカル開発環境での
+   Firebase Authenticationが機能しない状態だった**（`auth/api-key-not-valid`）。
+   `lib/firebase.ts`にハードコードされている現行の正しいキーの値に修正済み。
 4. **マイリスト機能**（依存: 3）
    `ページ マイリスト機能仕様書.md`準拠。**実装前にスキーマ拡張が必要**:
    現状の`mylist`ドキュメント（`userId, playlistId, createdAt, updatedAt`の4項目、

@@ -10,7 +10,9 @@
     "start": "next start",
     "lint": "next lint",
     "seed:master:stg": "node scripts/seed-master-data.mjs --target=stg",
-    "seed:master:prod": "node scripts/seed-master-data.mjs --target=prod"
+    "seed:master:prod": "node scripts/seed-master-data.mjs --target=prod",
+    "seed:games:stg": "node scripts/seed-test-games.mjs --target=stg",
+    "seed:games:prod": "node scripts/seed-test-games.mjs --target=prod"
   },
   "dependencies": {
     "@opentelemetry/api": "1.9.1",
