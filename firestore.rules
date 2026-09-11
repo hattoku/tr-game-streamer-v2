@@ -63,7 +63,7 @@ service cloud.firestore {
         || (isSelf(userId) && onlyChangedKeys([
               'displayName', 'profileImageUrl', 'bio', 'fcmTokens',
               'isMylistPublic', 'isReviewHistoryPublic',
-              'showNewArrivalNotification', 'lastLoginAt'
+              'showNewArrivalNotification', 'isContinuousPlayEnabled', 'lastLoginAt'
             ]));
 
       allow delete: if isSelf(userId) || isAdmin();

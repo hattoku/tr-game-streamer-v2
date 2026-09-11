@@ -1,6 +1,6 @@
 # プレミテ Firestore データモデル設計書
 
-**バージョン**: v1.8  
+**バージョン**: v1.9  
 **作成日**: 2026年3月30日（更新）  
 **対象**: 開発チーム  
 **関連ドキュメント**: プレミテ企画書 / プレミテ_技術スタック仕様書 / 各機能仕様書
@@ -151,6 +151,7 @@ Firestoreはテーブル結合（JOIN）ができないため、一覧表示や�
 | `isMylistPublic` | boolean | ✅ | マイリストの公開設定（デフォルト：アカウント作成時にユーザーが選択） |
 | `isReviewHistoryPublic` | boolean | ✅ | レビュー履歴の公開設定（デフォルト：アカウント作成時にユーザーが選択） |
 | `showNewArrivalNotification` | boolean | ✅ | マイリストの新着通知表示設定（デフォルト：`true`） |
+| `isContinuousPlayEnabled` | boolean | ✅ | 連続再生設定（ユーザー全体共通、デフォルト：`true`）。動画プレーヤー仕様書「連続再生機能」参照 |
 | `reviewCount` | number | ✅ | レビュー投稿数（集計キャッシュ、デフォルト：0） |
 | `helpfulReceivedCount` | number | ✅ | 「参考になった」被獲得数合計（集計キャッシュ、デフォルト：0） |
 | `accountCreatedAt` | Timestamp | ✅ | アカウント作成日時 |
@@ -827,3 +828,4 @@ ai_operators ──── (1) users
 | v1.6 | 2026-03-30 | admin_notifications に AI審査エラー通知タイプ（`ai_review_error`）を追加。 |
 | v1.7 | 2026-03-30 | `new_title_candidates` コレクションの定義を追加（新作タイトル検知バッチ用）。バージョン表記の整合性を修正。 |
 | v1.8 | 2026-09-11 | `mylist` に `watchStatus`・`isReverseOrder` フィールドを追加（マイリスト機能仕様書準拠、フェーズ2実装に伴うスキーマギャップ解消） |
+| v1.9 | 2026-09-11 | `users` に `isContinuousPlayEnabled` フィールドを追加（動画プレーヤー仕様書の連続再生設定準拠、フェーズ2実装に伴うスキーマギャップ解消） |

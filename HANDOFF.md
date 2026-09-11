@@ -202,11 +202,32 @@
    他ユーザーのuserIdでの書き込み試行がfirestore.rulesにより`permission-denied`で
    拒否されることを確認。確認に使った再生リスト登録・テストユーザーも含め、
    本番DBへの影響は残っていない。
-5. **動画プレーヤー（連続再生・視聴進捗）**（依存: 3。4とは並行可）
-   `ページ 再生リスト詳細ページにおける動画プレーヤー 仕様書.md`準拠。
-   `watch_progress`/`watch_history`の読み書きが必要。**実装前にスキーマ拡張が
-   必要**: `users`ドキュメントに連続再生ON/OFFのグローバル設定フィールドが
-   存在しない（現行スキーマにはなし）。
+5. ~~**動画プレーヤー（連続再生・視聴進捗）**~~（依存: 3。4とは並行可）→ **2026-09-11対応済み**
+   `ページ 再生リスト詳細ページにおける動画プレーヤー 仕様書.md`準拠。`users`に
+   `isContinuousPlayEnabled`（連続再生設定）を追加し、`Firestore データモデル
+   設計書.md`をv1.9へ更新。`firestore.rules`のusers.update許可フィールドにも追加。
+   `videos`（playlistId+position）・`watch_progress`（userId+playlistId+updatedAt）用の
+   複合インデックスを`firestore.indexes.json`に追加し、ステージング・本番両方へ
+   ルール・インデックスをデプロイ済み。
+   
+   実装は`app/playlists/[playlistId]/page.tsx`（本番のURL `/playlists/[playlistId]`は
+   ステップ3の完了画面「再生リストを見る」リンク先と一致）。YouTube IFrame Player API
+   （`window.YT.Player`、postMessageベース）を使い、5秒ごとの`getCurrentTime()`取得で
+   `watch_progress`/`watch_history`を更新、`onStateChange`のENDED検知で連続再生時に
+   自動的に次の動画へ遷移する。逆順トグルは`mylist.isReverseOrder`をそのまま共有し、
+   マイリスト未登録時はページ内のローカル状態のみ（仕様書通りの挙動）。
+   **今回のスコープ外**（仕様書自身の非スコープに加えて）: レビュー投稿・配信者情報・
+   ゲーム情報セクション（フェーズ3以降）、シアターモードの黒背景等の視覚デザイン
+   （トグルの状態管理のみ実装）、未ログインユーザーの視聴進捗LocalStorage保存
+   （ゲストは進捗が保存されない）、動画リストの現在再生中スクロール追従。
+   
+   **動作確認の範囲**: Firestoreデータ層（複合インデックスの疎通、
+   `watch_progress`/`watch_history`/`mylist`/`users`への読み書きとルール許可）は
+   本番環境で一時テスト管理者アカウントを使いクライアントSDK経由で確認済み
+   （確認後にテストデータ・アカウントは削除済み）。**一方、YouTube IFrame Player APIを
+   使った実際のブラウザ上の挙動（動画切り替え・連続再生の自動遷移・進捗バー表示等）は
+   ブラウザ自動化ツールがこの環境に無いため未確認**。ユーザー側でブラウザから
+   `/playlists/[playlistId]`にアクセスしての動作確認を推奨する。
 6. **新着通知**（依存: 4）
    `ページ ユーザー通知機能仕様書.md`準拠。**Firestoreデータモデル設計書に
    `notifications`コレクションの定義が存在しない**（管理者向け`admin_notifications`
