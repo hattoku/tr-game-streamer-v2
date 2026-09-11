@@ -1,6 +1,6 @@
 # プレミテ Firestore データモデル設計書
 
-**バージョン**: v1.7  
+**バージョン**: v1.8  
 **作成日**: 2026年3月30日（更新）  
 **対象**: 開発チーム  
 **関連ドキュメント**: プレミテ企画書 / プレミテ_技術スタック仕様書 / 各機能仕様書
@@ -370,8 +370,12 @@ YouTubeチャンネルの情報。
 |-----------|-----|:---:|------|
 | `userId` | string | ✅ | ユーザーのuserId |
 | `playlistId` | string | ✅ | 再生リストのドキュメントID |
+| `watchStatus` | string | ✅ | 視聴ステータス：`"want_to_watch"` / `"watching"` / `"completed"` / `"on_hold"` / `"dropped"`（デフォルト：`"want_to_watch"`） |
+| `isReverseOrder` | boolean | ✅ | 逆順トグル（デフォルト：`false`）。動画プレーヤーページの逆順トグルと設定を共有する |
 | `createdAt` | Timestamp | ✅ | 登録日時 |
 | `updatedAt` | Timestamp | ✅ | 最終更新日時 |
+
+> **設計注記**: `watchStatus`は`reviews.watchStatus`（3.9節）と値の構成が異なる（`"reviewing"`を含まない）。マイリストの視聴ステータスとレビューの視聴ステータスは別概念として扱う（マイリスト機能仕様書1.3節参照）。
 
 ---
 
@@ -822,3 +826,4 @@ ai_operators ──── (1) users
 | v1.5 | 2026-03-30 | 不要な `genre_search_keywords` コレクションの定義を削除。タイトルベース収集への移行に伴うクリーンアップ。 |
 | v1.6 | 2026-03-30 | admin_notifications に AI審査エラー通知タイプ（`ai_review_error`）を追加。 |
 | v1.7 | 2026-03-30 | `new_title_candidates` コレクションの定義を追加（新作タイトル検知バッチ用）。バージョン表記の整合性を修正。 |
+| v1.8 | 2026-09-11 | `mylist` に `watchStatus`・`isReverseOrder` フィールドを追加（マイリスト機能仕様書準拠、フェーズ2実装に伴うスキーマギャップ解消） |
