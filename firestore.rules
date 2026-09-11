@@ -256,6 +256,14 @@ service cloud.firestore {
       allow create, delete: if false;
     }
 
+    // ユーザー向けサイト内通知（管理者向けadmin_notificationsとは別物）。
+    // 生成は手動再取得API Route（Admin SDK）限定。本人はisReadの更新のみ可。
+    match /notifications/{notificationId} {
+      allow read: if isSelf(resource.data.userId) || isAdmin();
+      allow update: if isSelf(resource.data.userId) && onlyChangedKeys(['isRead']);
+      allow create, delete: if false;
+    }
+
     match /fraud_alerts/{alertId} {
       allow read: if isAdmin();
       allow update: if isAdmin() && onlyChangedKeys(['status', 'resolvedBy', 'resolvedAt']);
