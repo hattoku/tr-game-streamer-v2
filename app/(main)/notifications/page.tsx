@@ -5,8 +5,8 @@ import { useRouter } from 'next/navigation';
 import {
   collection, doc, getDocs, query, where, orderBy, updateDoc, writeBatch,
 } from 'firebase/firestore';
-import { db, auth } from '../../lib/firebase';
-import { useAuth } from '../../contexts/AuthContext';
+import { db, auth } from '@/lib/firebase';
+import { useAuth } from '@/contexts/AuthContext';
 
 // 通知一覧ページの最小版（動作確認用、スタイリングなし。他のページと同じ方針）。
 // document/specification/page/ページ ユーザー通知機能仕様書.md 準拠。

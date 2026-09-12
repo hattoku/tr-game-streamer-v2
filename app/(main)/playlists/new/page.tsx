@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { collection, getDocs } from 'firebase/firestore';
-import { db, auth } from '../../../lib/firebase';
-import { useAuth } from '../../../contexts/AuthContext';
+import { db, auth } from '@/lib/firebase';
+import { useAuth } from '@/contexts/AuthContext';
 
 // 「再生リストを追加する」の管理者専用・最小版（動作確認用）。
 // 一般ユーザーの提案フロー・AI説明文自動生成・ゲームタイトル追加提案モーダルは

@@ -1,24 +1,32 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
-  signOut,
 } from 'firebase/auth';
-import { auth } from '../../lib/firebase';
-import { useAuth } from '../../contexts/AuthContext';
+import { auth } from '@/lib/firebase';
+import { useAuth } from '@/contexts/AuthContext';
 
 // 認証まわりの実装土台（動作確認用の最小限のページ）。
 // フル仕様（ソーシャルログイン・パスワード再発行・初期設定ウィザード等）は
 // document/specification/page/ページ ログイン アカウント登録・ログイン仕様書.md 参照。
 // マイリスト機能・実ゲームタイトルデータが揃うフェーズ2以降で本実装する。
+// ログアウトはヘッダーのユーザードロップダウン（components/layout/UserDropdown.tsx）へ移した。
+// ログイン済みでこのページに来た場合は TOP へ戻す（ログイン仕様書 §5.4 の遷移先は暫定で TOP）。
+// フォームのデザイン適用はフェーズ2.5ステップ6で行う。
 export default function LoginPage() {
-  const { user, role, loading, refreshRole } = useAuth();
+  const { user, loading, refreshRole } = useAuth();
+  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!loading && user) router.replace('/');
+  }, [loading, user, router]);
 
   async function handleSignUp() {
     setError(null);
@@ -51,21 +59,7 @@ export default function LoginPage() {
     }
   }
 
-  async function handleSignOut() {
-    await signOut(auth);
-  }
-
-  if (loading) return <p>読み込み中...</p>;
-
-  if (user) {
-    return (
-      <div>
-        <p>ログイン中: {user.email}</p>
-        <p>role: {role ?? '(未設定)'}</p>
-        <button onClick={handleSignOut}>ログアウト</button>
-      </div>
-    );
-  }
+  if (loading || user) return <p>読み込み中...</p>;
 
   return (
     <div>

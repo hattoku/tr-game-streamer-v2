@@ -6,8 +6,8 @@ import {
   collection, doc, getDoc, getDocs, query, where, orderBy, limit,
   setDoc, updateDoc, serverTimestamp,
 } from 'firebase/firestore';
-import { db } from '../../../lib/firebase';
-import { useAuth } from '../../../contexts/AuthContext';
+import { db } from '@/lib/firebase';
+import { useAuth } from '@/contexts/AuthContext';
 
 // 再生リスト詳細ページの最小版（動作確認用、スタイリングなし。他のページと同じ方針）。
 // document/specification/page/ページ 再生リスト詳細ページにおける動画プレーヤー 仕様書.md 準拠。

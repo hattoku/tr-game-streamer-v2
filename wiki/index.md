@@ -2,7 +2,7 @@
 title: Wiki索引
 type: meta
 date: 2026-09-08
-updated: 2026-09-10
+updated: 2026-09-11
 ---
 
 # Wiki 索引
@@ -18,6 +18,9 @@ tr-game-streamer-v2 の**コーディング支援用**Wiki（実装の変更履�
 - [[2026-09-10-master-data-seed-script]] — マスタデータ投入スクリプトの実装
 - [[2026-09-10-auth-foundation]] — 認証まわりの実装土台（AuthContext・init-user API）
 - [[2026-09-10-phase2-plan]] — フェーズ2計画の精緻化（依存チェーン・スキーマギャップ）
+- [[2026-09-11-phase2.5-design-plan]] — フェーズ2.5（デザイン適用）計画（Tailwind導入・仕様書の穴埋め・8ステップ）
+- [[2026-09-11-design-foundation]] — フェーズ2.5 ステップ0・1（仕様書の穴埋め、Tailwind v4＋Radix導入、components/ui）
+- [[2026-09-11-layout-and-system-pages]] — フェーズ2.5 ステップ2（ルートグループ導入、ヘッダー/フッター/ドロワー、404/500/loading、TOP最小版）
 
 ## Entities
 - [[proxy]] — proxy.ts（旧middleware.ts、Next.js 16のproxy規約対応）
@@ -27,6 +30,7 @@ tr-game-streamer-v2 の**コーディング支援用**Wiki（実装の変更履�
 - [[依存バージョン固定方針]] — package.jsonのバージョン記法方針
 - [[マスタデータ投入方針]] — 投入対象の規模・ID採番ルール・Admin SDK必須の理由
 - [[ステージング環境運用方針]] — 設定は都度同期・データ検証はフェーズ4まで後回しの方針
+- [[デザイントークン運用方針]] — 仕様書トークン→`@theme`の1対1対応、0.5px枠線等の書き方、刺し色の原則、ヘッドレスUI方針
 
 ## Analyses
 （まだページなし）

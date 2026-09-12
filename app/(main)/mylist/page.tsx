@@ -13,8 +13,8 @@ import {
   deleteDoc,
   where,
 } from 'firebase/firestore';
-import { db } from '../../lib/firebase';
-import { useAuth } from '../../contexts/AuthContext';
+import { db } from '@/lib/firebase';
+import { useAuth } from '@/contexts/AuthContext';
 
 // マイリストページの最小版（動作確認用、スタイリングなし。login/page.tsx・
 // playlists/new/page.tsxと同じ方針）。

@@ -1,0 +1,213 @@
+/*
+ * グローバルスタイルとデザイントークン定義
+ * document/specification/common/共通 デザイントークン仕様書.md（v1.2）のトークン名を
+ * そのまま Tailwind v4 の @theme に CSS 変数として登録する。
+ * 例: color-bg-base → --color-bg-base → ユーティリティ `bg-bg-base`
+ * ブレークポイントは Tailwind 標準の md (768px) が
+ * 共通 ページレイアウト 仕様書 §2 の PC/モバイル境界と一致するためそのまま使う。
+ */
+@import 'tailwindcss';
+
+@theme {
+  /* §2.1 背景 */
+  --color-bg-base: #0f0f0f;
+  --color-bg-card: #141414;
+  --color-bg-btn: #252525;
+  --color-bg-input: #1a1a1a;
+  --color-bg-player: #000000;
+  --color-bg-list-active: #1c1c1c; /* §6.3 動画リストアイテム（再生中ハイライト） */
+
+  /* §2.2 ボーダー */
+  --color-border-subtle: #1e1e1e;
+  --color-border-default: #222222;
+  --color-border-strong: #3a3a3a;
+  --color-border-chip: #2e2e2e;
+
+  /* §2.3 テキスト */
+  --color-text-primary: #e8e8e8;
+  --color-text-secondary: #cccccc;
+  --color-text-tertiary: #aaaaaa;
+  --color-text-muted: #888888;
+  --color-text-faint: #777777;
+  --color-text-on-primary: #111111; /* §4.1 プライマリボタン文字色 */
+  --color-text-btn: #e0e0e0; /* §4.2 セカンダリボタン文字色 */
+
+  /* §2.4 ブランド・アクセント */
+  --color-brand-logo: #e03030;
+  --color-brand-score: #f0a500;
+  --color-brand-watching: #1db37a;
+  --color-brand-watching-bg: #0d2e2a;
+  --color-brand-trending: #38a8f5;
+  --color-brand-trending-bg: #0a1e2e;
+  --color-brand-rakuten: #bf360c;
+  --color-progress-bar: #e03030;
+  --color-progress-track: #333333; /* §6.4 未視聴部分 */
+
+  /* §9 ローディング */
+  --color-skeleton-bg: #1a1a1a;
+  --color-spinner: #aaaaaa;
+
+  /* §10 入力要素 */
+  --color-input-bg: #1a1a1a;
+  --color-input-border: #3a3a3a;
+  --color-input-text: #e8e8e8;
+  --color-input-placeholder: #888888;
+  --color-input-error: #e03030;
+
+  /* §11 ホバー */
+  --color-btn-primary-hover: #ffffff;
+  --color-btn-secondary-hover: #2e2e2e;
+
+  /* §12 トースト */
+  --color-toast-success: #1db37a;
+  --color-toast-error: #e03030;
+  --color-toast-warning: #f0a500;
+  --color-toast-info: #38a8f5;
+
+  /* §13 オーバーレイ面 */
+  --color-overlay: rgba(0, 0, 0, 0.6);
+  --color-surface-elevated: #141414;
+  --color-surface-border: #222222;
+  --shadow-elevated: 0 8px 24px rgba(0, 0, 0, 0.5);
+
+  /* §3 タイポグラフィ */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --text-xs: 10px;
+  --text-xs--line-height: 1.5;
+  --text-sm: 11px;
+  --text-sm--line-height: 1.5;
+  --text-md: 12px;
+  --text-md--line-height: 1.5;
+  --text-base: 13px;
+  --text-base--line-height: 1.6;
+  --text-lg: 14px;
+  --text-lg--line-height: 1.6;
+  --text-xl: 15px;
+  --text-xl--line-height: 1.5;
+  --text-2xl: 16px;
+  --text-2xl--line-height: 1.5;
+  --text-score: 26px;
+  --text-score--line-height: 1.2;
+
+  /* §14 ヘッダー高さ */
+  --spacing-header: 60px;
+  --spacing-header-mobile: 52px;
+  --spacing-header-mobile-tabs: 52px; /* モバイル「さがす」一覧ページのヘッダー直下タブ列（2行ラベル） */
+  --spacing-header-compact: 30px;
+  --spacing-bottom-tabs: 56px; /* モバイルのボトムタブバー（セーフエリアは別途加算） */
+
+  /* §9.1 スケルトンのシマー */
+  --animate-skeleton-shimmer: skeleton-shimmer 1.5s infinite linear;
+  @keyframes skeleton-shimmer {
+    from {
+      background-position: 200% 0;
+    }
+    to {
+      background-position: -200% 0;
+    }
+  }
+
+  /* UIコンポーネント仕様書 §2.7（ドロワー 200ms）・§6.2（トースト フェード 200ms） */
+  --animate-fade-in: fade-in 200ms ease-out;
+  --animate-fade-out: fade-out 200ms ease-in forwards;
+  --animate-slide-in-right: slide-in-right 200ms ease-out;
+  --animate-slide-out-right: slide-out-right 200ms ease-in forwards;
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes fade-out {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0;
+    }
+  }
+  @keyframes slide-in-right {
+    from {
+      transform: translateX(100%);
+    }
+    to {
+      transform: translateX(0);
+    }
+  }
+  @keyframes slide-out-right {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(100%);
+    }
+  }
+  /* 左からのドロワー（モバイルのハンバーガーメニュー、トークン §13.2） */
+  --animate-slide-in-left: slide-in-left 200ms ease-out;
+  --animate-slide-out-left: slide-out-left 200ms ease-in forwards;
+  @keyframes slide-in-left {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(0);
+    }
+  }
+  @keyframes slide-out-left {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-100%);
+    }
+  }
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+  body {
+    background-color: var(--color-bg-base);
+    color: var(--color-text-primary);
+    font-family: var(--font-sans);
+    font-size: 14px; /* §3.1 ベースフォントサイズ */
+    line-height: 1.6; /* §3.1 ベース行間 */
+    -webkit-font-smoothing: antialiased;
+  }
+  /* §11.2 フォーカス（キーボード操作時のみ・刺し色は使わない） */
+  :focus-visible {
+    outline: 2px solid var(--color-border-strong);
+    outline-offset: 2px;
+  }
+  /* §10 チェックボックス等は刺し色を使わない */
+  input[type='checkbox'],
+  input[type='radio'] {
+    accent-color: var(--color-text-primary);
+  }
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+  button {
+    cursor: pointer;
+  }
+  button:disabled {
+    /* §11.3 無効 */
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+}
+
+@layer components {
+  /* §9.1 Skeleton Screen */
+  .skeleton {
+    background-color: var(--color-skeleton-bg);
+    background-image: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.03), transparent);
+    background-size: 200% 100%;
+    animation: var(--animate-skeleton-shimmer);
+    border-radius: 6px;
+  }
+}
