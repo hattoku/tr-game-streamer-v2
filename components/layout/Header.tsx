@@ -1,12 +1,12 @@
 /**
  * グローバルヘッダー（共通 uiコンポーネント フロント 仕様書 §2、デザイントークン仕様書 §14）。
- * - PC（768px以上）: ロゴ／水平ナビ4項目／右端にユーザーエリア（1段）
+ * - PC（768px以上）: ロゴ／水平ナビ4項目／右端にユーザーエリア（マイリスト・視聴履歴・通知ベル・ユーザー、1段）
  * - モバイル: ハンバーガー（MobileMenu: サポート・法的リンク・©）＋ロゴ＋ユーザーエリア（ログインボタン or
  *   ユーザーアイコン＋名前）。主要導線はボトムタブバー（BottomTabBar）が担い、「さがす」一覧ページの
  *   ときだけ直下にタブ列（SearchTabs）を出す
  * - sticky で最上部に固定。高さ PC 60px・モバイル 52px（＋さがすタブ 52px）・シアターモード時 30px（黒背景）
  * - 面はベース色＋上端ハイライト（トークン仕様書 v2.0 §14）、下線は 1px の半透明白
- * - 通知ベル（ユーザー通知機能仕様書 §4.1）は PC のみ。未読件数はステップ5で付ける
+ * - 通知ベル（ユーザー通知機能仕様書 §4.1）は未読件数付きで PC・モバイル共通（NotificationBell）
  */
 'use client';
 
@@ -16,10 +16,10 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Logo } from '@/components/ui/Logo';
 import { LinkButton } from '@/components/ui/Button';
 import { Skeleton } from '@/components/ui/Skeleton';
-import { BellIcon } from '@/components/ui/icons';
 import { cn } from '@/components/ui/cn';
 import { useLayout } from './LayoutContext';
 import { MobileMenu } from './MobileMenu';
+import { NotificationBell } from './NotificationBell';
 import { SearchTabs } from './SearchTabs';
 import { UserDropdown } from './UserDropdown';
 import { GLOBAL_NAV, SIGNUP_HREF, USER_NAV, isActivePath, isSearchListPage } from './nav';
@@ -72,7 +72,7 @@ export function Header() {
             <Skeleton className="h-7 w-20 md:w-[140px]" />
           ) : user ? (
             <>
-              {/* PC のみ: マイリスト／視聴履歴／通知ベル。表示切替はラッパー要素で行う */}
+              {/* PC のみ: マイリスト／視聴履歴。表示切替はラッパー要素で行う */}
               <div className="hidden items-center gap-5 md:flex">
                 {USER_NAV.map((item) => (
                   <Link
@@ -87,17 +87,9 @@ export function Header() {
                     {item.label}
                   </Link>
                 ))}
-                <Link
-                  href="/notifications"
-                  aria-label="通知"
-                  className={cn(
-                    'relative inline-flex size-8 items-center justify-center rounded-full transition-colors duration-[120ms] hover:text-text-primary',
-                    isActivePath(pathname, '/notifications') ? 'text-text-primary' : 'text-text-tertiary',
-                  )}
-                >
-                  <BellIcon size={compactHeader ? 14 : 18} />
-                </Link>
               </div>
+              {/* 通知ベル（未読件数付き）は PC・モバイル共通。通知一覧への唯一の導線 */}
+              <NotificationBell compact={compactHeader} />
               <UserDropdown compact={compactHeader} />
             </>
           ) : (

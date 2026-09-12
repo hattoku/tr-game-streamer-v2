@@ -1,6 +1,6 @@
 /**
  * モバイル版ボトムタブバー（共通 uiコンポーネント フロント 仕様書 §2.7、デザイントークン仕様書 §14）。
- * 画面下部に固定し、ホーム／タイムライン／さがす／マイページ の4タブを等幅で並べる。
+ * 画面下部に固定し、ホーム／マイリスト／さがす／マイページ の4タブを等幅で並べる。
  * 未ログイン時に「マイページ」を押すとアカウント作成フローへ遷移する。
  * PC（768px以上）・シアターモード中は表示しない。
  */
@@ -9,14 +9,14 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { HomeIcon, SearchIcon, TimelineIcon, UserIcon } from '@/components/ui/icons';
+import { FavoriteIcon, HomeIcon, SearchIcon, UserIcon } from '@/components/ui/icons';
 import { cn } from '@/components/ui/cn';
 import { useLayout } from './LayoutContext';
 import { BOTTOM_TABS, activeBottomTab, type BottomTabKey } from './nav';
 
 const ICONS: Record<BottomTabKey, typeof HomeIcon> = {
   home: HomeIcon,
-  timeline: TimelineIcon,
+  mylist: FavoriteIcon,
   search: SearchIcon,
   mypage: UserIcon,
 };

@@ -16,8 +16,6 @@ export const GLOBAL_NAV: NavItem[] = [
   { label: 'ゲームから探す', href: '/games' },
   { label: 'チャンネルから探す', href: '/channels' },
   { label: 'まとめ', href: '/collections' },
-  // タイムライン: 中身の仕様は後日の課題（2026-09-12 ユーザー決定）。当面は通知一覧を割り当てる
-  { label: 'タイムライン', href: '/notifications' },
 ];
 
 /** ログイン済みユーザー向けリンク（PC、§2.6） */
@@ -79,7 +77,7 @@ export function isActivePath(pathname: string, href: string): boolean {
 }
 
 /** ボトムタブバーのセクション（§2.7）。アクティブ判定のプレフィクスを持つ */
-export type BottomTabKey = 'home' | 'timeline' | 'search' | 'mypage';
+export type BottomTabKey = 'home' | 'mylist' | 'search' | 'mypage';
 
 export interface BottomTab {
   key: BottomTabKey;
@@ -94,11 +92,12 @@ export interface BottomTab {
 
 export const BOTTOM_TABS: BottomTab[] = [
   { key: 'home', label: 'ホーム', href: '/', prefixes: [] },
-  // タイムライン: マイリスト登録中の再生リストの新着動画を時系列で見る導線。暫定で通知一覧を割り当て
-  { key: 'timeline', label: 'タイムライン', href: '/notifications', prefixes: ['/notifications'] },
+  // マイリスト（2026-09-12 ユーザー決定で「タイムライン」を置き換え）。未ログイン時はログインページへ
+  { key: 'mylist', label: 'マイリスト', href: '/mylist', guestHref: '/login', prefixes: ['/mylist'] },
   { key: 'search', label: 'さがす', href: '/playlists', prefixes: ['/playlists', '/games', '/channels', '/collections'] },
   // 未ログイン時はアカウント作成フローへ（§2.7）
-  { key: 'mypage', label: 'マイページ', href: '/mylist', guestHref: SIGNUP_HREF, prefixes: ['/mylist', '/history', '/profile', '/settings'] },
+  // マイページの遷移先はプロフィール／設定ページ実装後に見直す。当面は視聴履歴（準備中ページ）
+  { key: 'mypage', label: 'マイページ', href: '/history', guestHref: SIGNUP_HREF, prefixes: ['/history', '/profile', '/settings'] },
 ];
 
 export function activeBottomTab(pathname: string): BottomTabKey | null {
