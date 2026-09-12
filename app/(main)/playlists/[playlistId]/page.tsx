@@ -154,11 +154,17 @@ export default function PlaylistDetailPage() {
       setVideos(videoList);
 
       if (user) {
-        const mylistSnap = await getDoc(doc(db, 'mylist', `${user.uid}_${playlistId}`));
+        // 注意: 未登録のときにドキュメントを直接 getDoc すると、ルール（isSelf(resource.data.userId)）が
+        // 存在しないドキュメントを評価できず一般ユーザーでは permission-denied になる。
+        // 本人＋再生リストの等価条件クエリなら、0件でもルールを満たす（管理者はルールを素通りするため気づきにくい）
+        const mylistSnap = await getDocs(
+          query(collection(db, 'mylist'), where('userId', '==', user.uid), where('playlistId', '==', playlistId), limit(1)),
+        );
+        const mylistDoc = mylistSnap.docs[0];
         let reverse = false;
-        if (mylistSnap.exists()) {
-          setMylist({ docId: mylistSnap.id, status: (mylistSnap.data().watchStatus as WatchStatus) ?? 'want_to_watch' });
-          reverse = mylistSnap.data().isReverseOrder ?? false;
+        if (mylistDoc) {
+          setMylist({ docId: mylistDoc.id, status: (mylistDoc.data().watchStatus as WatchStatus) ?? 'want_to_watch' });
+          reverse = mylistDoc.data().isReverseOrder ?? false;
           setReverseOrder(reverse);
         }
 

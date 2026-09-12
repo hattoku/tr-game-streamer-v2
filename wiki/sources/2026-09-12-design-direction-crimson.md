@@ -51,9 +51,13 @@ v1.2→v1.6 と改訂されており、「実装→実機で見る→仕様書�
 データ読み込み後のスクリーンショットが撮れる。`scripts/dev/screenshot.mjs` に置いた（依存追加なし）。
 
 ```
-node scripts/dev/screenshot.mjs <url> <out.png> [width] [height] [waitMs] [mobile:0|1] [evalJs]
-例: node scripts/dev/screenshot.mjs http://localhost:3000/playlists out.png 1440 1000 9000
-    node scripts/dev/screenshot.mjs http://localhost:3000/playlists out-m.png 390 1300 9000 1   （モバイル幅・タッチ）
+node scripts/dev/screenshot.mjs <url> <out.png> [width] [height] [waitMs] [mobile:0|1]
+  例: node scripts/dev/screenshot.mjs http://localhost:3000/playlists out.png 1440 1000 9000
+      node scripts/dev/screenshot.mjs http://localhost:3000/playlists out-m.png 390 1300 9000 1   （モバイル幅・タッチ）
+node scripts/dev/screenshot.mjs --steps steps.json [width] [height] [mobile:0|1]
+  手順を JSON 配列で渡す: {"goto": url} / {"wait": ms} / {"click": "ボタンの文字"} / {"eval": "JS"} / {"shot": "out.png"}
+  ログイン必須ページは TOP で {"click": "管理者でログイン"}（テストモードウィジェット）してから {"goto": "/mylist"}。
+  ページのコンソールエラー・例外は PAGE ERROR: として表示される（ステップ5で索引不足の特定に使った）
 ```
 
 `waitMs` は Firestore の読み込み待ち。ヘッドレス Chrome の `--screenshot` だけでは読み込み前のスケルトンしか撮れない。

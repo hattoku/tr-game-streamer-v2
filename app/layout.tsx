@@ -18,7 +18,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ja">
-      <body>
+      {/* suppressHydrationWarning: ブラウザ拡張（ColorZilla の cz-shortcut-listen 等）が body に属性を
+          差し込むと React がハイドレーション不一致の警告を出す。body 自身の属性差分だけを抑止する
+          （子要素の不一致は引き続き検出される） */}
+      <body suppressHydrationWarning>
         <AuthProvider>
           <LayoutProvider>
             <ToastProvider>

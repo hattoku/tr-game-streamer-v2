@@ -23,6 +23,7 @@ tr-game-streamer-v2 の**コーディング支援用**Wiki（実装の変更履�
 - [[2026-09-11-layout-and-system-pages]] — フェーズ2.5 ステップ2（ルートグループ導入、ヘッダー/フッター/ドロワー、404/500/loading、TOP最小版）
 - [[2026-09-12-playlist-detail-design]] — フェーズ2.5 ステップ3（再生リスト詳細の部品化・2カラム・シアターモード・マイリスト追加・ログイン要求モーダル）
 - [[2026-09-12-design-direction-crimson]] — フェーズ2.5 ステップ4.5（デザイン方針の見直し: 4案比較→A. クリムゾン採用、トークン仕様書 v2.0、共通部品の作り直し）
+- [[2026-09-12-mylist-design]] — フェーズ2.5 ステップ5（マイリスト: MylistCard 部品化、タブ・ソート・子エリア・新着行・空状態、最終話判定の索引回避）
 
 ## Entities
 - [[proxy]] — proxy.ts（旧middleware.ts、Next.js 16のproxy規約対応）

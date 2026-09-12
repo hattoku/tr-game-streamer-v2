@@ -43,6 +43,20 @@ Firestoreルールはドキュメント単位が基本だが、以下は `diff()
 - `collection_candidates` / `new_title_candidates` / `fraud_alerts` / `admin_notifications`:
   管理者による承認・対応系フィールドのみ更新可（生成はCloud Functions限定）。
 
+## 本人限定コレクションの「存在しないかもしれない」ドキュメントは getDoc しない（2026-09-12）
+
+`mylist` / `watch_progress` / `watch_history` / `notifications` の read は `isSelf(resource.data.userId)` で
+本人判定している。この形のルールでは、**存在しないドキュメントを `getDoc` すると `resource` が null で
+評価できず permission-denied になる**（存在確認の用途で ID 直打ちの `getDoc` が使えない）。管理者は
+`isAdmin()` で素通りするため、管理者アカウントでの動作確認では気づかない。
+
+- 再生リスト詳細ページで「マイリスト登録済みか」を `mylist/{uid}_{playlistId}` の `getDoc` で調べていて、
+  一般ユーザー（未登録）でページ全体がエラーになった。
+- 対処: `where('userId','==',uid)` を含む**クエリ**で引く（0件でもルールを満たす）。2つの等価条件なら複合索引も不要。
+- 原則: これらのコレクションでクライアントから読むときは、常に `userId == 自分` を含むクエリにする。
+  ルール側で `resource == null` を許す案は、ID 形式（`{uid}_{playlistId}`）から他人の登録有無を探れるため採らない。
+- 動作確認は**一般ユーザーのテスト用会員でも**行うこと（テストモードウィジェットで切り替えられる）。
+
 ## 意図的に将来課題として残した点
 
 - `users` ドキュメントは本人・管理者以外読めないため、他ユーザーへの表示名公開手段が未設計

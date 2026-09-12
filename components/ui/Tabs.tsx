@@ -21,12 +21,14 @@ interface TabsListProps extends ComponentProps<typeof RadixTabs.List> {
 }
 
 export function TabsList({ className, trailing, children, ...rest }: TabsListProps) {
+  // モバイル: タブ列（折り返し可・ラベルは折り返さない）の下に trailing を右寄せで置く
+  // PC: タブ列と trailing を同じ行に置き、下線は行全体に引く
   return (
-    <div className={cn('flex items-end justify-between gap-3 border-b border-border-tabs', className)}>
-      <RadixTabs.List className="flex flex-wrap items-end gap-[2px]" {...rest}>
+    <div className={cn('flex flex-col gap-2 md:flex-row md:items-end md:justify-between md:gap-3 md:border-b md:border-border-tabs', className)}>
+      <RadixTabs.List className="flex flex-wrap items-end gap-[2px] border-b border-border-tabs md:border-0" {...rest}>
         {children}
       </RadixTabs.List>
-      {trailing && <div className="mb-2 shrink-0">{trailing}</div>}
+      {trailing && <div className="shrink-0 self-end md:mb-2">{trailing}</div>}
     </div>
   );
 }
@@ -40,7 +42,7 @@ export function TabsTrigger({ count, className, children, ...rest }: TabsTrigger
   return (
     <RadixTabs.Trigger
       className={cn(
-        'group -mb-px inline-flex items-center border-b-2 border-transparent px-[14px] py-[10px] text-base text-text-tertiary',
+        'group -mb-px inline-flex items-center whitespace-nowrap border-b-2 border-transparent px-3 py-[10px] text-base text-text-tertiary md:px-[14px]',
         'transition-[color,border-color] duration-[120ms] hover:text-text-primary',
         'data-[state=active]:border-border-active data-[state=active]:font-semibold data-[state=active]:text-text-primary',
         className,

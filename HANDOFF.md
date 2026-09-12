@@ -350,8 +350,18 @@ DB設計書に未記載）は、実装前に`document/specification/db/Firestore
    - **ステップ5〜7で使う部品の注意**: セレクトは `SelectMenu`、削除等の従アクションは `Button variant="ghost"`、
      トグル（逆順・連続再生）は `Button active`、タブ右端のソートは `TabsList trailing`、子エリアは `CardChildArea`。
      詳細は `wiki/concepts/デザイントークン運用方針.md`。
-5. **マイリスト**（フィルタタブ件数・ステータス変更ドロップダウン・子エリア「最後に再生した
-   動画」・🔔NEW行・空状態、暫定追加フォームの削除）
+5. ~~**マイリスト**~~（フィルタタブ件数・ステータス変更ドロップダウン・子エリア「最後に再生した
+   動画」・🔔NEW行・空状態、暫定追加フォームの削除）→ **2026-09-12対応済み**
+   （`wiki/sources/2026-09-12-mylist-design.md`）。`components/mylist/MylistCard.tsx` に部品化。
+   ソート「最後に再生した動画（新しい順）」は `watch_progress` の最新 `updatedAt` で実装（フェーズ2の暫定
+   `mylist.updatedAt` 代替を解消）。「最終話視聴済み」は最終話の `watch_history.progressPercent >= 95`、
+   「新着あり」は未読の `series_new_episode` 通知の有無で判定。最終話の取得に `orderBy+limitToLast` を使うと
+   降順の複合索引が必要になるため、`position == videoCount-1` の等価条件で引いている。未ログインは `/login` へ。
+   新着通知ON/OFFトグル（§5.4）は設定ページが無いため据え置き（常にON）。
+   **併せて修正**: 一般ユーザーで再生リスト詳細が権限エラーになる不具合（未登録時の `getDoc(mylist/{uid}_{playlistId})`
+   がルール `isSelf(resource.data.userId)` を満たせない）。本人限定コレクションは ID 直打ちの `getDoc` ではなく
+   `userId == 自分` を含むクエリで読む（`wiki/concepts/firestoreセキュリティルール方針.md`）。動作確認は一般ユーザーの
+   テスト用会員でも行うこと。
 6. **通知一覧とヘッダーベル**（未読件数バッジ、カード・タブ・空状態、管理者用再取得の隔離）
 7. **ログインと再生リスト登録**（AuthLayout、§12.1準拠フォーム、登録フォーム/プレビュー/
    ゲーム選択モーダル/完了画面）
