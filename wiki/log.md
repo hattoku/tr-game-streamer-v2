@@ -7,7 +7,7 @@
 再生リスト詳細を PlaylistInfoCard / VideoList / ChannelCard / AddToMylistButton / LoginRequiredModal に部品化し、
 PC 2カラム・モバイル縦積み・シアターモード（ヘッダー縮小・黒背景）・再生中動画への自動スクロール・
 「マイリストに追加」（ステータス選択モーダル、未ログインはログイン要求モーダル）を実装。シアター切替で
-YouTube iframe を破棄しないよう DOM 順固定・クラス切替のみとした。tsc/build 成功（未コミット）。
+YouTube iframe を破棄しないよう DOM 順固定・クラス切替のみとした。tsc/build 成功（コミット `772040d`）。
 [[2026-09-12-playlist-detail-design]] を作成。
 
 ## [2026-09-12] ingest | session: テストモードウィジェット実装
