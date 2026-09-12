@@ -25,6 +25,8 @@ tr-game-streamer-v2 の**コーディング支援用**Wiki（実装の変更履�
 - [[2026-09-12-design-direction-crimson]] — フェーズ2.5 ステップ4.5（デザイン方針の見直し: 4案比較→A. クリムゾン採用、トークン仕様書 v2.0、共通部品の作り直し）
 - [[2026-09-12-mylist-design]] — フェーズ2.5 ステップ5（マイリスト: MylistCard 部品化、タブ・ソート・子エリア・新着行・空状態、最終話判定の索引回避）
 - [[2026-09-12-notifications-design]] — フェーズ2.5 ステップ6（通知一覧・ヘッダーベルの未読バッジ、「タイムライン」廃止→ボトムタブ「マイリスト」、マイページは暫定 /history）
+- [[2026-09-12-login-and-register-design-plan]] — フェーズ2.5 ステップ7（ログイン・再生リスト登録のデザイン適用）実装計画（スコープの線引き・バリデーション文言・ゲーム選択モーダル・確認手順・要確認の判断4点）
+- [[2026-09-12-login-and-register-design]] — フェーズ2.5 ステップ7 実装記録（`/login` の signup モード・バリデーション・Firebase エラー日本語化、`/playlists/new` の確認エリア・GameSelectModal・PlaylistSummary・完了画面、撮影で focusout を使う話）
 
 ## Entities
 - [[proxy]] — proxy.ts（旧middleware.ts、Next.js 16のproxy規約対応）
