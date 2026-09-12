@@ -19,11 +19,13 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/DropdownMenu';
 import { useToast } from '@/components/ui/Toast';
-import { FavoriteIcon } from '@/components/ui/icons';
+import { FavoriteIcon, TrashIcon } from '@/components/ui/icons';
 import { LoginRequiredModal } from '@/components/layout/LoginRequiredModal';
 
 export interface MylistState {
@@ -93,7 +95,11 @@ export function AddToMylistButton({ playlistId, user, mylist, onChange }: AddToM
     return (
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button type="button" className="inline-flex items-center gap-2 text-md text-text-muted" aria-label="マイリストのステータスを変更">
+          <button
+            type="button"
+            className="inline-flex items-center gap-2 rounded-[8px] text-md text-text-muted transition-colors duration-[120ms] hover:text-text-primary"
+            aria-label="マイリストのステータスを変更"
+          >
             <FavoriteIcon size={14} className="text-text-primary" />
             マイリスト登録済み
             <StatusChip status={mylist.status} active readOnly />
@@ -101,14 +107,19 @@ export function AddToMylistButton({ playlistId, user, mylist, onChange }: AddToM
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start">
           <DropdownMenuLabel>視聴ステータスを変更</DropdownMenuLabel>
-          {WATCH_STATUS_ORDER.map((s) => (
-            <DropdownMenuItem key={s} onSelect={() => changeStatus(s)} className={s === mylist.status ? 'text-text-primary' : undefined}>
-              {WATCH_STATUS_LABEL[s]}
-              {s === mylist.status && <span className="ml-auto text-md text-text-muted">現在</span>}
-            </DropdownMenuItem>
-          ))}
+          {/* 現在の値は選択面＋チェック（トークン仕様書 v2.0 §13.3） */}
+          <DropdownMenuRadioGroup value={mylist.status} onValueChange={(v) => changeStatus(v as WatchStatus)}>
+            {WATCH_STATUS_ORDER.map((s) => (
+              <DropdownMenuRadioItem key={s} value={s}>
+                {WATCH_STATUS_LABEL[s]}
+              </DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={remove}>マイリストから削除</DropdownMenuItem>
+          <DropdownMenuItem onSelect={remove} className="text-text-muted">
+            <TrashIcon size={13} />
+            マイリストから削除
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
     );

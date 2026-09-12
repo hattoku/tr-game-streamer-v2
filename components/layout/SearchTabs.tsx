@@ -16,7 +16,7 @@ export function SearchTabs({ className }: { className?: string }) {
   const pathname = usePathname();
 
   return (
-    <nav aria-label="さがす" className={cn('grid h-header-mobile-tabs grid-cols-4 border-t-[0.5px] border-border-subtle', className)}>
+    <nav aria-label="さがす" className={cn('grid h-header-mobile-tabs grid-cols-4 border-t border-border-divider', className)}>
       {SEARCH_TABS.map((item) => {
         const active = pathname === item.href;
         return (

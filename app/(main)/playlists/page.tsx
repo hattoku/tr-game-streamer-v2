@@ -6,13 +6,14 @@
  */
 import type { Metadata } from 'next';
 import { PlaylistGrid } from '@/components/playlists/PlaylistGrid';
+import { SectionHeading } from '@/components/ui/Card';
 
 export const metadata: Metadata = { title: '再生リストを探す' };
 
 export default function PlaylistsPage() {
   return (
     <div>
-      <h1 className="mb-5 text-xl font-medium text-text-primary">再生リストを探す</h1>
+      <SectionHeading className="mb-5">再生リストを探す</SectionHeading>
       <PlaylistGrid max={48} />
     </div>
   );

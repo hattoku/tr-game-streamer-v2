@@ -68,7 +68,7 @@ export function TestModeWidget() {
   return (
     <aside
       aria-label="テストモード"
-      className="fixed right-3 z-[70] w-[200px] rounded-[8px] border border-brand-logo bg-bg-card p-3 text-md shadow-elevated bottom-[calc(var(--spacing-bottom-tabs)+env(safe-area-inset-bottom)+12px)] md:bottom-4"
+      className="fixed right-3 z-[70] w-[200px] rounded-[10px] border border-brand-primary bg-gradient-elevated p-3 text-md shadow-elevated bottom-[calc(var(--spacing-bottom-tabs)+env(safe-area-inset-bottom)+12px)] md:bottom-4"
     >
       <p className="mb-2 font-medium text-text-primary">🧪 テストモード</p>
       <p className="mb-2 text-text-muted">
@@ -86,7 +86,7 @@ export function TestModeWidget() {
               aria-pressed={isCurrent}
               className={cn(
                 'inline-flex w-full items-center justify-center gap-2 rounded-[6px] px-3 py-[6px] text-base font-medium transition-[filter] duration-[120ms]',
-                isCurrent ? 'bg-bg-btn text-text-tertiary' : 'bg-brand-logo text-white hover:brightness-110',
+                isCurrent ? 'bg-bg-btn text-text-tertiary' : 'bg-gradient-primary text-white hover:brightness-110',
               )}
             >
               {busy === kind && <Spinner size={14} className="text-white" />}
@@ -99,7 +99,7 @@ export function TestModeWidget() {
             type="button"
             onClick={handleSignOut}
             disabled={disabled}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-[6px] border-[0.5px] border-border-strong bg-bg-btn px-3 py-[6px] text-base font-medium text-text-btn hover:bg-btn-secondary-hover"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-[6px] border border-border-control bg-gradient-secondary px-3 py-[6px] text-base font-medium text-text-btn hover:bg-gradient-secondary-hover"
           >
             {busy === 'signout' && <Spinner size={14} />}
             ログアウト

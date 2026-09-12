@@ -1,6 +1,9 @@
 /**
- * フォーム入力要素（共通 デザイントークン仕様書 §10）。
- * Input / Select / Textarea と、ラベル＋エラーメッセージをまとめる Field。
+ * フォーム入力要素（共通 デザイントークン仕様書 v2.0 §10）。
+ * Input / Textarea / PasswordInput と、ラベル＋エラーメッセージをまとめる Field、Checkbox。
+ * 入力面は 1px の半透明白の枠＋内側の影で一段沈めて見せ、フォーカスで白枠＋リング。
+ * セレクトはブラウザ標準を使わない（OSのダーク配色と混ざり文字が読めなくなる）。
+ * `SelectMenu`（DropdownMenu.tsx）を使うこと。
  */
 'use client';
 
@@ -8,10 +11,10 @@ import { useId, useState, type ComponentProps, type ReactNode } from 'react';
 import { cn } from './cn';
 import { EyeIcon, EyeOffIcon } from './icons';
 
-const INPUT_CLASS =
-  'w-full rounded-[7px] border-[0.5px] border-input-border bg-input-bg px-3 py-[9px] text-base text-input-text ' +
-  'placeholder:text-input-placeholder transition-[border-color] duration-[120ms] ' +
-  'aria-invalid:border-input-error disabled:opacity-40';
+export const INPUT_CLASS =
+  'w-full rounded-[7px] border border-input-border bg-input-bg px-3 py-[9px] text-base text-input-text inset-shadow-input ' +
+  'placeholder:text-input-placeholder transition-[border-color,box-shadow] duration-[120ms] outline-none ' +
+  'focus:border-border-active focus:shadow-focus-ring aria-invalid:border-input-error disabled:opacity-40';
 
 export function Input({ className, ...rest }: ComponentProps<'input'>) {
   return <input className={cn(INPUT_CLASS, className)} {...rest} />;
@@ -20,21 +23,6 @@ export function Input({ className, ...rest }: ComponentProps<'input'>) {
 export function Textarea({ className, ...rest }: ComponentProps<'textarea'>) {
   return <textarea className={cn(INPUT_CLASS, 'min-h-[96px] resize-y', className)} {...rest} />;
 }
-
-export function Select({ className, children, ...rest }: ComponentProps<'select'>) {
-  return (
-    <select className={cn(INPUT_CLASS, 'appearance-none pr-8 bg-no-repeat', className)} style={SELECT_ARROW} {...rest}>
-      {children}
-    </select>
-  );
-}
-
-// セレクトの矢印（#aaaaaa のシェブロン）。画像リソースを増やさず data URI で埋め込む
-const SELECT_ARROW = {
-  backgroundImage:
-    "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23aaaaaa' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")",
-  backgroundPosition: 'right 10px center',
-} as const;
 
 /** パスワード入力（表示切替付き。ログイン仕様書 §12.1 の [表示]） */
 export function PasswordInput({ className, ...rest }: Omit<ComponentProps<'input'>, 'type'>) {

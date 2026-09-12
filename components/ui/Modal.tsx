@@ -1,7 +1,7 @@
 /**
- * モーダル（共通 デザイントークン仕様書 §13.1）。
+ * モーダル（共通 デザイントークン仕様書 v2.0 §13.1）。
  * 挙動（フォーカス閉じ込め・Esc・オーバーレイクリックで閉じる・aria）は Radix Dialog に任せ、
- * 見た目だけをトークンどおりに当てる。
+ * 見た目だけをトークンどおりに当てる（浮遊面: グラデーション＋1px枠＋影、§16 段階2）。
  * ログイン要求モーダル（UIコンポーネント仕様書 §5）・ゲームタイトル選択モーダル等の土台。
  */
 'use client';
@@ -31,7 +31,7 @@ export function Modal({ open, onOpenChange, title, description, children, maxWid
         <Dialog.Content
           className={cn(
             'fixed left-1/2 top-1/2 z-50 w-[calc(100%-32px)] -translate-x-1/2 -translate-y-1/2',
-            'rounded-[10px] border-[0.5px] border-surface-border bg-surface-elevated p-6 shadow-elevated',
+            'rounded-[12px] border border-surface-border bg-gradient-elevated p-6 shadow-elevated',
             'max-h-[calc(100dvh-32px)] overflow-y-auto outline-none',
             'data-[state=open]:animate-fade-in data-[state=closed]:animate-fade-out',
             maxWidthClassName,
@@ -47,7 +47,7 @@ export function Modal({ open, onOpenChange, title, description, children, maxWid
           {children && <div className="mt-5">{children}</div>}
           <Dialog.Close
             aria-label="閉じる"
-            className="absolute right-3 top-3 rounded-[6px] p-1 text-text-muted transition-colors duration-[120ms] hover:text-text-primary"
+            className="absolute right-3 top-3 rounded-[6px] p-1 text-text-muted transition-colors duration-[120ms] hover:bg-bg-hover hover:text-text-primary"
           >
             <XIcon size={18} />
           </Dialog.Close>

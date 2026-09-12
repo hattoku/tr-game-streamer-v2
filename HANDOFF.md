@@ -330,12 +330,34 @@ DB設計書に未記載）は、実装前に`document/specification/db/Firestore
    → **2026-09-12対応済み**（`wiki/sources/2026-09-12-playlist-detail-design.md`）。`components/playlists/`に
    部品化。シアターモード切替でYouTube iframeを破棄しないようDOM順固定・クラス切替のみ。**本番Firestoreに
    公開再生リストが0件のため、ブラウザでの再生確認には管理者で`/playlists/new`から1件登録が必要**。
+4.5. ~~**デザイン方針の見直し**~~ → **2026-09-12対応済み**（`wiki/sources/2026-09-12-design-direction-crimson.md`）。
+   ステップ4まで終えた時点でユーザーから「カードがフラット」「ボタンが文字リンクに見える」「枠や線の
+   ガイドラインが無いのでは。エンタメサイトとしてもう少しリッチに」との指摘。`/mylist`・`/playlists/new` の
+   指摘は未適用ページ（ステップ5・7で解消）だが、適用済みの `/playlists` も平坦で、原因はトークン仕様書 v1 の
+   コンセプト（「UIクロームは背景に溶け込む」＋0.5px枠）そのものと判断。残りステップが全て Card/Button/Tabs
+   の上に載るため、先に共通層を固めた。
+   - 方向性モックアップ4案（黒ベース＋赤を共通に、2色目の違い）をキャンバスで比較し **A. クリムゾン（2色目を
+     足さず、奥行きで演出）** を採用（ユーザー決定）。キャンバス: https://claude.ai/code/artifact/f0cf5e60-219c-4a93-9089-c5bfbe42c2bd 、
+     作業ファイル `document/design/phase2.5-direction-mockups/`。
+   - **共通 デザイントークン仕様書 v2.0**: §1 コンセプト改訂、境界線を 1px 半透明白に統一、赤の用途拡大
+     （プライマリボタン・進捗・未読・再生中）、カードの面・影・ホバー浮き上がり、サムネイルの話数「N話」
+     （「全N話」を廃止）とホバー再生ボタン、ゴーストボタン、タグのピル化、セレクトのドロップダウン化、
+     §16「奥行き・演出」新設。動画プレーヤー仕様書 v1.5・再生リストを探す仕様書 v1.6 も「N話」に更新。
+   - コード: `globals.css`（v2.0 トークン、`@utility` のグラデーション面）、`components/ui/` 全般
+     （`SelectMenu`・`DropdownMenuRadioItem`・`CardChildArea`・`SectionHeading`・`PlayingBadge`・`CountLabel`
+     追加、`Select` 削除）、レイアウト部品、`PlaylistGrid`・`VideoList`・再生リスト詳細に反映。tsc/build 成功、
+     実ブラウザ（1440/390）で一覧・詳細を確認済み。
+   - **ステップ5〜7で使う部品の注意**: セレクトは `SelectMenu`、削除等の従アクションは `Button variant="ghost"`、
+     トグル（逆順・連続再生）は `Button active`、タブ右端のソートは `TabsList trailing`、子エリアは `CardChildArea`。
+     詳細は `wiki/concepts/デザイントークン運用方針.md`。
 5. **マイリスト**（フィルタタブ件数・ステータス変更ドロップダウン・子エリア「最後に再生した
    動画」・🔔NEW行・空状態、暫定追加フォームの削除）
 6. **通知一覧とヘッダーベル**（未読件数バッジ、カード・タブ・空状態、管理者用再取得の隔離）
 7. **ログインと再生リスト登録**（AuthLayout、§12.1準拠フォーム、登録フォーム/プレビュー/
    ゲーム選択モーダル/完了画面）
-8. **仕上げ**（3幅での目視確認はユーザー側、キーボード操作・aria、lint/build、Wiki更新）
+8. **仕上げ**（3幅での目視確認、キーボード操作・aria、lint/build、Wiki更新）。
+   目視確認は `scripts/dev/screenshot.mjs`（DevTools Protocol でデータ読み込み後に撮影。2026-09-12 追加）で
+   Claude 側でも撮れるようになった。ユーザーの `npm run dev` が動いている状態で実行する。
 
 フェーズ2.5で見送るもの: インフォメーションバー、テストモードウィジェット、通知ドロップダウン、
 未実装ページ本体（`/playlists`・`/games`等はナビリンクだけ置き404で受ける）、TOP本実装、

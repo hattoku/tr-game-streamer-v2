@@ -1,13 +1,15 @@
 /**
  * 再生リスト詳細の動画リスト（動画プレーヤー仕様書「動画リスト」「右カラム進捗バー表示」、
  * デザイントークン仕様書 §6.3, §6.4）。
- * - 各動画: サムネイル＋進捗バー／タイトル／尺。現在再生中は背景ハイライト＋▶アイコン
- * - 「全XX話」表示と逆順トグル（動画プレーヤー仕様書「逆順トグル」）
+ * - 各動画: サムネイル＋進捗バー／タイトル／尺。現在再生中は背景ハイライト＋▶アイコン＋「再生中」バッジ（§5.3）
+ * - 話数「N話」表示（更新中の再生リストがあるため「全N話」とはしない。動画プレーヤー仕様書 v1.5）と
+ *   逆順トグル（動画プレーヤー仕様書「逆順トグル」）
  * - 初期スクロール: 最後に視聴した動画がリスト上端に来るよう、リスト内でスクロール
  */
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { PlayingBadge } from '@/components/ui/Badge';
 import { Card, CardTitle } from '@/components/ui/Card';
 import { Checkbox } from '@/components/ui/Input';
 import { ProgressBar } from '@/components/ui/ProgressBar';
@@ -58,12 +60,12 @@ export function VideoList({ videos, currentIndex, progressByVideo, reverseOrder,
     <Card flush className={cn('flex flex-col', className)}>
       <div className="flex items-center justify-between gap-3 px-[18px] pt-4 pb-3">
         <CardTitle>
-          動画リスト <span className="ml-1 text-md font-normal text-text-muted">全{videos.length}話</span>
+          動画リスト <span className="ml-1 text-md font-normal text-text-muted">{videos.length}話</span>
         </CardTitle>
         <Checkbox label="逆順" checked={reverseOrder} onChange={(e) => onReverseToggle(e.target.checked)} className="text-md" />
       </div>
       {reverseNote && <p className="px-[18px] pb-2 text-sm text-text-muted">{reverseNote}</p>}
-      <ul ref={listRef} className="max-h-[520px] overflow-y-auto border-t-[0.5px] border-border-subtle md:max-h-[calc(100dvh-220px)]">
+      <ul ref={listRef} className="max-h-[520px] overflow-y-auto border-t border-border-divider md:max-h-[calc(100dvh-220px)]">
         {videos.map((video, index) => {
           const isCurrent = index === currentIndex;
           const percent = progressByVideo[video.youtubeVideoId];
@@ -91,9 +93,12 @@ export function VideoList({ videos, currentIndex, progressByVideo, reverseOrder,
                       <img src={video.thumbnailUrl} alt="" className="size-full object-cover" loading="lazy" />
                     )}
                     {isCurrent && (
-                      <span className="absolute inset-0 flex items-center justify-center bg-black/40 text-white">
-                        <PlayIcon size={22} />
-                      </span>
+                      <>
+                        <span className="absolute inset-0 flex items-center justify-center bg-black/40 text-white">
+                          <PlayIcon size={22} />
+                        </span>
+                        <PlayingBadge className="absolute left-1 top-1" />
+                      </>
                     )}
                   </span>
                   {percent != null && <ProgressBar value={percent} className="mt-[2px]" />}

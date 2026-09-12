@@ -1,10 +1,10 @@
 /**
- * ボタン（共通 デザイントークン仕様書 §4・§11）。
- * - primary:   ページ内で最も重要な1アクション（§4.1）。1ページに原則1つ
- * - secondary: 操作系（§4.2）
+ * ボタン（共通 デザイントークン仕様書 v2.0 §4・§11・§16）。
+ * - primary:   ページ内で最も重要な1アクション（§4.1）。ブランド赤の面＋影。1ページに原則1つ
+ * - secondary: 操作系（§4.2）。グレーの面＋1px枠＋影。`active` でトグルON状態（逆順で再生・連続再生など）
+ * - ghost:     従アクション（§4.4）。面を持たず、ホバーで面が現れる（削除・キャンセル）
  * - rakuten:   外部リンク（楽天ブックス、§4.3）
- * size 'full' は幅100%のアクション系（§4.2 パディング 10px）、'sm' はヘッダーの
- * 「アカウント作成」など小型（§14）。
+ * size 'full' は幅100%のアクション系、'sm' はヘッダーの「アカウント作成」など小型（§14）。
  * リンクとして使う場合は LinkButton を使う。
  */
 import Link from 'next/link';
@@ -12,27 +12,38 @@ import type { ComponentProps, ReactNode } from 'react';
 import { cn } from './cn';
 import { Spinner } from './Spinner';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'rakuten';
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'rakuten';
 export type ButtonSize = 'md' | 'sm' | 'full';
 
 const VARIANT: Record<ButtonVariant, string> = {
   primary:
-    'bg-text-primary text-text-on-primary hover:bg-btn-primary-hover border-0',
+    'bg-gradient-primary text-white font-semibold border-0 shadow-primary inset-shadow-highlight-strong ' +
+    'hover:brightness-[1.08] hover:-translate-y-px',
   secondary:
-    'bg-bg-btn text-text-btn border-[0.5px] border-border-strong hover:bg-btn-secondary-hover',
-  rakuten: 'bg-brand-rakuten text-white border-0 hover:brightness-110',
+    'bg-gradient-secondary text-text-btn font-medium border border-border-control shadow-control inset-shadow-highlight ' +
+    'hover:bg-gradient-secondary-hover',
+  ghost: 'bg-transparent text-text-muted font-normal border border-transparent hover:text-text-primary hover:bg-bg-hover',
+  rakuten: 'bg-brand-rakuten text-white font-medium border-0 hover:brightness-110',
 };
+
+/** トグルON状態（§4.2）。secondary にのみ適用する */
+const ACTIVE = 'bg-none bg-bg-selected text-text-primary border-border-active hover:bg-none';
 
 const SIZE: Record<ButtonVariant, Record<ButtonSize, string>> = {
   primary: {
-    md: 'text-lg px-[22px] py-[9px] rounded-[7px]',
-    sm: 'text-base px-[14px] py-[7px] rounded-[7px]',
-    full: 'text-lg w-full px-[22px] py-[10px] rounded-[7px]',
+    md: 'text-lg px-[22px] py-[9px] rounded-[8px]',
+    sm: 'text-base px-[14px] py-[7px] rounded-[8px]',
+    full: 'text-lg w-full px-[22px] py-[11px] rounded-[8px]',
   },
   secondary: {
-    md: 'text-base px-[14px] py-2 rounded-[7px]',
+    md: 'text-base px-[14px] py-2 rounded-[8px]',
     sm: 'text-md px-[10px] py-[5px] rounded-[6px]',
-    full: 'text-base w-full p-[10px] rounded-[7px]',
+    full: 'text-base w-full p-[10px] rounded-[8px]',
+  },
+  ghost: {
+    md: 'text-base px-3 py-2 rounded-[8px]',
+    sm: 'text-md px-[8px] py-[5px] rounded-[6px]',
+    full: 'text-base w-full p-[10px] rounded-[8px]',
   },
   rakuten: {
     md: 'text-md px-3 py-[6px] rounded-[6px]',
@@ -42,11 +53,16 @@ const SIZE: Record<ButtonVariant, Record<ButtonSize, string>> = {
 };
 
 const BASE =
-  'inline-flex items-center justify-center gap-[6px] font-medium whitespace-nowrap select-none ' +
-  'transition-[background-color,color,border-color] duration-[120ms]';
+  'inline-flex items-center justify-center gap-[6px] whitespace-nowrap select-none ' +
+  'transition-[background-color,color,border-color,transform,box-shadow,filter] duration-[120ms]';
 
-export function buttonClassName(variant: ButtonVariant = 'secondary', size: ButtonSize = 'md', className?: string) {
-  return cn(BASE, VARIANT[variant], SIZE[variant][size], className);
+export function buttonClassName(
+  variant: ButtonVariant = 'secondary',
+  size: ButtonSize = 'md',
+  className?: string,
+  active = false,
+) {
+  return cn(BASE, VARIANT[variant], SIZE[variant][size], active && variant === 'secondary' && ACTIVE, className);
 }
 
 interface ButtonProps extends ComponentProps<'button'> {
@@ -54,6 +70,8 @@ interface ButtonProps extends ComponentProps<'button'> {
   size?: ButtonSize;
   /** true の間はスピナーを表示し、クリックを無効化する（§9.3 ボタン内アクション実行中） */
   loading?: boolean;
+  /** トグルON状態（secondary のみ）。aria-pressed も付く */
+  active?: boolean;
   children: ReactNode;
 }
 
@@ -61,6 +79,7 @@ export function Button({
   variant = 'secondary',
   size = 'md',
   loading = false,
+  active = false,
   disabled,
   className,
   children,
@@ -72,10 +91,11 @@ export function Button({
       type={type}
       disabled={disabled || loading}
       aria-busy={loading || undefined}
-      className={buttonClassName(variant, size, className)}
+      aria-pressed={variant === 'secondary' && active ? true : rest['aria-pressed']}
+      className={buttonClassName(variant, size, className, active)}
       {...rest}
     >
-      {loading && <Spinner size={14} className={variant === 'primary' ? 'text-text-on-primary' : undefined} />}
+      {loading && <Spinner size={14} className={variant === 'primary' ? 'text-white' : undefined} />}
       {children}
     </button>
   );

@@ -27,19 +27,19 @@ function LinkGroup({ title, items }: { title: string; items: NavItem[] }) {
 
 export function Footer() {
   return (
-    <footer className="mt-16 hidden border-t-[0.5px] border-border-subtle bg-bg-base md:block">
+    <footer className="mt-16 hidden border-t border-border-divider bg-bg-base md:block">
       <div className="mx-auto w-full max-w-[1400px] px-4 py-10 md:px-6">
         <Logo />
         <p className="mt-2 text-md text-text-muted">{SERVICE_TAGLINE}</p>
 
-        <div className="my-8 border-t-[0.5px] border-border-subtle" />
+        <div className="my-8 border-t border-border-divider" />
 
         <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 md:max-w-[480px]">
           <LinkGroup title="サービス" items={FOOTER_SERVICE_NAV} />
           <LinkGroup title="サポート" items={FOOTER_SUPPORT_NAV} />
         </div>
 
-        <div className="my-8 border-t-[0.5px] border-border-subtle" />
+        <div className="my-8 border-t border-border-divider" />
 
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <ul className="flex flex-col gap-2 md:flex-row md:gap-5">

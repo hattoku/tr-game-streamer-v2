@@ -1,8 +1,9 @@
 /*
  * グローバルスタイルとデザイントークン定義
- * document/specification/common/共通 デザイントークン仕様書.md（v1.2）のトークン名を
+ * document/specification/common/共通 デザイントークン仕様書.md（v2.0）のトークン名を
  * そのまま Tailwind v4 の @theme に CSS 変数として登録する。
  * 例: color-bg-base → --color-bg-base → ユーティリティ `bg-bg-base`
+ * 面のグラデーション（§6.1, §13, §16）は @utility で `bg-gradient-card` 等として定義する。
  * ブレークポイントは Tailwind 標準の md (768px) が
  * 共通 ページレイアウト 仕様書 §2 の PC/モバイル境界と一致するためそのまま使う。
  */
@@ -12,16 +13,26 @@
   /* §2.1 背景 */
   --color-bg-base: #0f0f0f;
   --color-bg-card: #141414;
+  --color-bg-card-top: #191919;
+  --color-bg-card-bottom: #131313;
+  --color-bg-elevated-top: #202020;
+  --color-bg-elevated-bottom: #171717;
   --color-bg-btn: #252525;
   --color-bg-input: #1a1a1a;
   --color-bg-player: #000000;
   --color-bg-list-active: #1c1c1c; /* §6.3 動画リストアイテム（再生中ハイライト） */
+  --color-bg-child: rgba(255, 255, 255, 0.03);
+  --color-bg-hover: rgba(255, 255, 255, 0.06);
+  --color-bg-selected: rgba(232, 232, 232, 0.1);
 
-  /* §2.2 ボーダー */
-  --color-border-subtle: #1e1e1e;
-  --color-border-default: #222222;
-  --color-border-strong: #3a3a3a;
-  --color-border-chip: #2e2e2e;
+  /* §2.2 ボーダー（1px の半透明白） */
+  --color-border-card: rgba(255, 255, 255, 0.07);
+  --color-border-card-hover: rgba(255, 255, 255, 0.14);
+  --color-border-control: rgba(255, 255, 255, 0.14);
+  --color-border-divider: rgba(255, 255, 255, 0.06);
+  --color-border-tabs: rgba(255, 255, 255, 0.08);
+  --color-border-chip: rgba(255, 255, 255, 0.12);
+  --color-border-active: #e8e8e8;
 
   /* §2.3 テキスト */
   --color-text-primary: #e8e8e8;
@@ -29,10 +40,10 @@
   --color-text-tertiary: #aaaaaa;
   --color-text-muted: #888888;
   --color-text-faint: #777777;
-  --color-text-on-primary: #111111; /* §4.1 プライマリボタン文字色 */
   --color-text-btn: #e0e0e0; /* §4.2 セカンダリボタン文字色 */
 
   /* §2.4 ブランド・アクセント */
+  --color-brand-primary: #e03030;
   --color-brand-logo: #e03030;
   --color-brand-score: #f0a500;
   --color-brand-watching: #1db37a;
@@ -49,14 +60,10 @@
 
   /* §10 入力要素 */
   --color-input-bg: #1a1a1a;
-  --color-input-border: #3a3a3a;
+  --color-input-border: rgba(255, 255, 255, 0.14);
   --color-input-text: #e8e8e8;
   --color-input-placeholder: #888888;
   --color-input-error: #e03030;
-
-  /* §11 ホバー */
-  --color-btn-primary-hover: #ffffff;
-  --color-btn-secondary-hover: #2e2e2e;
 
   /* §12 トースト */
   --color-toast-success: #1db37a;
@@ -66,9 +73,20 @@
 
   /* §13 オーバーレイ面 */
   --color-overlay: rgba(0, 0, 0, 0.6);
-  --color-surface-elevated: #141414;
-  --color-surface-border: #222222;
-  --shadow-elevated: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --color-surface-border: rgba(255, 255, 255, 0.12);
+
+  /* §16 奥行き・演出: 影 */
+  --shadow-card: 0 6px 18px rgba(0, 0, 0, 0.45);
+  --shadow-card-hover: 0 14px 32px rgba(0, 0, 0, 0.6);
+  --shadow-elevated: 0 12px 32px rgba(0, 0, 0, 0.6);
+  --shadow-control: 0 2px 6px rgba(0, 0, 0, 0.35);
+  --shadow-primary: 0 4px 14px rgba(224, 48, 48, 0.35);
+  --shadow-logo: 0 2px 8px rgba(224, 48, 48, 0.4);
+  --shadow-bottom-tabs: 0 -8px 24px rgba(0, 0, 0, 0.5);
+  --shadow-focus-ring: 0 0 0 3px rgba(232, 232, 232, 0.1); /* §10 入力のフォーカス */
+  --inset-shadow-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --inset-shadow-highlight-strong: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  --inset-shadow-input: inset 0 1px 2px rgba(0, 0, 0, 0.5);
 
   /* §3 タイポグラフィ */
   --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -86,6 +104,8 @@
   --text-xl--line-height: 1.5;
   --text-2xl: 16px;
   --text-2xl--line-height: 1.5;
+  --text-heading: 18px;
+  --text-heading--line-height: 1.4;
   --text-score: 26px;
   --text-score--line-height: 1.2;
 
@@ -165,6 +185,37 @@
   }
 }
 
+/* §16 面のグラデーション（上端がわずかに明るい）。色は @theme の値と揃える */
+@utility bg-gradient-card {
+  background-image: linear-gradient(180deg, var(--color-bg-card-top) 0%, var(--color-bg-card-bottom) 100%);
+}
+@utility bg-gradient-elevated {
+  background-image: linear-gradient(180deg, var(--color-bg-elevated-top) 0%, var(--color-bg-elevated-bottom) 100%);
+}
+/* §4.1 プライマリボタン・§8.2 ロゴ・§6.5 再生ボタン */
+@utility bg-gradient-primary {
+  background-image: linear-gradient(180deg, #ea4444 0%, #c92626 100%);
+}
+/* §4.2 セカンダリボタン（通常／ホバー） */
+@utility bg-gradient-secondary {
+  background-image: linear-gradient(180deg, #2c2c2c 0%, #222222 100%);
+}
+@utility bg-gradient-secondary-hover {
+  background-image: linear-gradient(180deg, #343434 0%, #282828 100%);
+}
+/* §14 ヘッダー（ベース色の上に上端ハイライト）・ボトムタブバー */
+@utility bg-header {
+  background-color: var(--color-bg-base);
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.025) 0%, rgba(255, 255, 255, 0) 100%);
+}
+@utility bg-gradient-bottom-tabs {
+  background-image: linear-gradient(180deg, #161616 0%, #111111 100%);
+}
+/* §6.5 サムネイル下部のオーバーレイ */
+@utility bg-thumb-overlay {
+  background-image: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.65) 100%);
+}
+
 @layer base {
   html {
     color-scheme: dark;
@@ -179,7 +230,7 @@
   }
   /* §11.2 フォーカス（キーボード操作時のみ・刺し色は使わない） */
   :focus-visible {
-    outline: 2px solid var(--color-border-strong);
+    outline: 2px solid var(--color-border-active);
     outline-offset: 2px;
   }
   /* §10 チェックボックス等は刺し色を使わない */
@@ -193,6 +244,7 @@
   }
   button {
     cursor: pointer;
+    font-family: inherit;
   }
   button:disabled {
     /* §11.3 無効 */

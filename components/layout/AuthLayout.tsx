@@ -9,7 +9,7 @@ import { Logo } from '@/components/ui/Logo';
 export function AuthLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="flex h-header-mobile items-center border-b-[0.5px] border-border-subtle px-4 md:h-header md:px-6">
+      <header className="flex h-header-mobile items-center border-b border-border-divider px-4 md:h-header md:px-6">
         <Logo />
       </header>
       <main className="flex flex-1 items-start justify-center px-4 py-10 md:py-16">

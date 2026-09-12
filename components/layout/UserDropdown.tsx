@@ -1,6 +1,6 @@
 /**
  * ヘッダーのユーザードロップダウン（共通 uiコンポーネント フロント 仕様書 §2.6）。
- * ユーザーアイコン（28px 円形、未設定時はイニシャル。デザイントークン仕様書 §14）＋ユーザー名をクリックで
+ * ユーザーアイコン（24px 円形、未設定時はイニシャル。デザイントークン仕様書 v2.0 §14）＋ユーザー名をピルに収め、クリックで
  * ユーザー名・メール（表示専用）／プロフィール／設定／ログアウト を表示する。
  * ログアウト後は TOP へ遷移する。
  */
@@ -26,8 +26,8 @@ export function UserAvatar({ name, size = 28, className }: { name: string; size?
   return (
     <span
       aria-hidden
-      className={cn('inline-flex shrink-0 items-center justify-center rounded-full bg-bg-btn text-text-tertiary', className)}
-      style={{ width: size, height: size, fontSize: Math.round(size * 0.45) }}
+      className={cn('inline-flex shrink-0 items-center justify-center rounded-full bg-bg-selected font-semibold text-text-primary', className)}
+      style={{ width: size, height: size, fontSize: Math.round(size * 0.46) }}
     >
       {initial}
     </span>
@@ -48,13 +48,19 @@ export function UserDropdown({ compact = false }: { compact?: boolean }) {
 
   return (
     <DropdownMenu>
+      {/* ピル（トークン仕様書 v2.0 §14「ユーザーエリア」）: アイコン＋名前＋▾ */}
       <DropdownMenuTrigger
         aria-label="ユーザーメニュー"
-        className="inline-flex items-center gap-1 rounded-full text-text-tertiary transition-colors duration-[120ms] hover:text-text-primary data-[state=open]:text-text-primary"
+        className={cn(
+          'inline-flex items-center rounded-full border border-white/10 bg-white/4 text-text-tertiary',
+          'transition-[color,border-color,background-color] duration-[120ms] hover:border-border-control hover:text-text-primary',
+          'data-[state=open]:border-border-control data-[state=open]:text-text-primary',
+          compact ? 'gap-1 py-[2px] pl-[2px] pr-[6px]' : 'gap-2 py-1 pl-1 pr-[10px]',
+        )}
       >
-        <UserAvatar name={name} size={compact ? 20 : 28} />
-        <span className={cn('max-w-[6em] truncate text-text-secondary', compact ? 'text-md' : 'text-base')}>{name}</span>
-        <ChevronDownIcon size={compact ? 10 : 14} />
+        <UserAvatar name={name} size={compact ? 18 : 24} />
+        <span className={cn('max-w-[6em] truncate text-text-primary', compact ? 'text-md' : 'text-base')}>{name}</span>
+        <ChevronDownIcon size={compact ? 10 : 12} />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-[220px]">
         <DropdownMenuLabel className="py-2">

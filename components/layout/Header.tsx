@@ -4,7 +4,8 @@
  * - モバイル: ハンバーガー（MobileMenu: サポート・法的リンク・©）＋ロゴ＋ユーザーエリア（ログインボタン or
  *   ユーザーアイコン＋名前）。主要導線はボトムタブバー（BottomTabBar）が担い、「さがす」一覧ページの
  *   ときだけ直下にタブ列（SearchTabs）を出す
- * - sticky で最上部に固定。高さ PC 60px・モバイル 52px（＋さがすタブ 40px）・シアターモード時 30px（黒背景）
+ * - sticky で最上部に固定。高さ PC 60px・モバイル 52px（＋さがすタブ 52px）・シアターモード時 30px（黒背景）
+ * - 面はベース色＋上端ハイライト（トークン仕様書 v2.0 §14）、下線は 1px の半透明白
  * - 通知ベル（ユーザー通知機能仕様書 §4.1）は PC のみ。未読件数はステップ5で付ける
  */
 'use client';
@@ -32,8 +33,8 @@ export function Header() {
   return (
     <header
       className={cn(
-        'sticky top-0 z-30 border-b-[0.5px] border-border-subtle transition-[background-color] duration-200',
-        compactHeader ? 'bg-bg-player' : 'bg-bg-base',
+        'sticky top-0 z-30 border-b border-border-divider transition-[background-color] duration-200',
+        compactHeader ? 'bg-bg-player' : 'bg-header',
       )}
     >
       <div

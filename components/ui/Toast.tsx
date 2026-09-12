@@ -65,7 +65,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 if (!open) remove(item.id);
               }}
               className={cn(
-                'flex items-start gap-3 rounded-[10px] border-[0.5px] border-border-default border-l-4 bg-bg-card px-4 py-3 text-base text-text-primary shadow-elevated',
+                'flex items-start gap-3 rounded-[10px] border border-surface-border border-l-4 bg-gradient-elevated px-4 py-3 text-base text-text-primary shadow-elevated',
                 'data-[state=open]:animate-fade-in data-[state=closed]:animate-fade-out data-[swipe=end]:animate-fade-out',
                 style.border,
               )}

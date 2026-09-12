@@ -6,11 +6,12 @@
  * （wiki/sources/2026-09-11-phase2.5-design-plan.md §4 ステップ2）。
  */
 import { PlaylistGrid } from '@/components/playlists/PlaylistGrid';
+import { SectionHeading } from '@/components/ui/Card';
 
 export default function HomePage() {
   return (
     <div>
-      <h1 className="mb-5 text-xl font-medium text-text-primary">新着の再生リスト</h1>
+      <SectionHeading className="mb-5">新着の再生リスト</SectionHeading>
       <PlaylistGrid />
     </div>
   );

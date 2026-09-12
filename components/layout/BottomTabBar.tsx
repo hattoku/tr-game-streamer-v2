@@ -32,7 +32,7 @@ export function BottomTabBar() {
   return (
     <nav
       aria-label="メインナビゲーション"
-      className="fixed inset-x-0 bottom-0 z-30 border-t-[0.5px] border-border-subtle bg-bg-base pb-[env(safe-area-inset-bottom)] md:hidden"
+      className="fixed inset-x-0 bottom-0 z-30 border-t border-border-tabs bg-gradient-bottom-tabs pb-[env(safe-area-inset-bottom)] shadow-bottom-tabs md:hidden"
     >
       <ul className="grid h-bottom-tabs grid-cols-4">
         {BOTTOM_TABS.map((tab) => {
@@ -46,7 +46,7 @@ export function BottomTabBar() {
                 aria-current={isActive ? 'page' : undefined}
                 className={cn(
                   'flex h-full flex-col items-center justify-center gap-[3px] transition-colors duration-[120ms]',
-                  isActive ? 'text-text-primary' : 'text-text-tertiary',
+                  isActive ? 'text-text-primary' : 'text-text-muted',
                 )}
               >
                 <Icon size={22} strokeWidth={isActive ? 2.25 : 1.75} />

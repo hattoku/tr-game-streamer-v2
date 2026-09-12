@@ -7,16 +7,16 @@ export * from './icons';
 export { Logo } from './Logo';
 export { Button, LinkButton, ExternalLinkButton, buttonClassName } from './Button';
 export type { ButtonVariant, ButtonSize } from './Button';
-export { Card, CardDivider, CardTitle } from './Card';
+export { Card, CardDivider, CardTitle, CardChildArea, SectionHeading } from './Card';
 export { StatusChip, WATCH_STATUS_LABEL, WATCH_STATUS_ORDER } from './Chip';
 export type { WatchStatus } from './Chip';
-export { TrendingBadge, NewBadge, UnreadDot, CountBadge } from './Badge';
+export { TrendingBadge, PlayingBadge, CountLabel, NewBadge, UnreadDot, CountBadge } from './Badge';
 export { Tag } from './Tag';
 export { ProgressBar } from './ProgressBar';
 export { Skeleton, SkeletonText } from './Skeleton';
 export { Spinner, CenteredSpinner } from './Spinner';
 export { EmptyState } from './EmptyState';
-export { Input, Textarea, Select, PasswordInput, Field, Checkbox } from './Input';
+export { Input, Textarea, PasswordInput, Field, Checkbox, INPUT_CLASS } from './Input';
 export { Modal } from './Modal';
 export { ToastProvider, useToast } from './Toast';
 export type { ToastType, ToastInput } from './Toast';
@@ -26,6 +26,10 @@ export {
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  SelectMenu,
 } from './DropdownMenu';
+export type { SelectOption } from './DropdownMenu';

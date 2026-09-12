@@ -201,6 +201,70 @@ export function UserIcon(props: IconProps) {
   );
 }
 
+/** ★スコア（塗り） */
+export function StarIcon({ size = 14, ...rest }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden {...rest}>
+      <path d="M12 2.8l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.7 6.1 20.8l1.2-6.5L2.5 9.7l6.6-.9z" />
+    </svg>
+  );
+}
+
+/** マイリスト登録数（人） */
+export function UsersIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M22 21v-2a4 4 0 0 0-3-3.9" />
+      <path d="M16 3.1a4 4 0 0 1 0 7.8" />
+    </svg>
+  );
+}
+
+/** レビュー数（吹き出し） */
+export function CommentIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    </svg>
+  );
+}
+
+/** 逆順（swap_vert） */
+export function ReverseIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M3 7h13" />
+      <path d="M12 3l4 4-4 4" />
+      <path d="M21 17H8" />
+      <path d="M12 13l-4 4 4 4" />
+    </svg>
+  );
+}
+
+/** 削除（delete） */
+export function TrashIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M3 6h18" />
+      <path d="M8 6V4h8v2" />
+      <path d="M19 6l-1 14H6L5 6" />
+    </svg>
+  );
+}
+
+/** 外部リンク（open_in_new） */
+export function ExternalLinkIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+      <path d="M15 3h6v6" />
+      <path d="M10 14L21 3" />
+    </svg>
+  );
+}
+
 /**
  * YouTube ロゴ（共通 デザイントークン仕様書 §8.1）。
  * 赤矩形 #FF0000 ＋ 白三角、16px × 11px。

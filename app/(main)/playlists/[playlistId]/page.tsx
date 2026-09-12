@@ -353,7 +353,7 @@ export default function PlaylistDetailPage() {
   // クラスだけを切り替える（親要素が変わると React が再マウントし、再生中の動画が止まる）
   const hero = (
     <div className={cn(theaterMode && '-mx-4 -mt-6 bg-bg-player px-4 pt-4 md:-mx-6 md:-mt-8 md:px-6')}>
-      <div className={cn('relative aspect-video w-full overflow-hidden bg-bg-player', !theaterMode && 'rounded-[10px]')}>
+      <div className={cn('relative aspect-video w-full overflow-hidden bg-bg-player', !theaterMode && 'rounded-[12px] shadow-card')}>
         {/* プレーヤーのマウント先は常に置いておき、開始前はサムネイルを重ねる */}
         <div id="yt-player-target" className="absolute inset-0 size-full" />
         {!playerStarted && (
@@ -365,8 +365,10 @@ export default function PlaylistDetailPage() {
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={currentVideo?.thumbnailUrl || playlist.thumbnailUrl} alt="" className="absolute inset-0 size-full object-cover opacity-80 transition-opacity group-hover:opacity-100" />
-            <span className="relative inline-flex size-16 items-center justify-center rounded-full bg-black/60 text-white transition-transform group-hover:scale-105">
-              <PlayIcon size={32} />
+            <span aria-hidden className="absolute inset-x-0 bottom-0 h-[46%] bg-thumb-overlay" />
+            {/* 再生ボタン（トークン仕様書 v2.0 §6.5）。ヒーローは大きめの 64px */}
+            <span className="relative inline-flex size-16 items-center justify-center rounded-full bg-gradient-primary text-white shadow-primary transition-transform duration-[120ms] group-hover:scale-105">
+              <PlayIcon size={30} />
             </span>
           </button>
         )}
@@ -404,7 +406,7 @@ export default function PlaylistDetailPage() {
                 <ChevronRightIcon size={14} />
               </Button>
             )}
-            <Button variant="secondary" onClick={() => setTheaterMode((v) => !v)} aria-pressed={theaterMode}>
+            <Button variant="secondary" active={theaterMode} onClick={() => setTheaterMode((v) => !v)}>
               シアター{theaterMode ? '解除' : ''}
             </Button>
             <Checkbox label="連続再生" checked={continuousPlay} onChange={(e) => handleContinuousPlayToggle(e.target.checked)} className="ml-1" />
@@ -470,7 +472,7 @@ function DetailSkeleton() {
   return (
     <div className="grid grid-cols-1 gap-6 md:grid-cols-[62fr_38fr]" aria-busy="true" aria-label="読み込み中">
       <div className="flex flex-col gap-3">
-        <Skeleton className="aspect-video w-full rounded-[10px]" />
+        <Skeleton className="aspect-video w-full rounded-[12px]" />
         <Skeleton className="h-10 w-[200px]" />
       </div>
       <div className="flex flex-col gap-4">

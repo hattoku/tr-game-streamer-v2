@@ -48,7 +48,7 @@ export function MobileMenu({ className }: { className?: string }) {
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-overlay data-[state=open]:animate-fade-in data-[state=closed]:animate-fade-out" />
-        <Dialog.Content className="fixed left-0 top-0 z-50 flex h-dvh w-[min(300px,85vw)] flex-col overflow-y-auto border-r-[0.5px] border-surface-border bg-surface-elevated p-5 outline-none data-[state=open]:animate-slide-in-left data-[state=closed]:animate-slide-out-left">
+        <Dialog.Content className="fixed left-0 top-0 z-50 flex h-dvh w-[min(300px,85vw)] flex-col overflow-y-auto border-r border-surface-border bg-gradient-elevated p-5 shadow-elevated outline-none data-[state=open]:animate-slide-in-left data-[state=closed]:animate-slide-out-left">
           <Dialog.Title className="sr-only">メニュー</Dialog.Title>
           <Dialog.Description className="sr-only">サポート情報と法的情報へのリンク</Dialog.Description>
           <div className="flex items-center justify-between">
@@ -60,7 +60,7 @@ export function MobileMenu({ className }: { className?: string }) {
 
           <div className="mt-6 flex flex-col gap-5">
             <LinkGroup title="サポート" items={FOOTER_SUPPORT_NAV} onNavigate={close} />
-            <div className="border-t-[0.5px] border-border-subtle" />
+            <div className="border-t border-border-divider" />
             <LinkGroup title="規約・ポリシー" items={FOOTER_LEGAL_NAV} onNavigate={close} />
           </div>
 

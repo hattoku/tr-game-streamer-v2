@@ -4,13 +4,14 @@
  * 実装予定のページに暫定で置く。空状態コンポーネント（同仕様書 §8）を流用。
  */
 import { EmptyState } from '@/components/ui/EmptyState';
+import { SectionHeading } from '@/components/ui/Card';
 import { LinkButton } from '@/components/ui/Button';
 import { InventoryIcon } from '@/components/ui/icons';
 
 export function ComingSoon({ title }: { title: string }) {
   return (
     <div>
-      <h1 className="mb-5 text-xl font-medium text-text-primary">{title}</h1>
+      <SectionHeading className="mb-5">{title}</SectionHeading>
       <EmptyState
         icon={<InventoryIcon />}
         title="この機能は準備中です"
