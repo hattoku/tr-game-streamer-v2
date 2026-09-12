@@ -118,7 +118,9 @@ commit: 4f1f54f
 - 資格情報をブラウザに置かないため、サーバー API がカスタムトークンを発行する方式。テスト用会員
   `test-user@puremite.test`（role user、isTestUser true）は初回に自動作成される。`.env.local` は本番 Firebase
   プロジェクトを向いているため、ローカルで押すと**本番 Auth にテスト用会員が1件できる**（仕様 §7.5 に明記）
-- 管理者としてのテストは対象外（必要なら別途「管理者に切替」を検討）
+- 2026-09-12 追記: ユーザー要望で**管理者（role owner、`test-admin@puremite.test`）のテスト用会員も追加**。API は
+  `{ kind: 'user' | 'admin' }` を受け、種別どおりの role を毎回保証する。ウィジェットは「一般ユーザーでログイン」
+  「管理者でログイン」「ログアウト」の3ボタン。ログイン後 `refreshRole()` で Custom Claims を反映（UI仕様書 v1.15）
 - **ハマりどころ**: 当初 `createCustomToken` を使ったが、ローカルの ADC はユーザー認証情報のため
   「Failed to determine service account ... signBlob」で 500。`serviceAccountId` 指定＋IAM の Token Creator 付与で
   回避もできるが、環境依存を避けて **`updateUser` で使い捨てパスワードを設定し直して返す方式** に変更した

@@ -2,7 +2,7 @@
 title: Wiki索引
 type: meta
 date: 2026-09-08
-updated: 2026-09-11
+updated: 2026-09-12
 ---
 
 # Wiki 索引
@@ -21,6 +21,7 @@ tr-game-streamer-v2 の**コーディング支援用**Wiki（実装の変更履�
 - [[2026-09-11-phase2.5-design-plan]] — フェーズ2.5（デザイン適用）計画（Tailwind導入・仕様書の穴埋め・8ステップ）
 - [[2026-09-11-design-foundation]] — フェーズ2.5 ステップ0・1（仕様書の穴埋め、Tailwind v4＋Radix導入、components/ui）
 - [[2026-09-11-layout-and-system-pages]] — フェーズ2.5 ステップ2（ルートグループ導入、ヘッダー/フッター/ドロワー、404/500/loading、TOP最小版）
+- [[2026-09-12-playlist-detail-design]] — フェーズ2.5 ステップ3（再生リスト詳細の部品化・2カラム・シアターモード・マイリスト追加・ログイン要求モーダル）
 
 ## Entities
 - [[proxy]] — proxy.ts（旧middleware.ts、Next.js 16のproxy規約対応）
