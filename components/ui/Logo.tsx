@@ -24,7 +24,7 @@ export function Logo({ compact = false, className }: LogoProps) {
       >
         <PlayIcon size={compact ? 11 : 15} />
       </span>
-      <span className={cn('font-semibold text-text-primary', compact ? 'text-base' : 'text-xl')}>プレミテ</span>
+      <span className={cn('whitespace-nowrap font-semibold text-text-primary', compact ? 'text-base' : 'text-xl')}>プレミテ</span>
     </Link>
   );
 }

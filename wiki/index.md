@@ -27,6 +27,7 @@ tr-game-streamer-v2 の**コーディング支援用**Wiki（実装の変更履�
 - [[2026-09-12-notifications-design]] — フェーズ2.5 ステップ6（通知一覧・ヘッダーベルの未読バッジ、「タイムライン」廃止→ボトムタブ「マイリスト」、マイページは暫定 /history）
 - [[2026-09-12-login-and-register-design-plan]] — フェーズ2.5 ステップ7（ログイン・再生リスト登録のデザイン適用）実装計画（スコープの線引き・バリデーション文言・ゲーム選択モーダル・確認手順・要確認の判断4点）
 - [[2026-09-12-login-and-register-design]] — フェーズ2.5 ステップ7 実装記録（`/login` の signup モード・バリデーション・Firebase エラー日本語化、`/playlists/new` の確認エリア・GameSelectModal・PlaylistSummary・完了画面、撮影で focusout を使う話）
+- [[2026-09-13-phase2.5-finish]] — フェーズ2.5 ステップ8 仕上げ（3幅確認で 768〜1023px のヘッダー折り返しを修正、キーボード/aria の実機確認と `aria-modal`、`next lint` 廃止と typescript-eslint の TS 7 未対応を受けた Babel パーサーによる ESLint 導入、react-hooks の指摘修正）。フェーズ2.5 完了
 
 ## Entities
 - [[proxy]] — proxy.ts（旧middleware.ts、Next.js 16のproxy規約対応）

@@ -169,11 +169,17 @@ export default function MylistPage() {
 
   useEffect(() => {
     if (!user) return;
-    loadEntries(user.uid).catch((e) => {
-      console.error('マイリストの読み込みに失敗しました', e);
-      setEntries([]);
-      toast({ type: 'error', message: 'マイリストの読み込みに失敗しました' });
-    });
+    const uid = user.uid;
+    // 非同期 IIFE にして、effect 本体で同期的に setState しない形にする（react-hooks/set-state-in-effect）
+    (async () => {
+      try {
+        await loadEntries(uid);
+      } catch (e) {
+        console.error('マイリストの読み込みに失敗しました', e);
+        setEntries([]);
+        toast({ type: 'error', message: 'マイリストの読み込みに失敗しました' });
+      }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 

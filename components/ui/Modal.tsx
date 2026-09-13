@@ -29,6 +29,7 @@ export function Modal({ open, onOpenChange, title, description, children, maxWid
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-overlay data-[state=open]:animate-fade-in data-[state=closed]:animate-fade-out" />
         <Dialog.Content
+          aria-modal="true"
           className={cn(
             'fixed left-1/2 top-1/2 z-50 w-[calc(100%-32px)] -translate-x-1/2 -translate-y-1/2',
             'rounded-[12px] border border-surface-border bg-gradient-elevated p-6 shadow-elevated',

@@ -202,7 +202,6 @@ export default function PlaylistDetailPage() {
 
       setLoading(false);
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playlistId, user, authLoading]);
 
   async function recordEpisodeOpened(video: VideoItem, startSeconds: number) {

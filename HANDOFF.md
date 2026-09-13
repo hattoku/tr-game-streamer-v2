@@ -85,6 +85,13 @@
    local / session の2択で有効期限を指定できないため、仕様どおりにするにはサーバー側セッション Cookie
    （`createSessionCookie`、expiresIn 24h/7d）方式への切替が必要。現状は SDK 既定の local 永続化
    （ブラウザを閉じてもログイン維持）。
+10. **ESLint の暫定構成（typescript-eslint が TypeScript 7 未対応）** — 2026-09-13 フェーズ2.5ステップ8で導入。
+    Next.js 16 は `next lint` を廃止し、公式手順の `eslint-config-next` は typescript-eslint を使うが、typescript-eslint
+    は TS 7.0 に未対応で読み込み時に例外を投げる（typescript-eslint/typescript-eslint#10940）。公式の回避策は
+    `typescript` パッケージを TS 6 互換パッケージへ別名解決させる方法（`"typescript": "npm:@typescript/typescript6@^6"`
+    ＋ `"@typescript/native": "npm:typescript@^7"`）だが、技術スタック決定（TS 7 固定）に関わるため採らず、
+    `@babel/eslint-parser` で構文解析する暫定構成にした（`eslint.config.mjs` 冒頭コメント参照）。型情報を使う
+    ルールは無い。typescript-eslint が TS 7.1 以降の API に対応したら `eslint-config-next` に戻す。
 
 ## 開発全体のロードマップ（合意済み、これから着手する順序の目安）
 
@@ -387,9 +394,20 @@ DB設計書に未記載）は、実装前に`document/specification/db/Firestore
    エラーは §7 のインライン＋トースト。未ログインは `/login` へ、一般ユーザーは「管理者のみ」の空状態。
    **置かなかったもの**: パスワード再発行リンク・ログイン状態維持チェック（未解決事項 8・9 に記録、後日実装）。
    実ブラウザ（1440/390）で確認済み。完了画面と新規登録の成功だけは本番データが増えるため未撮影（コード上のみ）。
-8. **仕上げ**（3幅での目視確認、キーボード操作・aria、lint/build、Wiki更新）。
-   目視確認は `scripts/dev/screenshot.mjs`（DevTools Protocol でデータ読み込み後に撮影。2026-09-12 追加）で
-   Claude 側でも撮れるようになった。ユーザーの `npm run dev` が動いている状態で実行する。
+8. ~~**仕上げ**~~（3幅での目視確認、キーボード操作・aria、lint/build、Wiki更新）→ **2026-09-13対応済み**
+   （`wiki/sources/2026-09-13-phase2.5-finish.md`）。
+   - 767 / 768 / 1600px の3幅で全ページを `scripts/dev/screenshot.mjs` で撮影・確認。**768〜1023px でヘッダーが
+     折り返す不具合**を発見し修正（ユーザーエリアの「マイリスト」「視聴履歴」リンクとユーザー名を lg 未満で非表示、
+     ユーザードロップダウンに「マイリスト」「視聴履歴」を追加。UI仕様書 v1.17 §2.6・§2.9）。
+   - キーボード・aria: モーダル／ドロワー／ドロップダウン／タブの `aria-expanded`・`aria-haspopup`・Esc で閉じる・
+     フォーカス復帰・スクロール固定を実ブラウザで確認（Radix が担保）。`aria-modal="true"` は Radix が付けないため
+     `Modal`・`MobileMenu` に明示。
+   - **ESLint を導入**（`npm run lint`、`eslint.config.mjs`）。Next.js 16 で `next lint` が廃止されており、公式の
+     `eslint-config-next` は typescript-eslint が TypeScript 7 未対応のため読み込めない。TypeScript に依存しない
+     `@babel/eslint-parser` で構文解析し、`@next/eslint-plugin-next`（core-web-vitals）＋ `eslint-plugin-react-hooks` を
+     直接組んだ（未解決事項 10）。react-hooks v7 の `set-state-in-effect` 指摘3件（マイリスト・通知・ベル）を修正。
+   - `npm run lint` / `npx tsc --noEmit` / `npm run build` 成功。
+   これでフェーズ2.5（デザイン適用）の全ステップが完了。次はフェーズ3。
 
 フェーズ2.5で見送るもの: インフォメーションバー、テストモードウィジェット、通知ドロップダウン、
 未実装ページ本体（`/playlists`・`/games`等はナビリンクだけ置き404で受ける）、TOP本実装、

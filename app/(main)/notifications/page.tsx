@@ -106,11 +106,17 @@ export default function NotificationsPage() {
 
   useEffect(() => {
     if (!user) return;
-    load(user.uid).catch((e) => {
-      console.error('通知の読み込みに失敗しました', e);
-      setItems([]);
-      toast({ type: 'error', message: '通知の読み込みに失敗しました' });
-    });
+    const uid = user.uid;
+    // 非同期 IIFE にして、effect 本体で同期的に setState しない形にする（react-hooks/set-state-in-effect）
+    (async () => {
+      try {
+        await load(uid);
+      } catch (e) {
+        console.error('通知の読み込みに失敗しました', e);
+        setItems([]);
+        toast({ type: 'error', message: '通知の読み込みに失敗しました' });
+      }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 

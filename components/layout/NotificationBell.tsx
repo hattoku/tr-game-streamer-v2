@@ -23,16 +23,18 @@ export function NotificationBell({ compact = false }: { compact?: boolean }) {
   const [unread, setUnread] = useState(0);
 
   useEffect(() => {
-    if (!user) {
-      setUnread(0);
-      return;
-    }
+    if (!user) return;
     const q = query(collection(db, 'notifications'), where('userId', '==', user.uid), where('isRead', '==', false));
-    return onSnapshot(
+    const unsubscribe = onSnapshot(
       q,
       (snap) => setUnread(snap.size),
       () => setUnread(0),
     );
+    // ログアウト・ユーザー切替時は購読を外して件数を戻す（effect 本体では setState しない: react-hooks/set-state-in-effect）
+    return () => {
+      unsubscribe();
+      setUnread(0);
+    };
   }, [user]);
 
   if (!user) return null;

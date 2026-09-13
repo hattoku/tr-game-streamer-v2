@@ -43,10 +43,10 @@ export function Header() {
           compactHeader ? 'h-header-compact' : 'h-header-mobile md:h-header',
         )}
       >
-        <div className="flex h-full items-center gap-2 md:gap-8">
+        <div className="flex h-full min-w-0 items-center gap-2 md:gap-6 lg:gap-8">
           {!compactHeader && <MobileMenu className="-ml-2 md:hidden" />}
           <Logo compact={compactHeader} />
-          <nav aria-label="グローバルナビゲーション" className="hidden h-full items-center gap-6 md:flex">
+          <nav aria-label="グローバルナビゲーション" className="hidden h-full items-center gap-4 md:flex lg:gap-6">
             {GLOBAL_NAV.map((item) => {
               const active = isActivePath(pathname, item.href);
               return (
@@ -55,7 +55,7 @@ export function Header() {
                   href={item.href}
                   aria-current={active ? 'page' : undefined}
                   className={cn(
-                    'relative flex h-full items-center text-base transition-colors duration-[120ms] hover:text-text-primary',
+                    'relative flex h-full items-center whitespace-nowrap text-base transition-colors duration-[120ms] hover:text-text-primary',
                     active ? 'text-text-primary' : 'text-text-tertiary',
                   )}
                 >
@@ -67,20 +67,21 @@ export function Header() {
           </nav>
         </div>
 
-        <div className="flex items-center gap-3 md:gap-5">
+        <div className="flex shrink-0 items-center gap-3 md:gap-4 lg:gap-5">
           {loading ? (
             <Skeleton className="h-7 w-20 md:w-[140px]" />
           ) : user ? (
             <>
-              {/* PC のみ: マイリスト／視聴履歴。表示切替はラッパー要素で行う */}
-              <div className="hidden items-center gap-5 md:flex">
+              {/* PC のみ: マイリスト／視聴履歴。表示切替はラッパー要素で行う。
+                  768〜1023px ではヘッダーに全要素が収まらないため非表示にし、ユーザードロップダウンの項目で代替する（UI仕様書 §2.9） */}
+              <div className="hidden items-center gap-5 lg:flex">
                 {USER_NAV.map((item) => (
                   <Link
                     key={item.href}
                     href={item.href}
                     aria-current={isActivePath(pathname, item.href) ? 'page' : undefined}
                     className={cn(
-                      'text-base transition-colors duration-[120ms] hover:text-text-primary',
+                      'whitespace-nowrap text-base transition-colors duration-[120ms] hover:text-text-primary',
                       isActivePath(pathname, item.href) ? 'text-text-primary' : 'text-text-tertiary',
                     )}
                   >
@@ -96,7 +97,7 @@ export function Header() {
             <>
               {/* PC: ログイン（文字リンク・従）＋ アカウント作成（プライマリ・主）。§2.5 */}
               <div className="hidden items-center gap-5 md:flex">
-                <Link href="/login" className="text-base text-text-secondary transition-colors duration-[120ms] hover:text-text-primary">
+                <Link href="/login" className="whitespace-nowrap text-base text-text-secondary transition-colors duration-[120ms] hover:text-text-primary">
                   ログイン
                 </Link>
                 <LinkButton href={SIGNUP_HREF} variant="primary" size="sm">

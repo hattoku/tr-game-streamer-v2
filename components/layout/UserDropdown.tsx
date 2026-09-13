@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/DropdownMenu';
 import { ChevronDownIcon } from '@/components/ui/icons';
 import { cn } from '@/components/ui/cn';
+import { USER_NAV } from './nav';
 
 export function UserAvatar({ name, size = 28, className }: { name: string; size?: number; className?: string }) {
   const initial = name.trim().charAt(0).toUpperCase() || '?';
@@ -59,7 +60,8 @@ export function UserDropdown({ compact = false }: { compact?: boolean }) {
         )}
       >
         <UserAvatar name={name} size={compact ? 18 : 24} />
-        <span className={cn('max-w-[6em] truncate text-text-primary', compact ? 'text-md' : 'text-base')}>{name}</span>
+        {/* 表示名は 1024px 以上でのみ。768〜1023px はヘッダーに収まらないためアイコン＋▾ だけにする（UI仕様書 §2.9） */}
+        <span className={cn('max-w-[6em] truncate text-text-primary', compact ? 'text-md' : 'hidden text-base lg:inline')}>{name}</span>
         <ChevronDownIcon size={compact ? 10 : 12} />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-[220px]">
@@ -68,7 +70,14 @@ export function UserDropdown({ compact = false }: { compact?: boolean }) {
           {user.email && <span className="block truncate text-md text-text-muted">{user.email}</span>}
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={() => router.push(`/profile/${user.uid}`)}>プロフィール</DropdownMenuItem>
+        {/* マイリスト／視聴履歴: 768〜1023px ではヘッダーの文字リンクを出せないため、ここからも辿れるようにする（UI仕様書 §2.6） */}
+        {USER_NAV.map((item) => (
+          <DropdownMenuItem key={item.href} onSelect={() => router.push(item.href)}>
+            {item.label}
+          </DropdownMenuItem>
+        ))}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => router.push(`/profile/`)}>プロフィール</DropdownMenuItem>
         <DropdownMenuItem onSelect={() => router.push('/settings')}>設定</DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={handleSignOut}>ログアウト</DropdownMenuItem>

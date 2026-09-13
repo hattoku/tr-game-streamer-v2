@@ -1,5 +1,12 @@
 # 操作ログ
 
+## [2026-09-13] ingest | session: フェーズ2.5 ステップ8（仕上げ）
+767/768/1600px で全ページを撮影し、768〜1023px でヘッダーが折り返す不具合を修正（ユーザーエリアの文字リンクと表示名を
+lg 未満で非表示、ユーザードロップダウンにマイリスト／視聴履歴を追加。UI仕様書 v1.17）。モーダル・ドロワー・ドロップダウン・
+タブの aria と Esc・フォーカス復帰を実機確認し、`aria-modal` を明示。`next lint` 廃止と typescript-eslint の TS 7 未対応を
+受けて `@babel/eslint-parser`＋`@next/eslint-plugin-next`＋`eslint-plugin-react-hooks` で ESLint を導入（HANDOFF 未解決事項 10）、
+react-hooks の `set-state-in-effect` 3件を修正。lint/tsc/build 成功。[[2026-09-13-phase2.5-finish]] を作成。フェーズ2.5 完了。
+
 ## [2026-09-12] ingest | session: フェーズ2.5 ステップ7（ログイン・再生リスト登録のデザイン適用）
 計画のデフォルト案どおりで実装（ユーザー決定。パスワード再発行リンクとログイン状態維持は後日実装の課題として
 HANDOFF 未解決事項 8・9 に記録）。`/login` を `Field`/`PasswordInput`/`Checkbox`＋プライマリボタンで組み直し、

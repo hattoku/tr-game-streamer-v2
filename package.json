@@ -8,7 +8,7 @@
     "build": "next build",
     "build:stg": "cross-env NEXT_PUBLIC_APP_ENV=stg next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint .",
     "seed:master:stg": "node scripts/seed-master-data.mjs --target=stg",
     "seed:master:prod": "node scripts/seed-master-data.mjs --target=prod",
     "seed:games:stg": "node scripts/seed-test-games.mjs --target=stg",
@@ -27,11 +27,16 @@
     "react-dom": "19.2.8"
   },
   "devDependencies": {
+    "@babel/core": "8.0.5",
+    "@babel/eslint-parser": "8.0.5",
+    "@next/eslint-plugin-next": "16.3.4",
     "@tailwindcss/postcss": "4.3.3",
     "@types/node": "26.5.0",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.7",
     "cross-env": "10.1.0",
+    "eslint": "10.10.0",
+    "eslint-plugin-react-hooks": "7.1.1",
     "tailwindcss": "4.3.3",
     "typescript": "7.0.2"
   }
