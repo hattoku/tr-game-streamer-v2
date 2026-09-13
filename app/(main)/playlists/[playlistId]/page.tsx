@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { notFound, useParams } from 'next/navigation';
 import {
-  collection, doc, getDoc, getDocs, query, where, orderBy, limit,
+  collection, doc, getDoc, getDocs, onSnapshot, query, where, orderBy, limit,
   setDoc, updateDoc, serverTimestamp,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -20,6 +20,7 @@ import { AddToMylistButton, type MylistState } from '@/components/playlists/AddT
 import { ChannelCard } from '@/components/playlists/ChannelCard';
 import { PlaylistInfoCard } from '@/components/playlists/PlaylistInfoCard';
 import { VideoList, type VideoItem } from '@/components/playlists/VideoList';
+import { ReviewSection } from '@/components/reviews/ReviewSection';
 import type { WatchStatus } from '@/components/ui/Chip';
 
 // 再生リスト詳細ページ。
@@ -27,12 +28,16 @@ import type { WatchStatus } from '@/components/ui/Chip';
 // ページ 再生リスト詳細ページにおける動画プレーヤー 仕様書.md（プレーヤー・再生制御・動画リスト・
 // 視聴進捗・シアターモード・連続再生）準拠。フェーズ2.5ステップ3でデザイン適用
 // （wiki/sources/2026-09-11-phase2.5-design-plan.md §4）。
+// レビュー投稿セクション（フェーズ3ステップ1）: PC版は左カラム（ヒーロー直下）、モバイル版は
+// 動画リスト直後という配置差があるため、PlaylistInfoCardと同じ「2箇所にレンダリングし
+// 片方をCSSで隠す」パターンで配置する（下記 reviewSection 変数参照）。
 // 引き続きスコープ外:
-// - レビュー投稿・ゲーム情報セクション（別仕様書、フェーズ3以降）
+// - ゲーム情報セクション（別仕様書、フェーズ3のゲームタイトル詳細ページ実装後）
 // - 未ログインユーザーの視聴進捗LocalStorage保存（ゲストは進捗が保存されない）
 // - 逆順トグルはマイリスト登録済みの場合のみFirestoreに永続化（mylist.isReverseOrderを共有）。
 //   未登録の場合はこのページ内のローカル状態のみ（セッション限り）
-// - playlists.mylistCount の加算（クライアントからは更新できないルール。サーバー側集計はフェーズ3）
+// - playlists.mylistCount の加算（クライアントからは更新できないルール。フェーズ3ステップ1の
+//   スコープ外。既知の未解決事項として残る）
 
 declare global {
   interface Window {
@@ -203,6 +208,17 @@ export default function PlaylistDetailPage() {
       setLoading(false);
     })();
   }, [playlistId, user, authLoading]);
+
+  // スコア・レビュー数はレビュー投稿（app/api/reviews/upsert）のたびにサーバー側で
+  // 再計算されるため、投稿直後に画面へ反映されるよう購読する
+  useEffect(() => {
+    if (!playlistId) return;
+    return onSnapshot(doc(db, 'playlists', playlistId), (snap) => {
+      if (!snap.exists()) return;
+      const data = snap.data();
+      setPlaylist((prev) => (prev ? { ...prev, score: data.score ?? null, reviewCount: data.reviewCount ?? 0 } : prev));
+    });
+  }, [playlistId]);
 
   async function recordEpisodeOpened(video: VideoItem, startSeconds: number) {
     if (!user || !playlistId) return;
@@ -446,9 +462,13 @@ export default function PlaylistDetailPage() {
   );
 
   const channelCard = <ChannelCard channelId={playlist.channelId} name={playlist.channelName} iconUrl={playlist.channelIconUrl} />;
+  const reviewSection = <ReviewSection playlistId={playlistId} user={user} />;
 
-  // 通常モード: PC 2カラム（左 62% / 右 38%: ヒーロー | 基本情報・動画リスト・配信者）、
-  //             モバイルは ヒーロー→基本情報→動画リスト→配信者 の縦積み
+  // 通常モード: PC 2カラム（左 62% / 右 38%: ヒーロー・レビュー | 基本情報・動画リスト・配信者）、
+  //             モバイルは ヒーロー→基本情報→動画リスト→レビュー→配信者 の縦積み
+  // （ページ 再生リスト詳細 仕様書「レビュー投稿セクション」節: PC版は左カラム、モバイル版は
+  //   動画リスト直後という配置差があるため、reviewSection は下記の2箇所に描画し
+  //   CSSで片方を隠す。PlaylistInfoCardと同じパターン）
   // シアターモード: ヒーローを全幅・黒背景で最上部に、その下に 基本情報 | 動画リスト・配信者 の2カラム
   // （いずれも DOM 順は同じで、クラスの切替のみ）
   return (
@@ -456,6 +476,7 @@ export default function PlaylistDetailPage() {
       <div className={cn('flex flex-col gap-4', theaterMode && 'md:col-span-2')}>
         {hero}
         <div className="md:hidden">{infoCard}</div>
+        <div className="hidden md:block">{reviewSection}</div>
       </div>
       <div
         className={cn(
@@ -466,6 +487,7 @@ export default function PlaylistDetailPage() {
         <div className="hidden md:block">{infoCard}</div>
         <div className="flex flex-col gap-4">
           {videoList}
+          <div className="md:hidden">{reviewSection}</div>
           {channelCard}
         </div>
       </div>

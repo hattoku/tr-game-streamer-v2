@@ -265,6 +265,17 @@ export function ExternalLinkIcon(props: IconProps) {
   );
 }
 
+/** その他メニュー（︙、レビューカードのカードメニュー等） */
+export function MoreIcon(props: IconProps) {
+  return (
+    <svg {...base(props)} fill="currentColor" stroke="none">
+      <circle cx="12" cy="5" r="1.6" />
+      <circle cx="12" cy="12" r="1.6" />
+      <circle cx="12" cy="19" r="1.6" />
+    </svg>
+  );
+}
+
 /**
  * YouTube ロゴ（共通 デザイントークン仕様書 §8.1）。
  * 赤矩形 #FF0000 ＋ 白三角、16px × 11px。

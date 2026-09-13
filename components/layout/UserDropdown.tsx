@@ -22,8 +22,30 @@ import { ChevronDownIcon } from '@/components/ui/icons';
 import { cn } from '@/components/ui/cn';
 import { USER_NAV } from './nav';
 
-export function UserAvatar({ name, size = 28, className }: { name: string; size?: number; className?: string }) {
+export function UserAvatar({
+  name,
+  imageUrl,
+  size = 28,
+  className,
+}: {
+  name: string;
+  /** 未設定・取得失敗時はイニシャル表示にフォールバックする（レビュー一覧等） */
+  imageUrl?: string | null;
+  size?: number;
+  className?: string;
+}) {
   const initial = name.trim().charAt(0).toUpperCase() || '?';
+  if (imageUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={imageUrl}
+        alt=""
+        className={cn('inline-block shrink-0 rounded-full object-cover', className)}
+        style={{ width: size, height: size }}
+      />
+    );
+  }
   return (
     <span
       aria-hidden

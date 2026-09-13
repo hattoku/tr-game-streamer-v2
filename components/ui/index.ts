@@ -13,6 +13,7 @@ export type { WatchStatus } from './Chip';
 export { TrendingBadge, PlayingBadge, CountLabel, NewBadge, UnreadDot, CountBadge } from './Badge';
 export { Tag } from './Tag';
 export { ProgressBar } from './ProgressBar';
+export { StarRating } from './StarRating';
 export { Skeleton, SkeletonText } from './Skeleton';
 export { Spinner, CenteredSpinner } from './Spinner';
 export { EmptyState } from './EmptyState';

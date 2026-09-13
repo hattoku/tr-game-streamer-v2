@@ -7,6 +7,7 @@
 import type { ReactNode } from 'react';
 import { Card, CardDivider } from '@/components/ui/Card';
 import { Tag } from '@/components/ui/Tag';
+import { StarRating } from '@/components/ui/StarRating';
 import { YouTubeIcon } from '@/components/ui/icons';
 
 interface PlaylistInfoCardProps {
@@ -18,18 +19,6 @@ interface PlaylistInfoCardProps {
   referenceUrl: string;
   /** AddToMylistButton を渡す */
   mylistAction?: ReactNode;
-}
-
-// 星表示の暫定版。半星（信頼度スコアリングシステム仕様書の「半分塗りつぶし」）はレビュー機能の
-// フェーズ3実装時に SVG で対応する。現状は score が常に null のため表示されない
-function Stars({ score }: { score: number }) {
-  const full = Math.min(5, Math.max(0, Math.round(score)));
-  return (
-    <span aria-hidden className="tracking-[1px] text-brand-score">
-      {'★'.repeat(full)}
-      {'☆'.repeat(5 - full)}
-    </span>
-  );
 }
 
 export function PlaylistInfoCard({ title, score, mylistCount, reviewCount, tags, referenceUrl, mylistAction }: PlaylistInfoCardProps) {
@@ -44,7 +33,7 @@ export function PlaylistInfoCard({ title, score, mylistCount, reviewCount, tags,
           <span className="text-text-muted">評価なし</span>
         ) : (
           <span className="inline-flex items-center gap-2">
-            <Stars score={score} />
+            <StarRating value={score} readOnly size={16} />
             <span className="text-score leading-none text-brand-score">{score.toFixed(1)}</span>
             <span className="text-text-muted">/ 5</span>
           </span>

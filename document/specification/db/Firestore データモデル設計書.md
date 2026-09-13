@@ -1,6 +1,6 @@
 # プレミテ Firestore データモデル設計書
 
-**バージョン**: v1.10  
+**バージョン**: v1.11  
 **作成日**: 2026年3月30日（更新）  
 **対象**: 開発チーム  
 **関連ドキュメント**: プレミテ企画書 / プレミテ_技術スタック仕様書 / 各機能仕様書
@@ -153,6 +153,7 @@ Firestoreはテーブル結合（JOIN）ができないため、一覧表示や�
 | `isReviewHistoryPublic` | boolean | ✅ | レビュー履歴の公開設定（デフォルト：アカウント作成時にユーザーが選択） |
 | `showNewArrivalNotification` | boolean | ✅ | マイリストの新着通知表示設定（デフォルト：`true`） |
 | `isContinuousPlayEnabled` | boolean | ✅ | 連続再生設定（ユーザー全体共通、デフォルト：`true`）。動画プレーヤー仕様書「連続再生機能」参照 |
+| `hideSpoilerReviews` | boolean | ✅ | レビュー一覧のネタバレ非表示フィルター設定（デフォルト：`true`）。レビュー投稿機能仕様書「ネタバレフィルター」節（ログイン済みユーザーの端末をまたいだ保存先。未ログイン時はLocalStorage） |
 | `reviewCount` | number | ✅ | レビュー投稿数（集計キャッシュ、デフォルト：0） |
 | `helpfulReceivedCount` | number | ✅ | 「参考になった」被獲得数合計（集計キャッシュ、デフォルト：0） |
 | `accountCreatedAt` | Timestamp | ✅ | アカウント作成日時 |
@@ -325,6 +326,8 @@ YouTubeチャンネルの情報。
 
 **パス**: `reviews/{reviewId}`
 
+> ドキュメントIDは `mylist`/`watch_progress` 等と同じ `{userId}_{playlistId}` 形式とする（1ユーザー×1再生リストで1件の制約をID自体で保証する）。
+
 | フィールド | 型 | 必須 | 説明 |
 |-----------|-----|:---:|------|
 | `userId` | string | ✅ | 投稿者のuserId |
@@ -338,7 +341,9 @@ YouTubeチャンネルの情報。
 | `watchDepth` | number? | — | 視聴深度（変数D、0.0〜1.0）。`watchStatus` が `"completed"` の場合は1.0固定 |
 | `lastOpenedEpisode` | number? | — | 最後に開いた話数（`watch_progress` からの参照値） |
 | `genreExpertiseScore` | number? | — | ジャンル専門性スコア（変数G、算出時点のスナップショット） |
-| `commentScore` | number? | — | コメント文字数スコア（変数C、0.2/0.5/1.0） |
+| `commentScore` | number? | — | コメント有無による乗数（変数C。あり: `1.0` / なし: `0.5`。共通 信頼度スコアリングシステム仕様書 §3.3に準拠） |
+| `userDisplayName` | string | ✅ | 投稿者の表示名の非正規化コピー（投稿・更新時点のスナップショット）。`users`は本人・管理者以外読めないルールのため、レビュー一覧での表示にはこちらを参照する（HANDOFF.md未解決事項1の対応） |
+| `userProfileImageUrl` | string? | — | 投稿者のプロフィール画像URLの非正規化コピー（同上） |
 | `postedAt` | Timestamp | ✅ | 初回投稿日時 |
 | `updatedAt` | Timestamp | ✅ | 最終更新日時 |
 
@@ -859,3 +864,4 @@ ai_operators ──── (1) users
 | v1.8 | 2026-09-11 | `mylist` に `watchStatus`・`isReverseOrder` フィールドを追加（マイリスト機能仕様書準拠、フェーズ2実装に伴うスキーマギャップ解消） |
 | v1.9 | 2026-09-11 | `users` に `isContinuousPlayEnabled` フィールドを追加（動画プレーヤー仕様書の連続再生設定準拠、フェーズ2実装に伴うスキーマギャップ解消） |
 | v1.10 | 2026-09-11 | `notifications` コレクションを新規追加（ユーザー通知機能仕様書準拠。フェーズ2ではシリーズ新着通知のみ実装、他3種別は将来対応） |
+| v1.11 | 2026-09-13 | フェーズ3ステップ1（レビュー・スコアリング機能）実装に伴うスキーマギャップ解消。`reviews` に投稿者表示用の非正規化コピー `userDisplayName`/`userProfileImageUrl` を追加（HANDOFF.md未解決事項1の対応）。`reviews.commentScore` の説明を実装（共通 信頼度スコアリングシステム仕様書 §3.3準拠、あり:1.0/なし:0.5の2値）に合わせて修正（旧記載の「0.2/0.5/1.0」は誤記）。`reviews` ドキュメントIDが `{userId}_{playlistId}` 形式であることを明記。`users` に `hideSpoilerReviews` を追加（レビュー投稿機能仕様書のネタバレフィルター設定の永続化用）。 |
