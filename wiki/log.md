@@ -6,6 +6,8 @@ lg 未満で非表示、ユーザードロップダウンにマイリスト／�
 タブの aria と Esc・フォーカス復帰を実機確認し、`aria-modal` を明示。`next lint` 廃止と typescript-eslint の TS 7 未対応を
 受けて `@babel/eslint-parser`＋`@next/eslint-plugin-next`＋`eslint-plugin-react-hooks` で ESLint を導入（HANDOFF 未解決事項 10）、
 react-hooks の `set-state-in-effect` 3件を修正。lint/tsc/build 成功。[[2026-09-13-phase2.5-finish]] を作成。フェーズ2.5 完了。
+ESLint の扱いは3案（暫定維持／公式の別名解決／oxlint）を提示し、ユーザー決定で「暫定構成を維持、typescript-eslint の
+TS 7 対応後に `eslint-config-next` へ戻す」を採用（HANDOFF 未解決事項 10 に記録）。
 
 ## [2026-09-12] ingest | session: フェーズ2.5 ステップ7（ログイン・再生リスト登録のデザイン適用）
 計画のデフォルト案どおりで実装（ユーザー決定。パスワード再発行リンクとログイン状態維持は後日実装の課題として

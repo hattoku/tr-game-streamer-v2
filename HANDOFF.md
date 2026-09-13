@@ -92,6 +92,10 @@
     ＋ `"@typescript/native": "npm:typescript@^7"`）だが、技術スタック決定（TS 7 固定）に関わるため採らず、
     `@babel/eslint-parser` で構文解析する暫定構成にした（`eslint.config.mjs` 冒頭コメント参照）。型情報を使う
     ルールは無い。typescript-eslint が TS 7.1 以降の API に対応したら `eslint-config-next` に戻す。
+    **2026-09-13 ユーザー決定**: 3案（①暫定構成を維持し対応後に公式構成へ戻す／②公式回避策の別名解決で
+    `eslint-config-next` に戻す／③oxlint へ切替）のうち①を採用。戻す条件は「TypeScript 7.1 正式版で JavaScript API が
+    復活し、typescript-eslint の peer 範囲が TS 7 を含む」こと。そのとき `eslint-config-next` を入れ直し、
+    `@babel/core`・`@babel/eslint-parser`・`@next/eslint-plugin-next`・`eslint-plugin-react-hooks` の直接依存を外す。
 
 ## 開発全体のロードマップ（合意済み、これから着手する順序の目安）
 
