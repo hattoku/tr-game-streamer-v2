@@ -1,10 +1,14 @@
 /**
- * 公開再生リストのカードグリッド。
- * TOP 最小版（`app/(main)/page.tsx`）と「再生リストを探す」最小版（`app/(main)/playlists/page.tsx`）で共用。
- * playlists を isPublic == true ＋ registeredAt 降順（firestore.indexes.json に複合索引あり）で取得する。
- * 検索・絞り込み・ソート（ページ 再生リストを探す 仕様書）はフェーズ3以降。
+ * 公開再生リストのカードグリッドと関連ユーティリティ。
+ * - `PlaylistGrid`: TOP最小版（`app/(main)/page.tsx`）と「再生リストを探す」最小版
+ *   （`app/(main)/playlists/page.tsx`）で使用。isPublic==true＋registeredAt降順
+ *   （firestore.indexes.jsonに複合索引あり）で新着順に最大`max`件取得する。
+ *   検索・絞り込み・ソート（ページ 再生リストを探す 仕様書）はフェーズ3ステップ4。
+ * - `PlaylistCardGrid`・`fetchPlaylistsByGame`・`sortPlaylists`: ゲームタイトル詳細ページの
+ *   「関連する再生リスト」節（components/games/GamePlaylistSection.tsx）向けに、データ取得と
+ *   ページング・ソートを呼び出し側に委ねられるよう分離したもの。
  * カードの構成: ページ 再生リストを探す 仕様書 §3.3（サムネイル／タイトル2行／チャンネル／スコア・マイリスト数・
- * レビュー数／タグ）。タグはタグ機能がフェーズ3のため、当面ゲームタイトルを先頭タグとして置く。
+ * レビュー数／タグ）。タグはタグ機能がフェーズ3ステップ3のため、当面ゲームタイトルを先頭タグとして置く。
  * 見た目: 共通 デザイントークン仕様書 v2.0 §6.1（カード・ホバーの浮き上がり）・§6.5（サムネイル: 下部オーバーレイ・
  * 話数「N話」・ホバー時の再生ボタン）。
  */
@@ -21,67 +25,58 @@ import { Skeleton, SkeletonText } from '@/components/ui/Skeleton';
 import { Tag } from '@/components/ui/Tag';
 import { CommentIcon, InventoryIcon, PlayIcon, StarIcon, UsersIcon } from '@/components/ui/icons';
 
-interface PlaylistSummary {
+function LoadingGrid() {
+  return (
+    <div className={GRID_CLASS} aria-busy="true">
+      {Array.from({ length: 8 }).map((_, i) => (
+        <Card key={i} flush>
+          <Skeleton className="aspect-video w-full rounded-none" />
+          <SkeletonText lines={2} className="p-3" />
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+export interface PlaylistSummary {
   id: string;
   title: string;
   thumbnailUrl: string;
   channelName: string;
   channelIconUrl: string;
+  gameId: string | null;
   gameName: string;
   videoCount: number;
   score: number | null;
   mylistCount: number;
   reviewCount: number;
+  latestVideoPublishedAt: number | null;
+  registeredAt: number;
 }
 
 const GRID_CLASS = 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4';
 
-export function PlaylistGrid({ max = 24 }: { max?: number }) {
-  const [playlists, setPlaylists] = useState<PlaylistSummary[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+function toSummary(d: { id: string; data(): Record<string, unknown> }): PlaylistSummary {
+  const data = d.data();
+  return {
+    id: d.id,
+    title: (data.title as string) ?? '',
+    thumbnailUrl: (data.thumbnailUrl as string) ?? '',
+    channelName: (data.channelName as string) ?? '',
+    channelIconUrl: (data.channelIconUrl as string) ?? '',
+    gameId: (data.gameId as string | null) ?? null,
+    gameName: (data.gameName as string) ?? '',
+    videoCount: (data.videoCount as number) ?? 0,
+    score: (data.score as number | null) ?? null,
+    mylistCount: (data.mylistCount as number) ?? 0,
+    reviewCount: (data.reviewCount as number) ?? 0,
+    latestVideoPublishedAt: (data.latestVideoPublishedAt as { toMillis(): number } | null)?.toMillis?.() ?? null,
+    registeredAt: (data.registeredAt as { toMillis(): number } | undefined)?.toMillis?.() ?? 0,
+  };
+}
 
-  useEffect(() => {
-    getDocs(query(collection(db, 'playlists'), where('isPublic', '==', true), orderBy('registeredAt', 'desc'), limit(max)))
-      .then((snap) =>
-        setPlaylists(
-          snap.docs.map((d) => ({
-            id: d.id,
-            title: d.data().title ?? '',
-            thumbnailUrl: d.data().thumbnailUrl ?? '',
-            channelName: d.data().channelName ?? '',
-            channelIconUrl: d.data().channelIconUrl ?? '',
-            gameName: d.data().gameName ?? '',
-            videoCount: d.data().videoCount ?? 0,
-            score: d.data().score ?? null,
-            mylistCount: d.data().mylistCount ?? 0,
-            reviewCount: d.data().reviewCount ?? 0,
-          })),
-        ),
-      )
-      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
-  }, [max]);
-
-  if (error) {
-    return (
-      <p role="alert" className="text-base text-input-error">
-        再生リストの取得に失敗しました: {error}
-      </p>
-    );
-  }
-
-  if (playlists === null) {
-    return (
-      <div className={GRID_CLASS} aria-busy="true">
-        {Array.from({ length: 8 }).map((_, i) => (
-          <Card key={i} flush>
-            <Skeleton className="aspect-video w-full rounded-none" />
-            <SkeletonText lines={2} className="p-3" />
-          </Card>
-        ))}
-      </div>
-    );
-  }
-
+/** 再生リストカードグリッド（データは呼び出し側が用意する場合） */
+export function PlaylistCardGrid({ playlists }: { playlists: PlaylistSummary[] }) {
   if (playlists.length === 0) {
     return (
       <EmptyState
@@ -151,4 +146,57 @@ export function PlaylistGrid({ max = 24 }: { max?: number }) {
       ))}
     </ul>
   );
+}
+
+export type PlaylistSort = 'score' | 'mylist' | 'newest';
+
+export function sortPlaylists(list: PlaylistSummary[], sort: PlaylistSort): PlaylistSummary[] {
+  const sorted = [...list];
+  if (sort === 'mylist') {
+    sorted.sort((a, b) => b.mylistCount - a.mylistCount);
+  } else if (sort === 'newest') {
+    sorted.sort((a, b) => (b.latestVideoPublishedAt ?? 0) - (a.latestVideoPublishedAt ?? 0));
+  } else {
+    // スコアが高い順（デフォルト）。評価なし（null）は末尾
+    sorted.sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
+  }
+  return sorted;
+}
+
+/**
+ * 指定ゲームの公開再生リストを取得する（ゲームタイトル詳細ページ「関連する再生リスト」節）。
+ * `isPublic`+`gameId`の等価条件のみのクエリのため新規のFirestore複合indexは不要
+ * （並び替え・ページングは取得後にJS側で行う想定。呼び出し側: components/games/GamePlaylistSection.tsx）。
+ */
+export async function fetchPlaylistsByGame(gameId: string): Promise<PlaylistSummary[]> {
+  const snap = await getDocs(query(collection(db, 'playlists'), where('isPublic', '==', true), where('gameId', '==', gameId)));
+  return snap.docs.map(toSummary);
+}
+
+/**
+ * 公開再生リストのカードグリッド（TOP最小版・「再生リストを探す」最小版で使用）。
+ * 新着順で最大`max`件を取得する。検索・絞り込み・ソート（ページ 再生リストを探す 仕様書）は
+ * フェーズ3ステップ4。
+ */
+export function PlaylistGrid({ max = 24 }: { max?: number }) {
+  const [playlists, setPlaylists] = useState<PlaylistSummary[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    getDocs(query(collection(db, 'playlists'), where('isPublic', '==', true), orderBy('registeredAt', 'desc'), limit(max)))
+      .then((snap) => setPlaylists(snap.docs.map(toSummary)))
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+  }, [max]);
+
+  if (error) {
+    return (
+      <p role="alert" className="text-base text-input-error">
+        再生リストの取得に失敗しました: {error}
+      </p>
+    );
+  }
+
+  if (playlists === null) return <LoadingGrid />;
+
+  return <PlaylistCardGrid playlists={playlists} />;
 }

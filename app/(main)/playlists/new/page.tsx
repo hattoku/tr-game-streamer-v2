@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, type ReactNode } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { collection, getDocs } from 'firebase/firestore';
 import { db, auth } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
@@ -80,6 +80,7 @@ const REGISTER_ERRORS: Record<string, { inline: string; toast: string }> = {
 export default function NewPlaylistPage() {
   const { user, role, loading } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
 
   const [playlistUrl, setPlaylistUrl] = useState('');
@@ -121,6 +122,20 @@ export default function NewPlaylistPage() {
       })
       .catch((e) => console.error('games の読み込みに失敗', e));
   }, [isAdmin]);
+
+  // ゲームタイトル詳細ページ「再生リストを追加する」からの遷移時、gameIdクエリで
+  // あらかじめゲームタイトルを選択済みにする（ページ ゲームタイトル 詳細仕様書 §4.4）。
+  // games（非同期取得）が揃った時点で一度だけ適用する「propが変わったらstateを調整する」
+  // パターンのため、effectではなく描画中に直接setStateする
+  const [appliedGameIdParam, setAppliedGameIdParam] = useState<string | null>(null);
+  const gameIdParam = searchParams.get('gameId');
+  if (gameIdParam && gameIdParam !== appliedGameIdParam && !selectedGame && games.length > 0) {
+    const match = games.find((g) => g.id === gameIdParam);
+    if (match) {
+      setAppliedGameIdParam(gameIdParam);
+      setSelectedGame(match);
+    }
+  }
 
   async function handleUrlBlur() {
     const url = playlistUrl.trim();

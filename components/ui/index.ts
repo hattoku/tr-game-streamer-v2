@@ -14,6 +14,7 @@ export { TrendingBadge, PlayingBadge, CountLabel, NewBadge, UnreadDot, CountBadg
 export { Tag } from './Tag';
 export { ProgressBar } from './ProgressBar';
 export { StarRating } from './StarRating';
+export { Pagination } from './Pagination';
 export { Skeleton, SkeletonText } from './Skeleton';
 export { Spinner, CenteredSpinner } from './Spinner';
 export { EmptyState } from './EmptyState';

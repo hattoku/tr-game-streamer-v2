@@ -16,12 +16,19 @@ interface TagProps {
   children: ReactNode;
 }
 
-const TAG_CLASS =
-  'inline-flex items-center rounded-[4px] px-2 py-[2px] text-sm leading-[1.5] transition-colors duration-[120ms] ' +
-  'hover:bg-white/10 hover:text-text-primary';
+const TAG_CLASS = 'inline-flex items-center rounded-[4px] px-2 py-[2px] text-sm leading-[1.5] transition-colors duration-[120ms]';
+// ホバー効果はクリック可能（href/onClick指定）な場合のみ付ける。読み取り専用表示（例: カード上の
+// 先頭ゲームタイトルタグ）にまでホバー効果を付けると、クリックしても何も起きず紛らわしいため
+// （2026-09-14、ゲームタイトルカードでのユーザー指摘を受けて修正）
+const INTERACTIVE_CLASS = 'hover:bg-white/10 hover:text-text-primary';
 
 export function Tag({ href, onClick, emphasis = false, className, children }: TagProps) {
-  const classes = cn(TAG_CLASS, emphasis ? 'bg-bg-selected text-text-primary' : 'bg-bg-hover text-text-secondary', className);
+  const classes = cn(
+    TAG_CLASS,
+    (href || onClick) && INTERACTIVE_CLASS,
+    emphasis ? 'bg-bg-selected text-text-primary' : 'bg-bg-hover text-text-secondary',
+    className,
+  );
   if (href) {
     return (
       <Link href={href} className={classes}>
