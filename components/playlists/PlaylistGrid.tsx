@@ -1,14 +1,14 @@
 /**
  * 公開再生リストのカードグリッドと関連ユーティリティ。
- * - `PlaylistGrid`: TOP最小版（`app/(main)/page.tsx`）と「再生リストを探す」最小版
- *   （`app/(main)/playlists/page.tsx`）で使用。isPublic==true＋registeredAt降順
+ * - `PlaylistGrid`: TOP最小版（`app/(main)/page.tsx`）専用。isPublic==true＋registeredAt降順
  *   （firestore.indexes.jsonに複合索引あり）で新着順に最大`max`件取得する。
- *   検索・絞り込み・ソート（ページ 再生リストを探す 仕様書）はフェーズ3ステップ4。
- * - `PlaylistCardGrid`・`fetchPlaylistsByGame`・`sortPlaylists`: ゲームタイトル詳細ページの
- *   「関連する再生リスト」節（components/games/GamePlaylistSection.tsx）向けに、データ取得と
- *   ページング・ソートを呼び出し側に委ねられるよう分離したもの。
+ * - `PlaylistCardGrid`・`fetchPlaylistsByGame`・`fetchPublicPlaylists`・`sortPlaylists`: ゲームタイトル
+ *   詳細ページの「関連する再生リスト」節（components/games/GamePlaylistSection.tsx）と「再生リストを探す」
+ *   本実装（`app/(main)/playlists/page.tsx`）向けに、データ取得とページング・ソートを呼び出し側に
+ *   委ねられるよう分離したもの。
  * カードの構成: ページ 再生リストを探す 仕様書 §3.3（サムネイル／タイトル2行／チャンネル／スコア・マイリスト数・
- * レビュー数／タグ）。タグはタグ機能がフェーズ3ステップ3のため、当面ゲームタイトルを先頭タグとして置く。
+ * レビュー数／タグ）。タグは§3.5の表示優先順位（固定→登録日順）で最大3件+「+N」、絞り込み中のタグは太字で強調する
+ * （フェーズ3ステップ3のタグシステム導入によりgameNameの仮置きから実データに置き換え済み）。
  * 見た目: 共通 デザイントークン仕様書 v2.0 §6.1（カード・ホバーの浮き上がり）・§6.5（サムネイル: 下部オーバーレイ・
  * 話数「N話」・ホバー時の再生ボタン）。
  */
@@ -24,6 +24,10 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Skeleton, SkeletonText } from '@/components/ui/Skeleton';
 import { Tag } from '@/components/ui/Tag';
 import { CommentIcon, InventoryIcon, PlayIcon, StarIcon, UsersIcon } from '@/components/ui/icons';
+import { cn } from '@/components/ui/cn';
+import { fetchTagsMap, resolveTags, type ResolvedTag, type TagInfo } from '@/lib/tags';
+
+const MAX_VISIBLE_TAGS = 3;
 
 function LoadingGrid() {
   return (
@@ -52,11 +56,12 @@ export interface PlaylistSummary {
   reviewCount: number;
   latestVideoPublishedAt: number | null;
   registeredAt: number;
+  tags: ResolvedTag[];
 }
 
 const GRID_CLASS = 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4';
 
-function toSummary(d: { id: string; data(): Record<string, unknown> }): PlaylistSummary {
+function toSummary(d: { id: string; data(): Record<string, unknown> }, tagsMap?: Map<string, TagInfo>): PlaylistSummary {
   const data = d.data();
   return {
     id: d.id,
@@ -72,11 +77,20 @@ function toSummary(d: { id: string; data(): Record<string, unknown> }): Playlist
     reviewCount: (data.reviewCount as number) ?? 0,
     latestVideoPublishedAt: (data.latestVideoPublishedAt as { toMillis(): number } | null)?.toMillis?.() ?? null,
     registeredAt: (data.registeredAt as { toMillis(): number } | undefined)?.toMillis?.() ?? 0,
+    tags: tagsMap
+      ? resolveTags((data.playlistTagIds as string[]) ?? [], (data.playlistTagsFixed as string[]) ?? [], tagsMap)
+      : [],
   };
 }
 
 /** 再生リストカードグリッド（データは呼び出し側が用意する場合） */
-export function PlaylistCardGrid({ playlists }: { playlists: PlaylistSummary[] }) {
+export function PlaylistCardGrid({
+  playlists,
+  highlightTagIds,
+}: {
+  playlists: PlaylistSummary[];
+  highlightTagIds?: Set<string>;
+}) {
   if (playlists.length === 0) {
     return (
       <EmptyState
@@ -134,9 +148,14 @@ export function PlaylistCardGrid({ playlists }: { playlists: PlaylistSummary[] }
                     {p.reviewCount.toLocaleString()}
                   </span>
                 </div>
-                {p.gameName && (
+                {p.tags.length > 0 && (
                   <div className="flex flex-wrap gap-[6px]">
-                    <Tag emphasis>{p.gameName}</Tag>
+                    {p.tags.slice(0, MAX_VISIBLE_TAGS).map((t) => (
+                      <Tag key={t.id} className={cn(highlightTagIds?.has(t.id) && 'font-bold text-text-primary')}>
+                        {t.name}
+                      </Tag>
+                    ))}
+                    {p.tags.length > MAX_VISIBLE_TAGS && <Tag>+{p.tags.length - MAX_VISIBLE_TAGS}</Tag>}
                   </div>
                 )}
               </div>
@@ -169,22 +188,40 @@ export function sortPlaylists(list: PlaylistSummary[], sort: PlaylistSort): Play
  * （並び替え・ページングは取得後にJS側で行う想定。呼び出し側: components/games/GamePlaylistSection.tsx）。
  */
 export async function fetchPlaylistsByGame(gameId: string): Promise<PlaylistSummary[]> {
-  const snap = await getDocs(query(collection(db, 'playlists'), where('isPublic', '==', true), where('gameId', '==', gameId)));
-  return snap.docs.map(toSummary);
+  const [snap, tagsMap] = await Promise.all([
+    getDocs(query(collection(db, 'playlists'), where('isPublic', '==', true), where('gameId', '==', gameId))),
+    fetchTagsMap(),
+  ]);
+  return snap.docs.map((d) => toSummary(d, tagsMap));
 }
 
 /**
- * 公開再生リストのカードグリッド（TOP最小版・「再生リストを探す」最小版で使用）。
- * 新着順で最大`max`件を取得する。検索・絞り込み・ソート（ページ 再生リストを探す 仕様書）は
- * フェーズ3ステップ4。
+ * 公開再生リスト全件を取得する（「再生リストを探す」本実装 `app/(main)/playlists/page.tsx`）。
+ * カタログ規模が小さい前提で全件クライアント取得＋クライアント側フィルタ・ソート・ページングとする
+ * （`/games`と同じ簡易実装方針）。
+ */
+export async function fetchPublicPlaylists(): Promise<PlaylistSummary[]> {
+  const [snap, tagsMap] = await Promise.all([
+    getDocs(query(collection(db, 'playlists'), where('isPublic', '==', true))),
+    fetchTagsMap(),
+  ]);
+  return snap.docs.map((d) => toSummary(d, tagsMap));
+}
+
+/**
+ * 公開再生リストのカードグリッド（TOP最小版で使用）。
+ * 新着順で最大`max`件を取得する。
  */
 export function PlaylistGrid({ max = 24 }: { max?: number }) {
   const [playlists, setPlaylists] = useState<PlaylistSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    getDocs(query(collection(db, 'playlists'), where('isPublic', '==', true), orderBy('registeredAt', 'desc'), limit(max)))
-      .then((snap) => setPlaylists(snap.docs.map(toSummary)))
+    Promise.all([
+      getDocs(query(collection(db, 'playlists'), where('isPublic', '==', true), orderBy('registeredAt', 'desc'), limit(max))),
+      fetchTagsMap(),
+    ])
+      .then(([snap, tagsMap]) => setPlaylists(snap.docs.map((d) => toSummary(d, tagsMap))))
       .catch((e) => setError(e instanceof Error ? e.message : String(e)));
   }, [max]);
 
