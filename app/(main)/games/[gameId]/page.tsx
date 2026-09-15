@@ -7,23 +7,23 @@
  * - 「情報を編集ボタン」（第7章の管理者編集フロー・審査ワークフロー経由の一般ユーザー提案）は
  *   審査ワークフロー自体が未実装のため非表示にする（フェーズ2.5でパスワード再発行リンク等を
  *   「未実装機能は置かない」方針で省略した前例に合わせる。フェーズ3計画参照）
- * - タグ編集アイコン（✏️、第8章）はフェーズ3ステップ3（タグシステム）で追加する。
- *   このページでは読み取り専用表示のみ
  */
 'use client';
 
 import { useEffect, useState } from 'react';
 import { notFound, useParams } from 'next/navigation';
-import { collection, doc, getDoc, getDocs } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { useAuth } from '@/contexts/AuthContext';
 import { fetchTagsMap, resolveTags, type ResolvedTag } from '@/lib/tags';
 import { fetchPlaylistsByGame } from '@/components/playlists/PlaylistGrid';
 import { GamePlaylistSection } from '@/components/games/GamePlaylistSection';
+import { TagEditModal } from '@/components/tags/TagEditModal';
 import { Card } from '@/components/ui/Card';
 import { Tag } from '@/components/ui/Tag';
 import { ExternalLinkButton } from '@/components/ui/Button';
 import { Skeleton, SkeletonText } from '@/components/ui/Skeleton';
-import { InventoryIcon, PlayIcon } from '@/components/ui/icons';
+import { InventoryIcon, LockIcon, PencilIcon, PlayIcon } from '@/components/ui/icons';
 
 interface GameDetail {
   title: string;
@@ -34,23 +34,24 @@ interface GameDetail {
   genreName: string;
   themeIds: string[];
   playlistCount: number;
-  tags: ResolvedTag[];
 }
 
 export default function GameDetailPage() {
   const { gameId } = useParams<{ gameId: string }>();
+  const { user } = useAuth();
 
   const [game, setGame] = useState<GameDetail | null>(null);
   const [themeNames, setThemeNames] = useState<string[]>([]);
   const [videoCount, setVideoCount] = useState<number | null>(null);
   const [missing, setMissing] = useState(false);
+  const [tags, setTags] = useState<ResolvedTag[]>([]);
+  const [tagModalOpen, setTagModalOpen] = useState(false);
 
   useEffect(() => {
     if (!gameId) return;
     (async () => {
-      const [gameSnap, tagsMap, themesSnap, playlists] = await Promise.all([
+      const [gameSnap, themesSnap, playlists] = await Promise.all([
         getDoc(doc(db, 'games', gameId)),
-        fetchTagsMap(),
         getDocs(collection(db, 'themes')),
         fetchPlaylistsByGame(gameId),
       ]);
@@ -72,11 +73,21 @@ export default function GameDetailPage() {
         genreName: data.genreName ?? '',
         themeIds,
         playlistCount: data.playlistCount ?? 0,
-        tags: resolveTags(data.gameTagIds ?? [], data.gameTagsFixed ?? [], tagsMap),
       });
       setThemeNames(themeIds.map((id) => themeNameById.get(id)).filter((n): n is string => !!n));
       setVideoCount(playlists.reduce((sum, p) => sum + p.videoCount, 0));
     })();
+  }, [gameId]);
+
+  // タグはタグ編集（app/api/tags/attach・detach）のたびにサーバー側で更新されるため、
+  // 操作直後に画面へ反映されるよう別途購読する（再生リスト詳細ページと同じ方針）
+  useEffect(() => {
+    if (!gameId) return;
+    return onSnapshot(doc(db, 'games', gameId), (snap) => {
+      if (!snap.exists()) return;
+      const data = snap.data();
+      fetchTagsMap().then((tagsMap) => setTags(resolveTags(data.gameTagIds ?? [], data.gameTagsFixed ?? [], tagsMap)));
+    });
   }, [gameId]);
 
   if (missing) notFound();
@@ -142,13 +153,30 @@ export default function GameDetailPage() {
                 {(videoCount ?? 0).toLocaleString()} 動画
               </span>
             </div>
-            {game.tags.length > 0 && (
-              <div className="flex flex-wrap gap-[6px]">
-                {game.tags.map((t) => (
-                  <Tag key={t.id} href={`/games?tag=${encodeURIComponent(t.id)}`}>
-                    {t.name}
-                  </Tag>
-                ))}
+            {(tags.length > 0 || user) && (
+              <div className="flex flex-wrap items-center gap-[6px]">
+                {tags.map((t) =>
+                  t.fixed ? (
+                    <span key={t.id} className="inline-flex items-center gap-1 text-sm text-text-secondary">
+                      <LockIcon size={11} />
+                      {t.name}
+                    </span>
+                  ) : (
+                    <Tag key={t.id} href={`/games?tag=${encodeURIComponent(t.id)}`}>
+                      {t.name}
+                    </Tag>
+                  ),
+                )}
+                {user && (
+                  <button
+                    type="button"
+                    aria-label="タグを編集する"
+                    onClick={() => setTagModalOpen(true)}
+                    className="rounded-[6px] p-1 text-text-muted hover:bg-bg-hover hover:text-text-primary"
+                  >
+                    <PencilIcon size={13} />
+                  </button>
+                )}
               </div>
             )}
             {game.description && (
@@ -169,6 +197,8 @@ export default function GameDetailPage() {
       </Card>
 
       <GamePlaylistSection gameId={gameId} />
+
+      <TagEditModal open={tagModalOpen} onOpenChange={setTagModalOpen} targetType="game" targetId={gameId} tags={tags} />
     </div>
   );
 }

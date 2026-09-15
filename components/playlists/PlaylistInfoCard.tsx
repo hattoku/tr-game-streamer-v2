@@ -8,20 +8,23 @@ import type { ReactNode } from 'react';
 import { Card, CardDivider } from '@/components/ui/Card';
 import { Tag } from '@/components/ui/Tag';
 import { StarRating } from '@/components/ui/StarRating';
-import { YouTubeIcon } from '@/components/ui/icons';
+import { LockIcon, PencilIcon, YouTubeIcon } from '@/components/ui/icons';
+import type { ResolvedTag } from '@/lib/tags';
 
 interface PlaylistInfoCardProps {
   title: string;
   score: number | null;
   mylistCount: number;
   reviewCount: number;
-  tags: Array<{ id: string; name: string }>;
+  tags: ResolvedTag[];
   referenceUrl: string;
   /** AddToMylistButton を渡す */
   mylistAction?: ReactNode;
+  /** ログイン済みのときのみ渡す（タグ編集アイコンの表示条件。ゲームタイトル詳細仕様書 §8.2準拠） */
+  onEditTags?: () => void;
 }
 
-export function PlaylistInfoCard({ title, score, mylistCount, reviewCount, tags, referenceUrl, mylistAction }: PlaylistInfoCardProps) {
+export function PlaylistInfoCard({ title, score, mylistCount, reviewCount, tags, referenceUrl, mylistAction, onEditTags }: PlaylistInfoCardProps) {
   return (
     <Card className="flex flex-col gap-3">
       <h1 className="truncate text-2xl font-medium text-text-primary" title={title}>
@@ -46,13 +49,30 @@ export function PlaylistInfoCard({ title, score, mylistCount, reviewCount, tags,
         </span>
       </div>
 
-      {tags.length > 0 && (
-        <div className="flex flex-wrap gap-x-3 gap-y-1">
-          {tags.map((t) => (
-            <Tag key={t.id} href={`/playlists?tag=${encodeURIComponent(t.id)}`}>
-              {t.name}
-            </Tag>
-          ))}
+      {(tags.length > 0 || onEditTags) && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          {tags.map((t) =>
+            t.fixed ? (
+              <span key={t.id} className="inline-flex items-center gap-1 text-sm text-text-secondary">
+                <LockIcon size={11} />
+                {t.name}
+              </span>
+            ) : (
+              <Tag key={t.id} href={`/playlists?tag=${encodeURIComponent(t.id)}`}>
+                {t.name}
+              </Tag>
+            ),
+          )}
+          {onEditTags && (
+            <button
+              type="button"
+              aria-label="タグを編集する"
+              onClick={onEditTags}
+              className="rounded-[6px] p-1 text-text-muted hover:bg-bg-hover hover:text-text-primary"
+            >
+              <PencilIcon size={13} />
+            </button>
+          )}
         </div>
       )}
 

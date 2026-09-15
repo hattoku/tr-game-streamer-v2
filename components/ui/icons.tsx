@@ -273,6 +273,26 @@ export function ExternalLinkIcon(props: IconProps) {
   );
 }
 
+/** タグ編集アイコン（鉛筆） */
+export function PencilIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z" />
+    </svg>
+  );
+}
+
+/** 固定タグ（編集不可）マーク */
+export function LockIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <rect x="5" y="11" width="14" height="9" rx="2" />
+      <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+    </svg>
+  );
+}
+
 /** その他メニュー（︙、レビューカードのカードメニュー等） */
 export function MoreIcon(props: IconProps) {
   return (

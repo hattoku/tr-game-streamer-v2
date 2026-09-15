@@ -21,6 +21,8 @@ import { ChannelCard } from '@/components/playlists/ChannelCard';
 import { PlaylistInfoCard } from '@/components/playlists/PlaylistInfoCard';
 import { VideoList, type VideoItem } from '@/components/playlists/VideoList';
 import { ReviewSection } from '@/components/reviews/ReviewSection';
+import { TagEditModal } from '@/components/tags/TagEditModal';
+import { fetchTagsMap, resolveTags, type ResolvedTag } from '@/lib/tags';
 import type { WatchStatus } from '@/components/ui/Chip';
 
 // 再生リスト詳細ページ。
@@ -85,6 +87,8 @@ export default function PlaylistDetailPage() {
   const [videos, setVideos] = useState<VideoItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [missing, setMissing] = useState(false);
+  const [tags, setTags] = useState<ResolvedTag[]>([]);
+  const [tagModalOpen, setTagModalOpen] = useState(false);
 
   const [reverseOrder, setReverseOrder] = useState(false);
   const [mylist, setMylist] = useState<MylistState | null>(null);
@@ -145,6 +149,7 @@ export default function PlaylistDetailPage() {
         reviewCount: p.reviewCount ?? 0,
         mylistCount: p.mylistCount ?? 0,
       });
+      fetchTagsMap().then((tagsMap) => setTags(resolveTags(p.playlistTagIds ?? [], p.playlistTagsFixed ?? [], tagsMap)));
 
       const videosSnap = await getDocs(
         query(collection(db, 'videos'), where('playlistId', '==', playlistId), orderBy('position', 'asc')),
@@ -209,14 +214,16 @@ export default function PlaylistDetailPage() {
     })();
   }, [playlistId, user, authLoading]);
 
-  // スコア・レビュー数はレビュー投稿（app/api/reviews/upsert）のたびにサーバー側で
-  // 再計算されるため、投稿直後に画面へ反映されるよう購読する
+  // スコア・レビュー数はレビュー投稿（app/api/reviews/upsert）のたびに、タグは
+  // タグ編集（app/api/tags/attach・detach）のたびにサーバー側で更新されるため、
+  // 操作直後に画面へ反映されるよう購読する
   useEffect(() => {
     if (!playlistId) return;
     return onSnapshot(doc(db, 'playlists', playlistId), (snap) => {
       if (!snap.exists()) return;
       const data = snap.data();
       setPlaylist((prev) => (prev ? { ...prev, score: data.score ?? null, reviewCount: data.reviewCount ?? 0 } : prev));
+      fetchTagsMap().then((tagsMap) => setTags(resolveTags(data.playlistTagIds ?? [], data.playlistTagsFixed ?? [], tagsMap)));
     });
   }, [playlistId]);
 
@@ -443,9 +450,10 @@ export default function PlaylistDetailPage() {
       score={playlist.score}
       mylistCount={playlist.mylistCount}
       reviewCount={playlist.reviewCount}
-      tags={[]}
+      tags={tags}
       referenceUrl={playlist.referenceUrl}
       mylistAction={<AddToMylistButton playlistId={playlistId} user={user} mylist={mylist} onChange={setMylist} />}
+      onEditTags={user ? () => setTagModalOpen(true) : undefined}
     />
   );
 
@@ -491,6 +499,8 @@ export default function PlaylistDetailPage() {
           {channelCard}
         </div>
       </div>
+
+      <TagEditModal open={tagModalOpen} onOpenChange={setTagModalOpen} targetType="playlist" targetId={playlistId} tags={tags} />
     </div>
   );
 }
