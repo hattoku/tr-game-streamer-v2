@@ -2,7 +2,7 @@
 title: Wiki索引
 type: meta
 date: 2026-09-08
-updated: 2026-09-12
+updated: 2026-09-15
 ---
 
 # Wiki 索引
@@ -28,6 +28,9 @@ tr-game-streamer-v2 の**コーディング支援用**Wiki（実装の変更履�
 - [[2026-09-12-login-and-register-design-plan]] — フェーズ2.5 ステップ7（ログイン・再生リスト登録のデザイン適用）実装計画（スコープの線引き・バリデーション文言・ゲーム選択モーダル・確認手順・要確認の判断4点）
 - [[2026-09-12-login-and-register-design]] — フェーズ2.5 ステップ7 実装記録（`/login` の signup モード・バリデーション・Firebase エラー日本語化、`/playlists/new` の確認エリア・GameSelectModal・PlaylistSummary・完了画面、撮影で focusout を使う話）
 - [[2026-09-13-phase2.5-finish]] — フェーズ2.5 ステップ8 仕上げ（3幅確認で 768〜1023px のヘッダー折り返しを修正、キーボード/aria の実機確認と `aria-modal`、`next lint` 廃止と typescript-eslint の TS 7 未対応を受けた Babel パーサーによる ESLint 導入、react-hooks の指摘修正）。フェーズ2.5 完了
+- [[2026-09-13-phase3-step1-reviews]] — フェーズ3 ステップ1（レビュー・スコアリング機能）。信頼度スコアはAdmin SDK側で算出、NGワードはサーバー側のみで判定、`reviews`への投稿者非正規化コピー追加、D=0で信頼度が0になる不具合と下限値対応
+- [[2026-09-14-phase3-step2-games]] — フェーズ3 ステップ2（ゲームタイトル探す・詳細ページ）。`PlaylistGrid`の分解・再利用、実機確認で見つかった検索UI4件の修正（×ボタン二重表示・適用中フィルターの左カラム常時表示・絞り込みバッジのトグル化・Tagのホバー効果不備）
+- [[2026-09-15-phase3-step3-tags]] — フェーズ3 ステップ3（タグシステム）。タグ付与・削除のAdmin SDK APIルート、`TagEditModal`共通部品、`.mjs`スクリプトのAPIルートからの再利用
 
 ## Entities
 - [[proxy]] — proxy.ts（旧middleware.ts、Next.js 16のproxy規約対応）
@@ -38,6 +41,7 @@ tr-game-streamer-v2 の**コーディング支援用**Wiki（実装の変更履�
 - [[マスタデータ投入方針]] — 投入対象の規模・ID採番ルール・Admin SDK必須の理由
 - [[ステージング環境運用方針]] — 設定は都度同期・データ検証はフェーズ4まで後回しの方針
 - [[デザイントークン運用方針]] — 仕様書トークン→`@theme`の1対1対応、`@utility`のグラデーション面、1px半透明白の枠線、奥行きの3段階、刺し色の原則（2色目を足さない）、セレクトはSelectMenu、ヘッドレスUI方針
+- [[react-hooksのset-state-in-effect対応]] — 購読系はコールバック/クリーンアップで、「propが変わったらstateを調整する」は描画中に直接setState、導出値はstate化しない
 
 ## Analyses
 （まだページなし）
