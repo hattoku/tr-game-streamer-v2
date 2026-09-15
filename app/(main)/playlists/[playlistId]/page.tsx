@@ -481,19 +481,19 @@ export default function PlaylistDetailPage() {
   // （いずれも DOM 順は同じで、クラスの切替のみ）
   return (
     <div className="grid grid-cols-1 gap-6 md:grid-cols-[62fr_38fr]">
-      <div className={cn('flex flex-col gap-4', theaterMode && 'md:col-span-2')}>
+      <div className={cn('flex min-w-0 flex-col gap-4', theaterMode && 'md:col-span-2')}>
         {hero}
         <div className="md:hidden">{infoCard}</div>
         <div className="hidden md:block">{reviewSection}</div>
       </div>
       <div
         className={cn(
-          'flex flex-col gap-4',
+          'flex min-w-0 flex-col gap-4',
           theaterMode && 'md:col-span-2 md:grid md:grid-cols-[62fr_38fr] md:items-start md:gap-6',
         )}
       >
-        <div className="hidden md:block">{infoCard}</div>
-        <div className="flex flex-col gap-4">
+        <div className="hidden min-w-0 md:block">{infoCard}</div>
+        <div className="flex min-w-0 flex-col gap-4">
           {videoList}
           <div className="md:hidden">{reviewSection}</div>
           {channelCard}
