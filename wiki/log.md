@@ -1,5 +1,20 @@
 # 操作ログ
 
+## [2026-09-15] ingest | session: フェーズ3 ステップ5（仕上げ）
+フェーズ2.5ステップ8と同内容（3幅確認・キーボード/aria・lint/tsc/build・本番E2E確認）をフェーズ3
+ステップ1〜4全体に対して実施。768pxで再生リスト詳細ページの右カラムが横方向にオーバーフローする
+不具合を発見（`md:grid-cols-[62fr_38fr]`の子要素に`min-w-0`が無く、動画リストのテキストがトラック幅を
+押し広げていた）。`app/(main)/playlists/[playlistId]/page.tsx`に`min-w-0`を追加して修正（コミット`aa0f433`）。
+タグ絞り込みパネルは一時的にタグを付与して選択・絞り込み・カード表示・削除までの一連を本番で確認。
+[[2026-09-15-phase3-step5-finish]]・[[CSSグリッドのmin-width対策]]を作成。これでフェーズ3が完了。
+
+## [2026-09-15] ingest | session: フェーズ3 ステップ4（再生リストを探す本実装）
+`/playlists`を最小版（新着順一覧のみ）から、キーワード検索（ゲームタイトル・チャンネル名）・タグ絞り込み
+（AND）・ソート3種・20件ページネーション・モバイルアコーディオンを備えた本実装に差し替え
+（`/games`と同じ簡易実装方針）。`PlaylistCardGrid`のタグ表示もgameNameの仮置きから実データ
+（`playlistTagIds`/`playlistTagsFixed`）に置き換えた。lint/tsc/build成功（コミット`8681e65`）。
+[[2026-09-15-phase3-step4-playlists-search]]を作成。`HANDOFF.md`のステップ3・4を更新。
+
 ## [2026-09-15] ingest | session: フェーズ3 ステップ3（タグシステム）
 `app/api/tags/attach`・`detach`（Admin SDK。`scripts/lib/tag-id.mjs`の`issueTagIds`を再利用）と
 `components/tags/TagEditModal.tsx`（ローカル下書き編集→保存で確定、前方一致サジェスト）を実装。
