@@ -13,6 +13,9 @@ import { TestModeWidget } from '../components/layout/TestModeWidget';
 export const metadata: Metadata = {
   title: { default: 'プレミテ', template: '%s | プレミテ' },
   description: 'ゲーム実況動画の再生リスト視聴記録＆新着通知サービス',
+  // 検証段階のため本番含め全ページを検索エンジンから除外する（app/robots.tsのDisallow: /と対）。
+  // 正式公開時に外すこと。
+  robots: { index: false, follow: false },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

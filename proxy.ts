@@ -2,14 +2,12 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 export function proxy(request: NextRequest) {
-  const isStaging = process.env.NEXT_PUBLIC_APP_ENV === 'stg';
   const authUser = process.env.STAGING_BASIC_AUTH_USER;
   const authPass = process.env.STAGING_BASIC_AUTH_PASSWORD;
 
-  // 基本的にAPP_ENV=stgの場合にBasic認証を適用する
-  // 開発者の利便性のため、authUser/authPassが設定されていない場合はスルーする設定も可能だが
-  // 安全のため設定されている場合のみ動作させる
-  if (isStaging && authUser && authPass) {
+  // 検証段階のため環境を問わずBasic認証を適用する（変数名の"STAGING_"はstg導入時の名残）。
+  // authUser/authPassがCloud Run側に設定されている場合のみ動作する
+  if (authUser && authPass) {
     const basicAuth = request.headers.get('authorization');
 
     if (basicAuth) {
