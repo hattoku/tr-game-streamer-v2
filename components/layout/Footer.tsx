@@ -3,8 +3,12 @@
  * ロゴ＋タグライン／サービス・サポートのリンク群／利用規約・プライバシーポリシー・コピーライト。
  * 認証ページ・初期設定フローでは表示しない（(auth) レイアウトには含めない）。
  * モバイル（767px以下）でも表示しない。同じリンク群と©はハンバーガーメニュー（MobileMenu）が担う（§3.5）。
+ * 管理者（owner/operator）ログイン時のみ「サービス」グループに「再生リストを追加する」を追加する。
  */
+'use client';
+
 import Link from 'next/link';
+import { useAuth } from '@/contexts/AuthContext';
 import { Logo } from '@/components/ui/Logo';
 import { COPYRIGHT, FOOTER_LEGAL_NAV, FOOTER_SERVICE_NAV, FOOTER_SUPPORT_NAV, SERVICE_TAGLINE, type NavItem } from './nav';
 
@@ -26,6 +30,12 @@ function LinkGroup({ title, items }: { title: string; items: NavItem[] }) {
 }
 
 export function Footer() {
+  const { role } = useAuth();
+  const isAdmin = role === 'owner' || role === 'operator';
+  const serviceNav = isAdmin
+    ? [...FOOTER_SERVICE_NAV, { label: '再生リストを追加する', href: '/playlists/new' }]
+    : FOOTER_SERVICE_NAV;
+
   return (
     <footer className="mt-16 hidden border-t border-border-divider bg-bg-base md:block">
       <div className="mx-auto w-full max-w-[1400px] px-4 py-10 md:px-6">
@@ -35,7 +45,7 @@ export function Footer() {
         <div className="my-8 border-t border-border-divider" />
 
         <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 md:max-w-[480px]">
-          <LinkGroup title="サービス" items={FOOTER_SERVICE_NAV} />
+          <LinkGroup title="サービス" items={serviceNav} />
           <LinkGroup title="サポート" items={FOOTER_SUPPORT_NAV} />
         </div>
 
