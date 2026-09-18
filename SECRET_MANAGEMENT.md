@@ -6,12 +6,16 @@
 
 | ファイル | 内容 |
 |---------|------|
-| `lib/constants.ts` | YouTube API キー |
 | `lib/firebase.ts` | Firebase 認証情報 |
 | (Cloud Run 設定) | `STAGING_BASIC_AUTH_USER` (ステージング環境Basic認証) |
 | (Cloud Run 設定) | `STAGING_BASIC_AUTH_PASSWORD` (ステージング環境Basic認証) |
 
 新たに秘密情報を追加する場合も、同様の構成ファイルに追加する。
+
+**例外**: `YOUTUBE_API_KEY`（`lib/constants.ts`）はこのリポジトリがpublicであるためソースへの
+直書きは採らない。ローカル開発は`.env.local`（gitignore対象）から供給し、Cloud Runデプロイ時は
+`deploy.sh`/`deploy.ps1`が`.env.local`から読み取って`gcloud run deploy --update-env-vars`で
+Cloud Runの環境変数として注入する。
 
 ## 本番環境での管理
 
