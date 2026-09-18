@@ -533,8 +533,44 @@ Admin SDKがルールをバイパスするAPIルートのみで完結し、ル�
 情報が無いため）、`playlists.mylistCount`の集計修正（未解決事項11、フェーズ3のスコープ外として
 発見・記録のみ）。
 
-### フェーズ4: 検証・本番デプロイ
-- ステージング環境でE2E確認 → 本番（`puremite.net`）へのデプロイ確認
+### フェーズ4: 検証・本番デプロイ（2026-09-18、次セッションはここから着手）
+
+**前提として押さえておくべきこと**: フェーズ1〜3で行ってきた「本番環境で確認」は、すべて
+`npm run dev`のローカル実行から本番Firebaseプロジェクト（Firestore/Authentication）へ直接接続して
+行ったものであり、**Cloud Runサービス`puremite`への実デプロイ（`deploy.sh`/`deploy.ps1`/
+`cloudbuild.yaml`経由のビルド＆デプロイ）は、v2立ち上げ以降まだ一度も実行されていない**。
+つまりフェーズ4は「再検証」ではなく、実質的に**初回デプロイ**になる。
+
+**着手前に解消しておくべき既知のブロッカー・注意点**:
+
+1. **ステージング環境のリセットが未実施**（未解決事項5、下記参照）。Firestoreルール・インデックスは
+   本番のみデプロイ済みで、`tr-game-streamer-stg`側の状態（ルール・マスタデータ・Authenticationの
+   プロバイダ設定）は未確認・おそらく未同期。ステージングでE2E確認する前に、まずステージング環境を
+   本番と同等の状態に揃える必要がある。
+2. **`YOUTUBE_API_KEY`がCloud Runのデプロイ経路に一切乗っていない**（`lib/constants.ts`参照）。
+   ローカルは`.env.local`（gitignore対象）頼みだが、`cloudbuild.yaml`のDocker buildにも
+   `deploy.sh`の`gcloud run deploy`にも`YOUTUBE_API_KEY`を渡す設定が存在しない。このままデプロイすると
+   再生リスト登録・新着動画の手動再取得などYouTube Data API依存の機能が本番で軒並み失敗する。
+   `SECRET_MANAGEMENT.md`の方針（Firebase設定と同様にソースへ既定値を直書き）に倣うか、
+   `gcloud run deploy --set-env-vars`/Secret Managerで渡すかを決めて対応すること。
+3. **テストモードウィジェット**（`NEXT_PUBLIC_TEST_MODE`）は`cloudbuild.yaml`の`_TEST_MODE`を
+   明示的に渡さない限り無効（既定`''`）。ステージングでのE2E確認時にテスト用ログインウィジェットを
+   使いたい場合は`--substitutions ..._TEST_MODE=true`が必要（本番へは絶対に渡さないこと）。
+
+**想定される着手順序**:
+1. 未解決事項5（ステージング環境のリセット）を解消 — `firestore.rules`/`firestore.indexes.json`と
+   マスタデータ投入スクリプト（`npm run seed:master:stg`等）をステージングへ反映し、Authentication
+   プロバイダ設定を本番と合わせる
+2. 上記ブロッカー2（YOUTUBE_API_KEY）の対応方針を決めて反映
+3. `./deploy.sh stg`（Windowsなら`deploy.ps1`）でステージングへ初回デプロイし、ビルド・起動が
+   通ることを確認
+4. ステージングURL上で、フェーズ1〜3で実装した主要導線のE2E確認（アカウント登録・ログイン、
+   再生リスト登録、視聴・進捗、マイリスト、新着通知、レビュー・スコアリング、タグ、
+   ゲームタイトル/再生リストを探す）
+5. 問題なければ本番（`puremite.net`）へ同様にデプロイし、最終確認
+
+未解決事項3（BigQueryエクスポート拡張機能の扱い）・4（X/パスキー認証）・6（v1旧APIキー無効化）は
+優先度が低く、フェーズ4を止める要因ではない。
 
 ### フェーズ5以降（将来構想）
 - AI運営者・信頼度スコアリング本格運用 → 格付けサイトへの転換、BigQuery/Terraform導入、
