@@ -37,7 +37,10 @@ export function proxy(request: NextRequest) {
   return NextResponse.next();
 }
 
-// staticファイルや画像などを除外
+// staticファイルや画像、APIルートを除外
+// APIルートはFirebase IDトークン（Authorization: Bearer）で別途保護されているため対象外とする。
+// Basic認証もAuthorizationヘッダーを使うため、両方を同時に満たすことができず、
+// APIルート込みで対象にするとBearerトークン送信時にBasic認証チェックが常に失敗してしまう。
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|api).*)'],
 };
