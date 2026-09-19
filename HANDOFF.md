@@ -533,41 +533,51 @@ Admin SDKがルールをバイパスするAPIルートのみで完結し、ル�
 情報が無いため）、`playlists.mylistCount`の集計修正（未解決事項11、フェーズ3のスコープ外として
 発見・記録のみ）。
 
-### フェーズ4: 検証・本番デプロイ（2026-09-18、次セッションはここから着手）
+### フェーズ4: 検証・本番デプロイ（2026-09-18〜19対応）
 
-**前提として押さえておくべきこと**: フェーズ1〜3で行ってきた「本番環境で確認」は、すべて
-`npm run dev`のローカル実行から本番Firebaseプロジェクト（Firestore/Authentication）へ直接接続して
-行ったものであり、**Cloud Runサービス`puremite`への実デプロイ（`deploy.sh`/`deploy.ps1`/
-`cloudbuild.yaml`経由のビルド＆デプロイ）は、v2立ち上げ以降まだ一度も実行されていない**。
-つまりフェーズ4は「再検証」ではなく、実質的に**初回デプロイ**になる。
+**前提**: フェーズ1〜3で行ってきた「本番環境で確認」は、すべて`npm run dev`のローカル実行から
+本番Firebaseプロジェクト（Firestore/Authentication）へ直接接続して行ったものであり、Cloud Run
+サービス`puremite`への実デプロイはv2立ち上げ以降フェーズ4で初めて実行された（実質**初回デプロイ**）。
 
-**着手前に解消しておくべき既知のブロッカー・注意点**:
+**2026-09-18に対応済み**（コミット`8297a7e`〜`3eb7e95`）:
+1. ~~ブロッカー2（`YOUTUBE_API_KEY`がデプロイ経路に乗っていない）~~ → 対応済み。publicリポジトリの
+   ため`lib/constants.ts`への直書きは採らず、`deploy.sh`/`deploy.ps1`が`.env.local`から読み取り
+   `gcloud run deploy --update-env-vars`で注入する方式にした。あわせてpackage-lock.json不整合
+   （sharp-wasm32のoptional依存解決漏れ）とdeploy.ps1のフェイルファスト欠如も修正。
+2. ~~stg・本番とも`deploy.ps1`で実際にデプロイ~~ → 対応済み。Cloud Runリビジョンで確認可能
+   （stg: `puremite-00006`〜、本番: `puremite-00003`〜、いずれも2026-09-18作成）。
+3. ~~Basic認証とBearer認証（Firebase IDトークン）の競合でstg APIが全滅していたバグ~~ → 対応済み。
+   `proxy.ts`のBasic認証matcherから`/api`配下を除外（コミット`2ffbdd6`）。
+4. ~~検証段階として全環境にnoindex・Basic認証を適用~~ → 対応済み（コミット`3eb7e95`）。
+   `app/robots.ts`・`layout.tsx`のmetadata.robotsでnoindex、`proxy.ts`のBasic認証を
+   stg限定から環境問わず適用に変更。本番Cloud Runにも同じBasic認証資格情報を設定済み。
+5. フッターに管理者向け「再生リストを追加する」導線を追加（コミット`baf1538`）。
 
-1. **ステージング環境のリセットが未実施**（未解決事項5、下記参照）。Firestoreルール・インデックスは
-   本番のみデプロイ済みで、`tr-game-streamer-stg`側の状態（ルール・マスタデータ・Authenticationの
-   プロバイダ設定）は未確認・おそらく未同期。ステージングでE2E確認する前に、まずステージング環境を
-   本番と同等の状態に揃える必要がある。
-2. **`YOUTUBE_API_KEY`がCloud Runのデプロイ経路に一切乗っていない**（`lib/constants.ts`参照）。
-   ローカルは`.env.local`（gitignore対象）頼みだが、`cloudbuild.yaml`のDocker buildにも
-   `deploy.sh`の`gcloud run deploy`にも`YOUTUBE_API_KEY`を渡す設定が存在しない。このままデプロイすると
-   再生リスト登録・新着動画の手動再取得などYouTube Data API依存の機能が本番で軒並み失敗する。
-   `SECRET_MANAGEMENT.md`の方針（Firebase設定と同様にソースへ既定値を直書き）に倣うか、
-   `gcloud run deploy --set-env-vars`/Secret Managerで渡すかを決めて対応すること。
-3. **テストモードウィジェット**（`NEXT_PUBLIC_TEST_MODE`）は`cloudbuild.yaml`の`_TEST_MODE`を
-   明示的に渡さない限り無効（既定`''`）。ステージングでのE2E確認時にテスト用ログインウィジェットを
-   使いたい場合は`--substitutions ..._TEST_MODE=true`が必要（本番へは絶対に渡さないこと）。
+**2026-09-19に発見・対応済み**: 上記4のBasic認証適用後も、**本番カスタムドメイン
+（`puremite.net`・`tr-game-streamer.web.app`）がBasic認証を素通りしてHTTP 200を返す**不具合を
+発見。原因はNext.jsの静的ページのデフォルト`Cache-Control: s-maxage=31536000`（1年）を
+Firebase HostingのCDN（Fastly）がそのままキャッシュ規則として使い、`proxy.ts`のミドルウェアが
+実行されるCloud Run本体まで到達する前にエッジでレスポンスを返してしまっていたこと（Basic認証
+導入**前**にキャッシュされた古いレスポンスが残り続けていた）。`firebase.json`のhosting設定に
+`Cache-Control: private, no-store`を強制する`headers`ルールを追加し、stg・本番ともデプロイして
+解消（`X-Cache: MISS`で毎回401が返ることを確認済み）。コード変更なし・Cloud Run再デプロイ不要、
+Firebase Hostingの設定のみの反映。**正式公開でnoindex/Basic認証を外す際は、この`no-store`強制も
+併せて見直すこと**（パフォーマンス目的のキャッシュを復活させるなら、静的アセット等の安全な範囲に
+絞って再設計する）。
 
-**想定される着手順序**:
-1. 未解決事項5（ステージング環境のリセット）を解消 — `firestore.rules`/`firestore.indexes.json`と
-   マスタデータ投入スクリプト（`npm run seed:master:stg`等）をステージングへ反映し、Authentication
-   プロバイダ設定を本番と合わせる
-2. 上記ブロッカー2（YOUTUBE_API_KEY）の対応方針を決めて反映
-3. `./deploy.sh stg`（Windowsなら`deploy.ps1`）でステージングへ初回デプロイし、ビルド・起動が
-   通ることを確認
-4. ステージングURL上で、フェーズ1〜3で実装した主要導線のE2E確認（アカウント登録・ログイン、
-   再生リスト登録、視聴・進捗、マイリスト、新着通知、レビュー・スコアリング、タグ、
-   ゲームタイトル/再生リストを探す）
-5. 問題なければ本番（`puremite.net`）へ同様にデプロイし、最終確認
+**まだ未実施**:
+1. **主要導線のE2E確認**（アカウント登録・ログイン、再生リスト登録、視聴・進捗、マイリスト、
+   新着通知、レビュー・スコアリング、タグ、ゲームタイトル/再生リストを探す）を、実際にデプロイされた
+   stg・本番のURL上でブラウザから通しで確認した記録がまだ無い。フェーズ1〜3のE2E確認はすべて
+   `npm run dev`のローカル実行経由だったため、Cloud Run上でのビルド成果物としての動作確認が
+   未了（YouTube IFrame Player APIのブラウザ実機確認も含む）。次セッションで実施すること。
+2. 未解決事項5（ステージング環境のリセット）が実際にどこまで反映済みかの棚卸し。stg・本番とも
+   デプロイ・Basic認証適用は完了しているが、Firestoreルール・インデックス・マスタデータ・
+   Authenticationプロバイダ設定がstg側で本番と一致しているかは今回未確認のまま。
+
+**noindex・Basic認証を外すタイミングについて（2026-09-19ユーザー決定）**: かなり先の話とする。
+友人へのデモ・SNSアカウント開設・販促関連タスク一式が完了した後。フェーズ4完了後はこの後続タスク
+（デモ・SNS・販促、正式公開判断）について**まったく新しい計画を別途立てる**方針。
 
 未解決事項3（BigQueryエクスポート拡張機能の扱い）・4（X/パスキー認証）・6（v1旧APIキー無効化）は
 優先度が低く、フェーズ4を止める要因ではない。
@@ -575,6 +585,8 @@ Admin SDKがルールをバイパスするAPIルートのみで完結し、ル�
 ### フェーズ5以降（将来構想）
 - AI運営者・信頼度スコアリング本格運用 → 格付けサイトへの転換、BigQuery/Terraform導入、
   iOS/Androidネイティブアプリ展開
+- 正式公開に向けた販促フェーズ（友人へのデモ、SNSアカウント開設、noindex/Basic認証解除の判断を
+  含む）— 2026-09-19時点でまだ計画未着手。フェーズ4完了後に別途計画を立てる。
 
 ## 参考: 主要ドキュメントの場所
 
