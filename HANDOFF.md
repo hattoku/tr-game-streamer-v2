@@ -98,14 +98,8 @@
     `eslint-config-next` に戻す／③oxlint へ切替）のうち①を採用。戻す条件は「TypeScript 7.1 正式版で JavaScript API が
     復活し、typescript-eslint の peer 範囲が TS 7 を含む」こと。そのとき `eslint-config-next` を入れ直し、
     `@babel/core`・`@babel/eslint-parser`・`@next/eslint-plugin-next`・`eslint-plugin-react-hooks` の直接依存を外す。
-11. **`playlists.mylistCount` の集計が実質機能していない** — 2026-09-13 フェーズ3ステップ1実装時に判明。
-    `AddToMylistButton`（マイリスト登録・解除・ステータス変更）はクライアントSDKから`mylist`を直接読み書きするが、
-    `playlists.mylistCount`を増減させる処理がどこにも無い（`firestore.rules`の`playlists`更新許可フィールドにも
-    含まれていない）。レビュー機能側は`app/api/reviews/upsert`が新規レビュー投稿時に`mylist`ドキュメントを
-    自動作成することがあるが、`mylistCount`自体は更新していない。カード・詳細ページの「マイリスト」表示は
-    常に登録時の初期値（0）のまま。対応時は`mylist`の作成・削除を伴う操作をAdmin SDK API経由に寄せるか、
-    再生リストごとに`mylist`件数を都度集計するか（レビュー機能の`playlists.score`再計算と同じ方式）を検討する。
-    → **フェーズ4.5ステップ3**でAdmin SDK API方式に寄せて対応予定（2026-09-20決定）。
+11. ~~**`playlists.mylistCount` の集計が実質機能していない**~~ → **2026-09-20対応済み**
+    （フェーズ4.5ステップ3、コミット`462c6db`）。詳細はステップ3の記述参照。
 12. ~~**常用アカウント（メールアドレスは伏字）の`users`ドキュメントが不完全**~~ →
     **2026-09-20補修済み**。2026-09-20フェーズ4.5ステップ1のE2E作業中に発生（詳細は同ステップの
     記述参照）。`role`フィールドのみ存在し、`uid`/`isAI`/`isBanned`/`isTestUser`/`fcmTokens`/
@@ -714,14 +708,24 @@ Firebase Hostingの設定のみの反映。**正式公開でnoindex/Basic認証�
      フッターから提案モーダルでなく`GameCreateModal`を開く旨）、`管理 マスタ管理仕様書`v2.3
      （§7.1に注記追加。本節が想定する`/admin`管理画面自体は未実装で、新規登録のみ暫定実装、
      JANコード自動取得なしの手入力版である旨）。
-3. **`playlists.mylistCount`の集計修正**（未解決事項11）
-   - 原因確定: `mylist`の作成・削除がクライアントSDK直で、カウントを増減する処理がどこにも無い。
+3. ~~**`playlists.mylistCount`の集計修正**~~（未解決事項11）→ **2026-09-20対応済み**（コミット`462c6db`）。
+   - 原因確定: `mylist`の作成・削除がクライアントSDK直で、カウントを増減する処理がどこにも無かった。
      `playlists`のupdateルールは一般ユーザーに`playlistTagIds`のみ許可しているため、
-     **クライアントからは構造的に増減できない**。
-   - 追加・削除だけAdmin SDK API（`app/api/mylist`、`FieldValue.increment`）に寄せる。ステータス
-     変更・逆順トグルはカウントに影響しないのでクライアントSDKのまま。
-   - `app/api/reviews/upsert`のmylist自動作成経路にもincrementを追加。
-   - `scripts/recount-mylist.mjs`（新規・冪等）で既存のズレを数え直す。
+     クライアントからは構造的に増減できない設計だった。
+   - `app/api/mylist`（新規）を追加し、マイリストの追加・削除だけAdmin SDK API経由に寄せて
+     `FieldValue.increment`で加算・減算する方式にした。ステータス変更・逆順トグルはカウントに
+     影響しないため、引き続きクライアントSDK直書き（`AddToMylistButton.tsx`・`app/(main)/mylist/page.tsx`）。
+   - `app/api/reviews/upsert`のmylist自動作成経路（レビュー投稿時に未登録なら`mylist`を自動作成する処理）
+     にも同様のincrementを追加。
+   - `scripts/recount-mylist.mjs`（新規・冪等）で既存の`mylist`件数を数え直し、`playlists.mylistCount`の
+     ズレを補正するスクリプトを用意。`npm run recount:mylist:stg` / `:prod`。
+   - **E2E動作確認**: ステージング環境（ローカル`next dev`を`NEXT_PUBLIC_APP_ENV=stg`で起動、既存の
+     `npm run dev`プロセスと競合しないよう別ディレクトリにgit worktreeを作成して実施）で、Playwrightに
+     よりテストユーザーで実際にマイリスト追加→`mylistCount` 0→1、削除→1→0と正しく増減することを確認。
+     テストで作成したマイリストデータは確認後に削除済み。
+   - **積み残し**: 本番（`tr-game-streamer`）に対する`npm run recount:mylist:prod`の実行と本番E2E確認は
+     今回未実施（ユーザー指示によりステージングまでの確認に留めた）。ステップ7（stg・本番デプロイ）で
+     本番デプロイと合わせて実施すること。
 4. **新着通知の自動実行**
    サービスの中核価値であり、手動ボタンのままでは「通知で気づく」体験自体を検証できない。
    - `app/api/admin/refresh-new-videos`にcron経路を追加 — `X-Cron-Secret`ヘッダーが環境変数
