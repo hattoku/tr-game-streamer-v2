@@ -4,6 +4,7 @@ node_modules
 .env.stg
 .agent/cache/
 *.tsbuildinfo
+.playwright-mcp/
 
 # サービスアカウント鍵（万一ダウンロードした場合の誤コミット防止。通常はADCを使うため不要）
 *service-account*.json
