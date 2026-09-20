@@ -47,7 +47,10 @@ import { MylistCard, type MylistCardData } from '@/components/mylist/MylistCard'
 // 「最終話を視聴済み」判定は、最終話（逆順なら先頭）の watch_history.progressPercent が 95 以上。
 // 最終話は videos を position == videoCount-1 の等価条件で引く（orderBy+limitToLast は降順の複合索引が要る）。
 // スコープ外（据え置き）:
-// - 新着通知の ON/OFF トグル（§5.4）: ユーザー設定ページが無いため常に ON
+// - 新着通知の ON/OFF トグル（§5.4）: フェーズ4.5ステップ6で/settingsに実装したが、
+//   showNewArrivalNotificationはFCMプッシュ通知の送信可否を絞るためのフィールド（FCMプッシュ通知
+//   基盤仕様書参照）で、FCM自体が未実装のため現時点では見た目上の効果はない。in-app通知一覧
+//   （notifications）の生成はこのフラグを見ずに常に行う仕様のため、マイリストページ側の対応は不要
 // - TOP ページ連携（§6）はフェーズ3
 
 type FilterValue = 'all' | WatchStatus;
