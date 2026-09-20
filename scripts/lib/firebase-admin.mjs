@@ -1,11 +1,23 @@
 import { initializeApp, applicationDefault, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
+import { getAuth } from 'firebase-admin/auth';
 
 // プロジェクトIDの対応は .firebaserc の projects エイリアスと同一にする。
 const PROJECT_IDS = {
   prod: 'tr-game-streamer',
   stg: 'tr-game-streamer-stg',
 };
+
+function getApp(target) {
+  const projectId = PROJECT_IDS[target];
+  if (!projectId) {
+    throw new Error(`unknown target "${target}". expected "prod" or "stg".`);
+  }
+  const app = getApps().length === 0
+    ? initializeApp({ credential: applicationDefault(), projectId })
+    : getApps()[0];
+  return { app, projectId };
+}
 
 /**
  * Admin SDKを初期化しFirestoreインスタンスを返す。
@@ -16,12 +28,15 @@ const PROJECT_IDS = {
  * @param {"prod"|"stg"} target
  */
 export function initFirestore(target) {
-  const projectId = PROJECT_IDS[target];
-  if (!projectId) {
-    throw new Error(`unknown target "${target}". expected "prod" or "stg".`);
-  }
-  const app = getApps().length === 0
-    ? initializeApp({ credential: applicationDefault(), projectId })
-    : getApps()[0];
+  const { app, projectId } = getApp(target);
   return { db: getFirestore(app), projectId };
+}
+
+/**
+ * Admin SDKを初期化しAuthインスタンスを返す（initFirestoreと同じ認証方式）。
+ * @param {"prod"|"stg"} target
+ */
+export function initAuth(target) {
+  const { app, projectId } = getApp(target);
+  return { auth: getAuth(app), projectId };
 }

@@ -106,6 +106,17 @@
     常に登録時の初期値（0）のまま。対応時は`mylist`の作成・削除を伴う操作をAdmin SDK API経由に寄せるか、
     再生リストごとに`mylist`件数を都度集計するか（レビュー機能の`playlists.score`再計算と同じ方式）を検討する。
     → **フェーズ4.5ステップ3**でAdmin SDK API方式に寄せて対応予定（2026-09-20決定）。
+12. ~~**常用アカウント（`develop_boss1@hattoku.net`）の`users`ドキュメントが不完全**~~ →
+    **2026-09-20補修済み**。2026-09-20フェーズ4.5ステップ1のE2E作業中に発生（詳細は同ステップの
+    記述参照）。`role`フィールドのみ存在し、`uid`/`isAI`/`isBanned`/`isTestUser`/`fcmTokens`/
+    `reviewCount`/`helpfulReceivedCount`/`accountCreatedAt`/`email`/`displayName`が無い状態
+    だった。Admin SDKの一回限りスクリプト（一時ファイル、実行後削除済み）で`init-user`ルートと
+    同じ既定値に補修。**補修時の事故**: 既に投稿済みだったレビュー1件分で`reviewCount`が1に
+    加算済みだったところへ、既定値0の`merge:true`書き込みが上書きしてしまい、直後に気づいて
+    1へ再修正済み（`helpfulReceivedCount`等の他の集計値は補修時点で加算対象の操作が発生して
+    いなかったため影響なし）。**教訓**: 既存ドキュメントへの`merge:true`一括補修は、対象
+    フィールドが他の処理で既に更新されている可能性を先に`.get()`で確認してから、補修対象外の
+    フィールドを明示的に除外すること。
 
 ## 開発全体のロードマップ（合意済み、これから着手する順序の目安）
 
@@ -637,21 +648,44 @@ Firebase Hostingの設定のみの反映。**正式公開でnoindex/Basic認証�
 **このフェーズで**やらない**もの**（フェーズ6以降へ）: チャンネル・まとめ・プロフィール・TOP本実装・
 管理画面・法務ページ・楽天API連携。「実際に使って必要だと感じた順」で入れるほうが無駄が少ない。
 
-1. **デプロイ済み環境のE2E確認と常用アカウント整備**（フェーズ4積み残し1）
+1. ~~**デプロイ済み環境のE2E確認と常用アカウント整備**~~（フェーズ4積み残し1）→ **2026-09-20対応済み**。
    最初に置く理由は、ここで出る不具合が後続ステップの前提を壊しうるため。
    - `scripts/set-role.mjs`（新規）— メール指定でCustom Claim `role`と`users.role`を更新。
      **現状ownerに昇格させる手段がコードに一切無い**（`api/auth/init-user`は`user`固定、
      `api/test/sign-in`はテスト用会員専用）ため、このままでは本番で再生リストを登録できない。
-   - 本番に自分の常用アカウントを作成 → owner付与。
-   - Playwright MCP（コミット`3ad01eb`で導入済み）で`puremite.net`の主要導線を通す:
-     登録→ログイン／`/playlists/new`で登録／詳細ページで**実際に動画再生**（YouTube IFrame Player
-     APIの実機確認はフェーズ2から未消化）・連続再生・進捗保存／マイリスト一式／レビュー＋参考に
-     なった／タグ付与と検索絞り込み／手動再取得→通知→ベル→既読。
-     Basic認証は`https://user:pass@puremite.net/`で通す。通らなければstgを`_TEST_MODE=true`で
-     ビルドして代替する。
+     `scripts/lib/firebase-admin.mjs`に`initAuth`を追加（既存`initFirestore`と同じADC方式）。
+   - 本番に常用アカウント（`develop_boss1@hattoku.net`）を作成 → `set-role.mjs`でowner付与。
+   - Playwright MCPで`puremite.net`の主要導線を通した（既存の登録済み3件の再生リストを使用。
+     新規`/playlists/new`登録はユーザー判断でスキップ）: サインアップ→ログイン／詳細ページで
+     **実際に動画再生**（YouTube IFrame Player APIの実機確認、フェーズ2から未消化だった）・
+     「次へ」による連続再生・`watch_progress`/`watch_history`への進捗保存（Firestore書き込みを
+     ネットワークログで確認）／マイリスト追加・ステータス変更／レビュー投稿（★評価・コメント）＋
+     参考になった／タグ付与＋`/playlists`でのタグ絞り込み／管理者用「新着動画を再取得」
+     （3件確認・新着0件、エラーなしで正常終了）。
+   - **重要な副作用の発見**: Basic認証を`https://user:pass@puremite.net/`のようにURLへ埋め込む
+     方式で確認を始めたところ、**アプリ自身の相対パスfetch（`/api/reviews/upsert`等）が
+     ブラウザの仕様で例外を起こし全滅する**ことが判明（`document.baseURI`が認証情報を含むと、
+     そこから解決される相対URLでの`fetch()`をFetch仕様が拒否するため。エラーメッセージ:
+     `Request cannot be constructed from a URL that includes credentials`）。実ユーザーは
+     ブラウザ標準のBasic認証ダイアログを使うためこの問題は起きない、**Playwright自動操作固有の
+     罠**。今後同様の自動操作を行う際は、URL埋め込みではなく`page.route()`で`Authorization`
+     ヘッダーを注入する方式を使うこと（ただし`/api`配下は`proxy.ts`でBasic認証対象外なので、
+     appのBearerトークンを上書きしないよう「既にAuthorizationヘッダーがある場合は触らない」
+     条件を必ず入れる）。
+   - **この副作用に起因する実データの不整合**: 上記の罠により、常用アカウントの新規登録直後の
+     `/api/auth/init-user`呼び出しが失敗し、`users/{uid}`ドキュメントが作成されないまま
+     `set-role.mjs`の`merge:true`書き込みで`role`フィールドだけが存在する不完全な状態になった。
+     さらに`init-user`は`customClaims.role`が既にセットされていると早期returnして
+     ドキュメント作成処理をスキップする設計のため、後から呼び直しても直らない
+     （`displayName`等が無いため、レビュー一覧の投稿者名が「ユーザー」フォールバック表示になる
+     副作用を確認済み）。`displayName`はfirestore.rulesの本人更新許可フィールドのため
+     `/settings`実装後（ステップ6）に本人が入力すれば直る想定。`isAI`/`isBanned`等の管理項目は
+     Admin SDKでの補修が必要だが、本セッションでは本番Admin SDK書き込みの追加承認が得られず
+     未実施（**積み残し**、下記参照）。
    - **本番データの扱いを転換（2026-09-20ユーザー決定）**: これまではE2Eのたびに本番データを
      全削除してきたが、ここからは**残す**。削除するのはテスト用会員（`test-user@puremite.test`・
-     `test-admin@puremite.test`）のみ。
+     `test-admin@puremite.test`）のみ。今回登録したレビュー・マイリスト・タグ（オープンワールド）は
+     実データとして残置。
 2. **ゲームタイトル追加UI（管理者）**
    `games`は現在5件で、追加手段は`scripts/data/test-games.mjs`の書き換えのみ。コンテンツが
    貯まらない最大の原因。
