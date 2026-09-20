@@ -22,8 +22,8 @@ $ServiceName = "puremite"
 $Region = "asia-northeast1"
 $ImageUrl = "${Region}-docker.pkg.dev/${ProjectId}/${RepoName}/${ServiceName}"
 
-# YouTube Data API キーは public リポジトリに直書きせず、ローカルの .env.local から読み取って
-# デプロイ時にのみ Cloud Run の環境変数として注入する（SECRET_MANAGEMENT.md参照）
+# YouTube Data API キー・CRON_SECRET は public リポジトリに直書きせず、ローカルの .env.local から
+# 読み取ってデプロイ時にのみ Cloud Run の環境変数として注入する（SECRET_MANAGEMENT.md参照）
 $EnvLocalPath = Join-Path $PSScriptRoot ".env.local"
 $YoutubeApiKeyLine = Get-Content $EnvLocalPath | Where-Object { $_ -match '^YOUTUBE_API_KEY=' }
 if (-not $YoutubeApiKeyLine) {
@@ -31,6 +31,13 @@ if (-not $YoutubeApiKeyLine) {
     exit 1
 }
 $YoutubeApiKey = ($YoutubeApiKeyLine -split '=', 2)[1]
+
+$CronSecretLine = Get-Content $EnvLocalPath | Where-Object { $_ -match '^CRON_SECRET=' }
+if (-not $CronSecretLine) {
+    Write-Host "ERROR: .env.local に CRON_SECRET が見つかりません" -ForegroundColor Red
+    exit 1
+}
+$CronSecret = ($CronSecretLine -split '=', 2)[1]
 
 # 1. ビルドとプッシュ
 Write-Host "Building and pushing Docker image..." -ForegroundColor Green
@@ -47,7 +54,7 @@ gcloud run deploy "$ServiceName" `
     --region "$Region" `
     --platform managed `
     --allow-unauthenticated `
-    --update-env-vars "YOUTUBE_API_KEY=$YoutubeApiKey" `
+    --update-env-vars "YOUTUBE_API_KEY=$YoutubeApiKey,CRON_SECRET=$CronSecret" `
     --project "$ProjectId"
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR: Cloud Run deploy failed (exit code $LASTEXITCODE). Aborting deploy." -ForegroundColor Red

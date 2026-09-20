@@ -12,10 +12,11 @@
 
 新たに秘密情報を追加する場合も、同様の構成ファイルに追加する。
 
-**例外**: `YOUTUBE_API_KEY`（`lib/constants.ts`）はこのリポジトリがpublicであるためソースへの
-直書きは採らない。ローカル開発は`.env.local`（gitignore対象）から供給し、Cloud Runデプロイ時は
+**例外**: `YOUTUBE_API_KEY`・`CRON_SECRET`（`lib/constants.ts`）はこのリポジトリがpublicであるため
+ソースへの直書きは採らない。ローカル開発は`.env.local`（gitignore対象）から供給し、Cloud Runデプロイ時は
 `deploy.sh`/`deploy.ps1`が`.env.local`から読み取って`gcloud run deploy --update-env-vars`で
-Cloud Runの環境変数として注入する。
+Cloud Runの環境変数として注入する。`CRON_SECRET`はCloud Schedulerが
+`app/api/admin/refresh-new-videos`を呼ぶ際の`X-Cron-Secret`ヘッダー認証用（フェーズ4.5ステップ4）。
 
 ## 本番環境での管理
 

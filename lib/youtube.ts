@@ -34,6 +34,20 @@ function bestThumbnailUrl(thumbnails: Thumbnails | undefined): string {
   return '';
 }
 
+// 定期取得バッチ（新着動画自動検知）のクォータ消費記録用カウンタ。
+// list系エンドポイント（playlists/channels/playlistItems/videos）はいずれも1ユニット消費のため
+// 呼び出し回数をそのまま加算する。resetQuotaCounter()/getQuotaConsumed()で1バッチ分を集計する想定
+// （batch_logs.quotaConsumed。Firestore データモデル設計書 3.21節）。
+let quotaCounter = 0;
+
+export function resetQuotaCounter(): void {
+  quotaCounter = 0;
+}
+
+export function getQuotaConsumed(): number {
+  return quotaCounter;
+}
+
 async function callApi<T>(endpoint: string, params: Record<string, string>): Promise<T> {
   if (!YOUTUBE_API_KEY) {
     throw new YouTubeApiError('YOUTUBE_API_KEY が設定されていません（.env.local参照）。');
@@ -44,6 +58,7 @@ async function callApi<T>(endpoint: string, params: Record<string, string>): Pro
   }
 
   const res = await fetch(url);
+  quotaCounter += 1;
   const body = await res.json();
   if (!res.ok) {
     const reason = body?.error?.errors?.[0]?.reason;

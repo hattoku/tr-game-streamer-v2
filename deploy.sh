@@ -22,12 +22,18 @@ SERVICE_NAME="puremite"
 REGION="asia-northeast1"
 IMAGE_URL="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${SERVICE_NAME}"
 
-# YouTube Data API キーは public リポジトリに直書きせず、ローカルの .env.local から読み取って
-# デプロイ時にのみ Cloud Run の環境変数として注入する（SECRET_MANAGEMENT.md参照）
+# YouTube Data API キー・CRON_SECRET は public リポジトリに直書きせず、ローカルの .env.local から
+# 読み取ってデプロイ時にのみ Cloud Run の環境変数として注入する（SECRET_MANAGEMENT.md参照）
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 YOUTUBE_API_KEY=$(grep '^YOUTUBE_API_KEY=' "$SCRIPT_DIR/.env.local" | cut -d '=' -f2-)
 if [ -z "$YOUTUBE_API_KEY" ]; then
   echo "ERROR: .env.local に YOUTUBE_API_KEY が見つかりません"
+  exit 1
+fi
+
+CRON_SECRET=$(grep '^CRON_SECRET=' "$SCRIPT_DIR/.env.local" | cut -d '=' -f2-)
+if [ -z "$CRON_SECRET" ]; then
+  echo "ERROR: .env.local に CRON_SECRET が見つかりません"
   exit 1
 fi
 
@@ -42,7 +48,7 @@ gcloud run deploy "$SERVICE_NAME" \
   --region "$REGION" \
   --platform managed \
   --allow-unauthenticated \
-  --update-env-vars "YOUTUBE_API_KEY=$YOUTUBE_API_KEY" \
+  --update-env-vars "YOUTUBE_API_KEY=$YOUTUBE_API_KEY,CRON_SECRET=$CRON_SECRET" \
   --project "$PROJECT_ID"
 
 # 3. Firebase Hosting デプロイ (Cloud Run へのリライト設定を反映)
