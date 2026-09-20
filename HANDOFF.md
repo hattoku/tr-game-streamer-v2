@@ -753,16 +753,29 @@ Firebase Hostingの設定のみの反映。**正式公開でnoindex/Basic認証�
      （`processedCount: 3`・`quotaConsumed: 9`・`status: "success"`）を確認済み。
    - クォータは実測で再生リスト数（3件）に対し9ユニット（大きめの再生リストは複数ページに
      跨るため）。上限10,000/日に対して現状の登録数では十分余裕がある。
-5. **`/history`本実装**
-   土台は揃っている（`watch_history`のスキーマ・ルール・複合インデックス`userId + watchedAt DESC`、
-   書き込みもプレーヤーが実施中）。
-   - 2カラム（左=日付グルーピング一覧、右=キーワード検索・日付フィルタ・全削除）、カード
-     （サムネ＋進捗バー＋タイトル＋チャンネル＋⋮メニュー）、空状態。
-   - タイトル/サムネ/チャンネル名は`watch_history`に持たないため`videos`/`playlists`/`channels`
-     から合成する。
-   - **見送り**（仕様書に明記して見送る）: 未ログイン時のLocalStorage記録とログイン時マージ
-     （§7.2・§7.3。プレーヤー側もゲスト進捗未対応）、カレンダーピッカーは依存追加を避け
-     `<input type="date">`で代替。
+5. ~~**`/history`本実装**~~ → **2026-09-20対応済み**。
+   土台は揃っていた（`watch_history`のスキーマ・ルール・複合インデックス`userId + watchedAt DESC`、
+   書き込みもプレーヤーが実施中）ため、本ステップは一覧・検索・削除のみ実装。
+   - `components/history/HistoryCard.tsx`（サムネ＋進捗バー＋タイトル＋チャンネル＋⋮メニューからの
+     個別削除。クリックで該当再生リストの動画プレーヤーページへ）、`app/(main)/history/page.tsx`
+     （2カラム。左=日付グルーピング一覧「今日／昨日／YYYY年M月D日（曜）」、右=キーワード検索・
+     日付フィルタ・全削除。モバイルは`/playlists`と同じアコーディオンパネル）。
+   - `watch_history`にはタイトル・サムネ・配信者名が無いため、`videos`（`{playlistId}_{youtubeVideoId}`
+     で直接getDoc）・`playlists`（`channelName`/`channelIconUrl`はdenormalized済みのためそのまま利用、
+     `channels`への追加フェッチは不要）から合成する。
+   - 個別削除・全削除ともFirestore直書き＋確認モーダル（`ReviewForm`の削除確認と同じ
+     `Modal`＋primary「削除する」パターン）。全削除は`notifications`の一括既読と同じ
+     450件ごとの`writeBatch`分割。
+   - **見送り**（仕様書に明記して見送る。ファイル冒頭コメント参照）: 未ログイン時のLocalStorage記録と
+     ログイン時マージ（§7.2・§7.3。プレーヤー側もゲスト進捗未対応のため、未ログイン時は常に空状態）、
+     カレンダーピッカーは依存追加を避け`<input type="date">`で代替、キーワード検索のデバウンスは
+     `/playlists`・`/games`と同じくクライアント内メモリ配列のフィルタのため実施しない。
+   - `npm run lint` / `npx tsc --noEmit` / `npm run build`成功。**動作確認**（本番Firestore接続、
+     `npm run dev`のテストモードで管理者ログイン、Playwright使用）: 実データ（登録済み再生リストの
+     視聴履歴4件）で日付グルーピング・カード表示・キーワード検索・日付フィルタ（該当0件時の
+     メッセージ含む）・個別削除の確認モーダル表示を確認（実削除は行わず取消で終了、本番データへの
+     影響なし）。未ログイン時は空状態が表示されることも確認。767/768/1600px幅の目視確認は未実施
+     （次回ステップ7の仕上げでまとめて実施予定）。
 6. **`/settings`最小版**
    - 入れる: 表示名変更／連続再生（`isContinuousPlayEnabled`）／ネタバレレビュー非表示
      （`hideSpoilerReviews`）／マイリスト新着通知（`showNewArrivalNotification`）／ログアウト。
