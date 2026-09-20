@@ -106,7 +106,7 @@
     常に登録時の初期値（0）のまま。対応時は`mylist`の作成・削除を伴う操作をAdmin SDK API経由に寄せるか、
     再生リストごとに`mylist`件数を都度集計するか（レビュー機能の`playlists.score`再計算と同じ方式）を検討する。
     → **フェーズ4.5ステップ3**でAdmin SDK API方式に寄せて対応予定（2026-09-20決定）。
-12. ~~**常用アカウント（`develop_boss1@hattoku.net`）の`users`ドキュメントが不完全**~~ →
+12. ~~**常用アカウント（メールアドレスは伏字）の`users`ドキュメントが不完全**~~ →
     **2026-09-20補修済み**。2026-09-20フェーズ4.5ステップ1のE2E作業中に発生（詳細は同ステップの
     記述参照）。`role`フィールドのみ存在し、`uid`/`isAI`/`isBanned`/`isTestUser`/`fcmTokens`/
     `reviewCount`/`helpfulReceivedCount`/`accountCreatedAt`/`email`/`displayName`が無い状態
@@ -654,7 +654,8 @@ Firebase Hostingの設定のみの反映。**正式公開でnoindex/Basic認証�
      **現状ownerに昇格させる手段がコードに一切無い**（`api/auth/init-user`は`user`固定、
      `api/test/sign-in`はテスト用会員専用）ため、このままでは本番で再生リストを登録できない。
      `scripts/lib/firebase-admin.mjs`に`initAuth`を追加（既存`initFirestore`と同じADC方式）。
-   - 本番に常用アカウント（`develop_boss1@hattoku.net`）を作成 → `set-role.mjs`でowner付与。
+   - 本番に常用アカウント（メールアドレスは伏字、実際の連絡先は口頭で共有済み）を作成
+     → `set-role.mjs`でowner付与。
    - Playwright MCPで`puremite.net`の主要導線を通した（既存の登録済み3件の再生リストを使用。
      新規`/playlists/new`登録はユーザー判断でスキップ）: サインアップ→ログイン／詳細ページで
      **実際に動画再生**（YouTube IFrame Player APIの実機確認、フェーズ2から未消化だった）・
