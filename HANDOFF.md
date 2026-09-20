@@ -726,17 +726,33 @@ Firebase Hostingの設定のみの反映。**正式公開でnoindex/Basic認証�
    - **積み残し**: 本番（`tr-game-streamer`）に対する`npm run recount:mylist:prod`の実行と本番E2E確認は
      今回未実施（ユーザー指示によりステージングまでの確認に留めた）。ステップ7（stg・本番デプロイ）で
      本番デプロイと合わせて実施すること。
-4. **新着通知の自動実行**
+4. ~~**新着通知の自動実行**~~ → **2026-09-20対応済み**。
    サービスの中核価値であり、手動ボタンのままでは「通知で気づく」体験自体を検証できない。
-   - `app/api/admin/refresh-new-videos`にcron経路を追加 — `X-Cron-Secret`ヘッダーが環境変数
-     `CRON_SECRET`と一致すれば`requireAdmin`をスキップ。`/api`は`proxy.ts`のBasic認証対象外の
-     ため、Cloud Run URLを直接叩ける。
-   - `deploy.ps1`/`deploy.sh`に`CRON_SECRET`注入を追加（`.env.local`から読む、`YOUTUBE_API_KEY`と
-     同じ方式）。`SECRET_MANAGEMENT.md`に追記。
-   - Cloud Scheduler（asia-northeast1、日1回・JST 6:00、本番のみ）。
-   - `batch_logs`（DB設計書3.21に定義済み・未使用）に実行結果を1件記録する。テスト期間中に
-     「バッチが動いたのか」を確認する手段が無いと困るため。
-   - クォータは 再生リスト数×2ユニット程度/日で、上限10,000に対して余裕がある。
+   - `app/api/admin/refresh-new-videos`にcron経路を追加。`X-Cron-Secret`ヘッダーが環境変数
+     `CRON_SECRET`と一致すれば`requireAdmin`をスキップする（計画通り）。`/api`は`proxy.ts`の
+     Basic認証対象外のため、Cloud Run URL（`https://puremite-505702015926.asia-northeast1.run.app`）を
+     直接叩ける。
+   - `lib/constants.ts`に`CRON_SECRET`を追加（`YOUTUBE_API_KEY`と同じくソース直書きせず
+     `process.env`経由）。`deploy.ps1`/`deploy.sh`が`.env.local`の`CRON_SECRET`を読み取り
+     `gcloud run deploy --update-env-vars`で注入するよう変更。`SECRET_MANAGEMENT.md`に追記。
+   - `batch_logs`（DB設計書3.21）への書き込みを追加。バッチ全体を`try/catch`で囲み、成功時は
+     `functionName: "video_update"`・`processedCount`・`newVideoCount`・`status: "success"`・
+     `quotaConsumed`を1件記録、Firestore書き込み等で例外が起きた場合は`status: "error"`・
+     `errorMessage`を記録して500を返す（個々の再生リストのYouTube APIエラーはこれまで通り
+     `errors`配列に集約してスキップし、バッチ全体は継続）。
+   - `lib/youtube.ts`にモジュールレベルのクォータカウンタ（`resetQuotaCounter`/`getQuotaConsumed`）
+     を追加し、`callApi`呼び出し1回ごとに1ユニット加算して`quotaConsumed`を実測する
+     （playlists/channels/playlistItems/videosのlist系エンドポイントはいずれも1ユニット消費のため）。
+   - Cloud Scheduler `refresh-new-videos-daily`（`asia-northeast1`、本番プロジェクト`tr-game-streamer`
+     のみ、`0 6 * * *`・タイムゾーン`Asia/Tokyo`、OIDC認証は使わず`X-Cron-Secret`ヘッダー方式）を
+     `gcloud scheduler jobs create http`で作成済み。
+   - **動作確認**: まずstg（`tr-game-streamer-stg`）にデプロイし、正しい`X-Cron-Secret`で200・
+     `batch_logs`書き込みを確認、誤ったシークレットでは`requireAdmin`にフォールバックして401に
+     なることを確認。問題なかったため本番にもデプロイし、`gcloud scheduler jobs run`で
+     Cloud Scheduler経由の実行を1回手動トリガーして本番`batch_logs`への記録
+     （`processedCount: 3`・`quotaConsumed: 9`・`status: "success"`）を確認済み。
+   - クォータは実測で再生リスト数（3件）に対し9ユニット（大きめの再生リストは複数ページに
+     跨るため）。上限10,000/日に対して現状の登録数では十分余裕がある。
 5. **`/history`本実装**
    土台は揃っている（`watch_history`のスキーマ・ルール・複合インデックス`userId + watchedAt DESC`、
    書き込みもプレーヤーが実施中）。
