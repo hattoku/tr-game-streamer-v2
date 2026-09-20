@@ -687,17 +687,33 @@ Firebase Hostingの設定のみの反映。**正式公開でnoindex/Basic認証�
      全削除してきたが、ここからは**残す**。削除するのはテスト用会員（`test-user@puremite.test`・
      `test-admin@puremite.test`）のみ。今回登録したレビュー・マイリスト・タグ（オープンワールド）は
      実データとして残置。
-2. **ゲームタイトル追加UI（管理者）**
-   `games`は現在5件で、追加手段は`scripts/data/test-games.mjs`の書き換えのみ。コンテンツが
-   貯まらない最大の原因。
-   - `app/api/admin/games`（POST・`requireAdmin`）— title必須、genre/theme/platforms/
-     packageImageUrl/rakutenUrl/description任意、同名重複チェック。
-   - `components/games/GameCreateModal.tsx` — `GameSelectModal`のフッターから開く。管理者のみ表示
-     （一般ユーザー向けの「提案」は審査ワークフロー依存のため引き続き非表示）。
-   - パッケージ画像はURL手入力で代替（表示は`<img>`直参照のため設定変更不要）。楽天ブックス
-     API連携はフェーズ6以降。
-   - **仕様書更新が必要**: `ページ 再生リストを追加する 仕様書`§4.2.2（管理者は提案でなく直接追加）、
-     `管理 マスタ管理仕様書`§7.1（JANコード自動取得なしの暫定手入力版である旨）。
+2. ~~**ゲームタイトル追加UI（管理者）**~~ → **2026-09-20対応済み**。
+   `games`は5件のままで、追加手段は`scripts/data/test-games.mjs`の書き換えのみだった
+   （コンテンツが貯まらない最大の原因）。
+   - `app/api/admin/games`（POST・`requireAdmin`）— title必須（100文字以内・完全一致で重複拒否）、
+     genreId/themeIds/platforms/packageImageUrl/rakutenUrl/description任意。genreId指定時は
+     `genres`の実在確認＋`genreName`denormalize、themeIdsは`adminDb.getAll`で実在するものだけ
+     採用。登録に伴い`genres.gameTitleCount`/`themes.gameTitleCount`（フェーズ1投入時点で0初期化
+     済みの未使用集計フィールド）をバッチでincrement（未解決事項11のmylistCount同様、
+     「集計フィールドを作っても増減処理を書き忘れる」再発防止のため今回は最初から組み込んだ）。
+   - `components/games/GameCreateModal.tsx` — `GameSelectModal`のフッター（`onAddNew`prop、渡された
+     場合のみ表示）から開く。ジャンルは`SelectMenu`で単一選択、テーマは`/games`検索パネルと同じ
+     トグルボタンで複数選択、プラットフォームは固定候補（Nintendo Switch / Nintendo Switch 2 / PS5 /
+     PS4 / Steam）のトグルボタン。パッケージ画像・楽天URLはURL手入力（表示は`<img>`直参照のため
+     設定変更不要）。楽天ブックスAPI連携はフェーズ6以降。登録成功時は作成したゲームをその場で
+     自動選択し、`/playlists/new`の一覧にも即座に追加（再フェッチ不要）。
+   - 一般ユーザー向けの「提案」（`GameSelectModal`の元のフッター文言・§4.2.2の提案モーダル）は
+     審査ワークフロー依存のため引き続き非表示。
+   - `npm run lint` / `npx tsc --noEmit` / `npm run build` 成功。**E2E動作確認**（本番環境、
+     `npm run dev`のテストモードで管理者ログイン）: ゲームタイトル新規登録→自動選択→
+     `/playlists/new`フォームに反映を確認。同名タイトルでの再登録が`already_exists`(409)で
+     拒否されトースト・インラインエラーが出ることも確認。確認に使ったテストデータ
+     （ゲームタイトル1件、genre/theme各1件へのカウント加算含む）は一回限りのAdmin SDKスクリプト
+     （実行後削除済み）で削除・カウント補正済み、本番DBへの影響は残っていない。
+   - **仕様書更新済み**: `ページ 再生リストを追加する 仕様書`v3.7（§4.2.1に注記追加。管理者は
+     フッターから提案モーダルでなく`GameCreateModal`を開く旨）、`管理 マスタ管理仕様書`v2.3
+     （§7.1に注記追加。本節が想定する`/admin`管理画面自体は未実装で、新規登録のみ暫定実装、
+     JANコード自動取得なしの手入力版である旨）。
 3. **`playlists.mylistCount`の集計修正**（未解決事項11）
    - 原因確定: `mylist`の作成・削除がクライアントSDK直で、カウントを増減する処理がどこにも無い。
      `playlists`のupdateルールは一般ユーザーに`playlistTagIds`のみ許可しているため、

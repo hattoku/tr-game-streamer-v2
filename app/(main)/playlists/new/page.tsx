@@ -14,6 +14,7 @@ import { useToast } from '@/components/ui/Toast';
 import { AlertIcon, CheckIcon, ChevronDownIcon, InfoIcon, XIcon } from '@/components/ui/icons';
 import { cn } from '@/components/ui/cn';
 import { GameSelectModal, type GameOption } from '@/components/playlists/GameSelectModal';
+import { GameCreateModal } from '@/components/games/GameCreateModal';
 import { PlaylistSummary } from '@/components/playlists/PlaylistSummary';
 
 // 「再生リストを追加する」（管理者専用の最小版）。
@@ -92,6 +93,7 @@ export default function NewPlaylistPage() {
   const [games, setGames] = useState<GameOption[]>([]);
   const [selectedGame, setSelectedGame] = useState<GameOption | null>(null);
   const [gameModalOpen, setGameModalOpen] = useState(false);
+  const [gameCreateModalOpen, setGameCreateModalOpen] = useState(false);
   const [gameError, setGameError] = useState<string | null>(null);
 
   const [channelDescription, setChannelDescription] = useState('');
@@ -423,7 +425,22 @@ export default function NewPlaylistPage() {
         </div>
       </Card>
 
-      <GameSelectModal open={gameModalOpen} onOpenChange={setGameModalOpen} games={games} onSelect={setSelectedGame} />
+      <GameSelectModal
+        open={gameModalOpen}
+        onOpenChange={setGameModalOpen}
+        games={games}
+        onSelect={setSelectedGame}
+        onAddNew={() => setGameCreateModalOpen(true)}
+      />
+      <GameCreateModal
+        open={gameCreateModalOpen}
+        onOpenChange={setGameCreateModalOpen}
+        onCreated={(game) => {
+          setGames((prev) => [...prev, game].sort((a, b) => a.title.localeCompare(b.title, 'ja')));
+          setSelectedGame(game);
+          setGameError(null);
+        }}
+      />
     </div>
   );
 }

@@ -2,8 +2,9 @@
  * ゲームタイトル選択モーダル（ページ 再生リストを追加する 仕様書 §4.2.1）。
  * 検索欄でインクリメンタル絞り込み、行クリックで選択して閉じる。
  * 候補のサムネイルは games.packageImageUrl（楽天ブックスの縦長パッケージ画像。無ければプレースホルダー）。
- * フッターの「ゲームタイトルの登録を提案する」（§4.2.2）は一般ユーザー向けの機能で、管理者には出さない仕様
- * （§4.2.2 対象ユーザー）。管理者専用の現状では置かない。
+ * フッターの「ゲームタイトルの登録を提案する」（§4.2.2）は一般ユーザー向けの機能のため出さない
+ * （§4.2.2 対象ユーザー）。代わりに`onAddNew`が渡された場合のみ、管理者専用の直接登録導線
+ * （GameCreateModal、フェーズ4.5ステップ2）へのフッターリンクを表示する。
  */
 'use client';
 
@@ -23,9 +24,11 @@ interface GameSelectModalProps {
   onOpenChange: (open: boolean) => void;
   games: GameOption[];
   onSelect: (game: GameOption) => void;
+  /** 管理者専用の直接登録モーダルを開く。渡された場合のみフッターリンクを表示する */
+  onAddNew?: () => void;
 }
 
-export function GameSelectModal({ open, onOpenChange, games, onSelect }: GameSelectModalProps) {
+export function GameSelectModal({ open, onOpenChange, games, onSelect, onAddNew }: GameSelectModalProps) {
   const [search, setSearch] = useState('');
 
   const filtered = useMemo(() => {
@@ -81,6 +84,21 @@ export function GameSelectModal({ open, onOpenChange, games, onSelect }: GameSel
               </li>
             ))}
           </ul>
+        )}
+
+        {onAddNew && (
+          <div className="border-t border-border-divider pt-3">
+            <button
+              type="button"
+              onClick={() => {
+                handleOpenChange(false);
+                onAddNew();
+              }}
+              className="text-base text-brand-primary hover:underline"
+            >
+              お探しのゲームタイトルが見つかりませんか？ → 新しいゲームタイトルを登録する
+            </button>
+          </div>
         )}
       </div>
     </Modal>
