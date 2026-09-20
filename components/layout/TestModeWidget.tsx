@@ -1,7 +1,7 @@
 /**
  * テストモードウィジェット（共通 uiコンポーネント フロント 仕様書 §7）。
  * 画面右下に固定表示し、「一般ユーザー」「管理者」のテスト用会員でのログインと、ログアウトを切り替える。
- * `NEXT_PUBLIC_TEST_MODE=true` のビルドでのみ描画する（本番では表示しない）。
+ * `NEXT_PUBLIC_TEST_MODE=true` かつ本番以外のビルドでのみ描画する（判定は lib/app-env.ts）。
  * ログインは /api/test/sign-in が毎回設定し直す使い捨てパスワードで行う（資格情報を環境変数やコードに持たない）。
  * モバイルではボトムタブバーに重ならないよう、その上に置く。
  */
@@ -13,8 +13,7 @@ import { auth } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { Spinner } from '@/components/ui/Spinner';
 import { cn } from '@/components/ui/cn';
-
-export const TEST_MODE_ENABLED = process.env.NEXT_PUBLIC_TEST_MODE === 'true';
+import { TEST_MODE_ENABLED } from '@/lib/app-env';
 
 type Kind = 'user' | 'admin';
 

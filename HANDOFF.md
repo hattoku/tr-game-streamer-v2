@@ -111,6 +111,52 @@
     いなかったため影響なし）。**教訓**: 既存ドキュメントへの`merge:true`一括補修は、対象
     フィールドが他の処理で既に更新されている可能性を先に`.get()`で確認してから、補修対象外の
     フィールドを明示的に除外すること。
+13. **stg/本番の環境分離の棚卸しと今後の課題**（2026-09-20、ユーザーからの「stgと本番でDBが
+    共通になっていないか」という確認を受けて調査）。
+    **結論: Firestore/Auth/Cloud Run/Hostingは最初からGCPプロジェクト単位で分離済み**
+    （`tr-game-streamer-stg` / `tr-game-streamer`）。「共通」に見えていた実態は以下の2点だった。
+    - ~~**ローカル開発のデフォルトが本番DB**~~ → **2026-09-20対応済み**。`NEXT_PUBLIC_APP_ENV`
+      未指定時の接続先が本番だったため、フェーズ1〜4.5のE2E確認は`npm run dev`から本番Firestoreに
+      対して行い、毎回テストデータの後始末をしていた（本節の各「本番DBへの影響は残っていない」の
+      記述がその痕跡）。`lib/app-env.ts`を新設して判定を集約し、**`NEXT_PUBLIC_APP_ENV=prod`と
+      明示したときだけ本番、それ以外はstg**に反転。npmスクリプトは`dev`/`build`=stg、
+      `dev:prod`/`build:prod`=本番に変更（`dev:stg`/`build:stg`は廃止）。テストモード
+      （`NEXT_PUBLIC_TEST_MODE`）も`TEST_MODE_ENABLED = !IS_PROD && ...`で本番では無効化。
+      Cloud Runデプロイは`cloudbuild.yaml`の`_APP_ENV`でstg/prodを明示しているため影響なし。
+      `.agent/rules/setup.md`を書き換え済み。
+    - **シークレットがstg/本番で同一**（備忘録、当面は対応不要とユーザー判断）。`YOUTUBE_API_KEY`・
+      `CRON_SECRET`・Basic認証の資格情報がいずれも同じ値で、`deploy.ps1`が同じ`.env.local`から
+      両環境に注入している。特に`YOUTUBE_API_KEY`はYouTube Data APIのクォータ（1日10,000ユニット）を
+      両環境で共有するため、stgで新着取得を試すと本番cronの枠を食う。将来分離するなら、
+      (a) stg側GCPプロジェクトで別キーを発行し、`.env.local`を`YOUTUBE_API_KEY_STG`/`_PROD`の
+      ように環境別キーにして`deploy.ps1`が`$Env`で選ぶ（最小変更）、(b) `SECRET_MANAGEMENT.md`
+      記載の通りSecret Managerへ移行し`gcloud run deploy --set-secrets`で各プロジェクトに閉じる
+      （本命）、のいずれか。
+    **残課題（優先度順、いずれも急がない）**:
+    - **本番→stgのデータコピー手段**（後日の課題、2026-09-20ユーザー判断）。`gcloud firestore export`
+      （GCS経由）→stgへ`import`、Authは`firebase auth:export/import`（UIDを保って移さないと
+      所有データが紐づかない）。`npm run dev`がstgを向くようになった今、stgがほぼ空（テスト
+      フィクスチャ1件＋マスタ）なのが実装作業に効いてくる。フェーズ5で本番に自分のデータが溜まって
+      きた頃、または実装中に「stgにデータが無くて確認できない」と困った時点でやる。それまでは
+      stgで再生リストを2〜3件登録しておけば日常の実装には足りる。本番プロジェクト操作なので
+      exportはユーザーのターミナルで実行する必要がある。
+    - ~~Firestoreルール/インデックスのデプロイを`deploy.ps1`に組み込む~~ → **2026-09-20対応済み**。
+      `deploy.ps1`/`deploy.sh`の手順2（Cloud Runデプロイの前）に
+      `firebase deploy --only firestore:rules,firestore:indexes --project <id>`を追加。stgで実行して
+      動作確認済み（ルールは最新でスキップ、インデックス反映成功）。本番は次回`.deploy.ps1 prod`時に
+      同じ経路で反映される。なお`firestore:indexes`はリポジトリに無いインデックスを非対話では
+      削除しないため、prodに残っている旧`reviews`インデックス（フェーズ4.5ステップ7の積み残し）は
+      これでは消えない（消すならFirebaseコンソールから手動）。
+    - ~~`.env.stg`と`lib/firebase.ts`の`NEXT_PUBLIC_STG_FIREBASE_*`参照の整理~~ → **2026-09-20対応済み**。
+      整理中に`.env.local`の本番`NEXT_PUBLIC_FIREBASE_APP_ID`/`MEASUREMENT_ID`が
+      `lib/firebase.ts`のハードコード値（＝Cloud Runで動いている値）と異なっている（リセット前の
+      旧Webアプリ登録のIDが残っていたと推定）ことが判明。設定源が二重化してドリフトしていたので、
+      `SECRET_MANAGEMENT.md`の方針どおり`lib/firebase.ts`の直書き一本に統一し、環境変数による
+      上書き（`NEXT_PUBLIC_FIREBASE_*`/`NEXT_PUBLIC_STG_FIREBASE_*`）を廃止。Dockerfileの対応する
+      `ARG`/`ENV`（cloudbuild.yamlから渡されておらず死んでいた）、`.env.local`の同変数、`.env.stg`
+      （Next.jsが読まないファイル名）、`.gitignore`の`.env.stg`行を削除。
+    - `scripts/lib/firebase-admin.mjs`の複数target問題（フェーズ4.5ステップ7で発見）は
+      `initializeApp(config, name)`で名前付きAppにすれば解消。実害なし、同種のスクリプトを書くときに直す。
 
 ## 開発全体のロードマップ（合意済み、これから着手する順序の目安）
 
@@ -873,7 +919,8 @@ Firebase Hostingの設定のみの反映。**正式公開でnoindex/Basic認証�
 - その場で直せないもの（画面を新規に作る必要があるもの・設計から考え直すもの）だけ、本ドキュメントの
   「未解決事項」に1行ずつ積む。専用の記録ファイルは作らない。
 - **デプロイの回し方**: 本番URLで使う以上、修正の反映にはデプロイが要る。実装中の確認は
-  `npm run dev`（ローカル→本番Firestore接続、これまでと同じ）で行い、デプロイは区切りのいい
+  `npm run dev`（ローカル→**stg** Firestore接続。2026-09-20に「明示しない限りstg」へ反転した、
+  未解決事項13参照。本番接続が必要なときだけ`npm run dev:prod`）で行い、デプロイは区切りのいい
   ところでまとめて実施する（急ぎのものは都度）。
 - 意識しないと自分では通らない経路が2つある: **スマホからの視聴**と**レビュー投稿**。この2つだけは
   どこかで触っておくと気づきが出やすい。

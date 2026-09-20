@@ -2,7 +2,8 @@
  * テストモード用会員としてログインするための使い捨てパスワード発行 API。
  * document/specification/common/共通 uiコンポーネント フロント 仕様書.md §7（テストモードウィジェット）。
  *
- * - `NEXT_PUBLIC_TEST_MODE=true` のビルドでのみ有効（それ以外は 404）。本番デプロイでは設定しない。
+ * - `NEXT_PUBLIC_TEST_MODE=true` かつ本番以外のビルドでのみ有効（それ以外は 404）。判定は lib/app-env.ts。
+ *   本番（`NEXT_PUBLIC_APP_ENV=prod`）では変数が渡されていても無効になる。
  * - リクエストボディ `{ kind: 'user' | 'admin' }` で、一般ユーザー（role user）と管理者（role owner）の
  *   どちらのテスト用会員でログインするかを選ぶ（§7.5）。
  * - テスト用会員は Firebase Auth に無ければここで自動作成する。users ドキュメントは isTestUser: true。
@@ -13,6 +14,7 @@
 import { randomUUID } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth, adminDb } from '../../../../lib/firebase-admin';
+import { TEST_MODE_ENABLED } from '../../../../lib/app-env';
 
 type TestUserKind = 'user' | 'admin';
 
@@ -22,7 +24,7 @@ const TEST_USERS: Record<TestUserKind, { email: string; displayName: string; rol
 };
 
 export async function POST(request: NextRequest) {
-  if (process.env.NEXT_PUBLIC_TEST_MODE !== 'true') {
+  if (!TEST_MODE_ENABLED) {
     return NextResponse.json({ error: 'not_found' }, { status: 404 });
   }
 

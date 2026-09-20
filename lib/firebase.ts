@@ -1,24 +1,28 @@
 import { initializeApp, getApps } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
+import { IS_PROD } from './app-env';
 
-const isStg = process.env.NEXT_PUBLIC_APP_ENV === 'stg';
-
-const firebaseConfig = isStg ? {
-    apiKey: process.env.NEXT_PUBLIC_STG_FIREBASE_API_KEY || "AIzaSyB_HmS-y7rgzDYVQMAryn5Ugbmsxrjmb5Y",
-    authDomain: process.env.NEXT_PUBLIC_STG_FIREBASE_AUTH_DOMAIN || "tr-game-streamer-stg.firebaseapp.com",
-    projectId: process.env.NEXT_PUBLIC_STG_FIREBASE_PROJECT_ID || "tr-game-streamer-stg",
-    storageBucket: process.env.NEXT_PUBLIC_STG_FIREBASE_STORAGE_BUCKET || "tr-game-streamer-stg.firebasestorage.app",
-    messagingSenderId: process.env.NEXT_PUBLIC_STG_FIREBASE_MESSAGING_SENDER_ID || "562598531589",
-    appId: process.env.NEXT_PUBLIC_STG_FIREBASE_APP_ID || "1:562598531589:web:533c79bc648ed9d10d426c",
+// 接続先は lib/app-env.ts の判定に従う（明示的に prod と指定しない限りステージング）。
+// Firebase Webアプリ設定は SECRET_MANAGEMENT.md の方針どおりここに直書きし、環境変数による上書きは
+// 行わない（以前は NEXT_PUBLIC_FIREBASE_* / NEXT_PUBLIC_STG_FIREBASE_* で上書きできたが、
+// .env.local に旧Webアプリ登録の appId が残るなど設定源が二重化してドリフトしていたため廃止）。
+// これらは公開識別子であり、アクセス制御は firestore.rules 側で行う。
+const firebaseConfig = !IS_PROD ? {
+    apiKey: "AIzaSyB_HmS-y7rgzDYVQMAryn5Ugbmsxrjmb5Y",
+    authDomain: "tr-game-streamer-stg.firebaseapp.com",
+    projectId: "tr-game-streamer-stg",
+    storageBucket: "tr-game-streamer-stg.firebasestorage.app",
+    messagingSenderId: "562598531589",
+    appId: "1:562598531589:web:533c79bc648ed9d10d426c",
 } : {
-    apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "AIzaSyACkJL3u4O5R3jsO8U_2HxNv2CfdH4hI1w",
-    authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "tr-game-streamer.firebaseapp.com",
-    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "tr-game-streamer",
-    storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "tr-game-streamer.firebasestorage.app",
-    messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "505702015926",
-    appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "1:505702015926:web:0525b2c9d02bc68c319717",
-    measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID || "G-KLFF2X1DM4",
+    apiKey: "AIzaSyACkJL3u4O5R3jsO8U_2HxNv2CfdH4hI1w",
+    authDomain: "tr-game-streamer.firebaseapp.com",
+    projectId: "tr-game-streamer",
+    storageBucket: "tr-game-streamer.firebasestorage.app",
+    messagingSenderId: "505702015926",
+    appId: "1:505702015926:web:0525b2c9d02bc68c319717",
+    measurementId: "G-KLFF2X1DM4",
 };
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];

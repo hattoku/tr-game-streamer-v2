@@ -6,12 +6,16 @@
 - npm
 - Firebase プロジェクト（認証情報は `lib/firebase.ts` に直接記述）
 
-## 環境の切り替え（本番環境 / 検証環境）
+## 環境の切り替え（ステージング環境 / 本番環境）
 
-本プロジェクトでは、用途に応じて本番環境と検証環境（ステージング環境）を切り替えて開発・ビルドを行います。切り替えは npm スクリプトを使用し、内部で環境変数 `NEXT_PUBLIC_APP_ENV` によって制御・切り替えされます。
+本プロジェクトは本番（`tr-game-streamer`）とステージング（`tr-game-streamer-stg`）の2つの
+Firebase/GCPプロジェクトを持ち、環境変数 `NEXT_PUBLIC_APP_ENV` で接続先を切り替える。
+判定は `lib/app-env.ts` に集約されており、**`NEXT_PUBLIC_APP_ENV=prod` と明示したときだけ本番、
+それ以外（未指定を含む）はすべてステージング**に接続する（2026-09-20に反転。以前は
+「stgと明示しない限り本番」だったため、ローカルの `npm run dev` が本番Firestoreに向いていた）。
 
-### 1. 本番環境（Production）向け
-標準のコマンドを使用します。`NEXT_PUBLIC_APP_ENV` は未指定（またはデフォルト扱い）となります。
+### 1. ステージング環境向け（デフォルト）
+標準のコマンドを使用する。`NEXT_PUBLIC_APP_ENV` は未指定でよい。日常の実装・E2E確認はこちら。
 
 - **開発サーバー起動**:
   ```bash
@@ -22,16 +26,29 @@
   npm run build
   ```
 
-### 2. 検証環境（Staging）向け
-検証用の設定で起動・ビルドする場合は `:stg` サフィックスがついたコマンドを使用します。内部で `NEXT_PUBLIC_APP_ENV=stg` が設定されます。
+### 2. 本番環境向け（明示指定が必要）
+本番Firestoreに接続したい場合のみ `:prod` サフィックスのコマンドを使用する。内部で
+`NEXT_PUBLIC_APP_ENV=prod` が設定される。本番データを触るので、テストデータの作成・削除を伴う
+確認には使わない。
 
-- **開発サーバー起動（検証環境）**:
+- **開発サーバー起動（本番接続）**:
   ```bash
-  npm run dev:stg
+  npm run dev:prod
   ```
-- **ビルド（検証環境）**:
+- **ビルド（本番向け）**:
   ```bash
-  npm run build:stg
+  npm run build:prod
   ```
 
-> **実装時の注意**: アプリケーションコード内で環境による処理（APIエンドポイントや定数の切り替えなど）の分岐が必要な場合は、`process.env.NEXT_PUBLIC_APP_ENV === 'stg'` のように判定を行ってください。
+Cloud Run へのデプロイは `deploy.ps1 [stg|prod]` / `deploy.sh [stg|prod]` が `cloudbuild.yaml` の
+`_APP_ENV` 経由で Docker ビルド時に `NEXT_PUBLIC_APP_ENV` を明示するため、上記スクリプトとは独立に
+正しい環境が選ばれる。
+
+### テストモードウィジェット
+`NEXT_PUBLIC_TEST_MODE=true`（ローカルは `.env.local`）で有効になるテストモードウィジェットと
+`/api/test/sign-in` は、`lib/app-env.ts` の `TEST_MODE_ENABLED` により**本番以外でのみ**有効。
+本番向けビルド（`NEXT_PUBLIC_APP_ENV=prod`）では変数が渡されていても無効になる。
+
+> **実装時の注意**: アプリケーションコード内で環境による分岐が必要な場合は、
+> `process.env.NEXT_PUBLIC_APP_ENV` を直接参照せず、`lib/app-env.ts` の `IS_PROD` / `APP_ENV` を
+> import して判定すること。

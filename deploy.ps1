@@ -47,7 +47,17 @@ if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
-# 2. Cloud Run へデプロイ
+# 2. Firestore ルール・インデックスをデプロイ
+# 新コードが依存するルール/インデックスを、Cloud Run に新リビジョンが載る前に反映しておく。
+# 以前は hosting のみで手動運用だったため両環境への反映漏れが起きやすかった（wiki/concepts/ステージング環境運用方針.md）
+Write-Host "Deploying Firestore rules and indexes..." -ForegroundColor Green
+firebase deploy --only firestore:rules,firestore:indexes --project "$ProjectId"
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "ERROR: Firestore rules/indexes deploy failed (exit code $LASTEXITCODE). Aborting deploy." -ForegroundColor Red
+    exit $LASTEXITCODE
+}
+
+# 3. Cloud Run へデプロイ
 Write-Host "Deploying to Cloud Run..." -ForegroundColor Green
 gcloud run deploy "$ServiceName" `
     --image "$ImageUrl" `
@@ -61,7 +71,7 @@ if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
-# 3. Firebase Hosting デプロイ
+# 4. Firebase Hosting デプロイ
 Write-Host "Deploying to Firebase Hosting..." -ForegroundColor Green
 # ターゲット名を指定してデプロイ
 firebase deploy --only hosting:app --project "$ProjectId"

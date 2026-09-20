@@ -4,9 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "dev:stg": "cross-env NEXT_PUBLIC_APP_ENV=stg next dev",
+    "dev:prod": "cross-env NEXT_PUBLIC_APP_ENV=prod next dev",
     "build": "next build",
-    "build:stg": "cross-env NEXT_PUBLIC_APP_ENV=stg next build",
+    "build:prod": "cross-env NEXT_PUBLIC_APP_ENV=prod next build",
     "start": "next start",
     "lint": "eslint .",
     "seed:master:stg": "node scripts/seed-master-data.mjs --target=stg",

@@ -29,7 +29,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <LayoutProvider>
             <ToastProvider>
               {children}
-              {/* NEXT_PUBLIC_TEST_MODE=true のビルドでのみ描画される（UI仕様書 §7） */}
+              {/* NEXT_PUBLIC_TEST_MODE=true かつ本番以外のビルドでのみ描画される（UI仕様書 §7、lib/app-env.ts） */}
               <TestModeWidget />
             </ToastProvider>
           </LayoutProvider>

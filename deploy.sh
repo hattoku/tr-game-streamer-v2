@@ -41,7 +41,13 @@ fi
 echo "Building and pushing Docker image..."
 gcloud builds submit --config cloudbuild.yaml --substitutions "_IMAGE_URL=$IMAGE_URL,_APP_ENV=$ENV" . --project "$PROJECT_ID"
 
-# 2. Cloud Run へデプロイ
+# 2. Firestore ルール・インデックスをデプロイ
+# 新コードが依存するルール/インデックスを、Cloud Run に新リビジョンが載る前に反映しておく。
+# 以前は hosting のみで手動運用だったため両環境への反映漏れが起きやすかった（wiki/concepts/ステージング環境運用方針.md）
+echo "Deploying Firestore rules and indexes..."
+firebase deploy --only firestore:rules,firestore:indexes --project "$PROJECT_ID"
+
+# 3. Cloud Run へデプロイ
 echo "Deploying to Cloud Run..."
 gcloud run deploy "$SERVICE_NAME" \
   --image "$IMAGE_URL" \
@@ -51,7 +57,7 @@ gcloud run deploy "$SERVICE_NAME" \
   --update-env-vars "YOUTUBE_API_KEY=$YOUTUBE_API_KEY,CRON_SECRET=$CRON_SECRET" \
   --project "$PROJECT_ID"
 
-# 3. Firebase Hosting デプロイ (Cloud Run へのリライト設定を反映)
+# 4. Firebase Hosting デプロイ (Cloud Run へのリライト設定を反映)
 echo "Deploying to Firebase Hosting..."
 # ターゲット名を指定してデプロイ
 firebase deploy --only hosting:app --project "$PROJECT_ID"

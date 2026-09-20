@@ -1,5 +1,17 @@
 # 操作ログ
 
+## [2026-09-20] ingest | session: stg/本番の環境分離の調査とローカル接続先のstg反転
+ユーザーの「stgと本番でDBが共通では」という確認を受けて調査。Firestore/Auth/Cloud Run/Hostingは
+GCPプロジェクト単位で分離済みだったが、`NEXT_PUBLIC_APP_ENV`未指定時の接続先が本番だったため
+`npm run dev`とE2E確認が本番Firestoreに向いていた（フェーズ1〜4.5の「本番DBへの影響なし」記述の正体）。
+`lib/app-env.ts`を新設し「明示的に`prod`と指定しない限りstg」に反転、`dev:prod`/`build:prod`を追加
+（`dev:stg`/`build:stg`廃止）、テストモードを`TEST_MODE_ENABLED = !IS_PROD && ...`で本番無効化。
+シークレット（`YOUTUBE_API_KEY`等）のstg/本番共有は当面対応不要と判断し備忘録のみ
+（HANDOFF.md未解決事項13）。続けて掃除: `deploy.ps1`/`deploy.sh`にFirestoreルール/インデックスの
+デプロイを組み込み（stgで動作確認）、`lib/firebase.ts`のFirebase設定を直書き一本化して環境変数上書きを廃止
+（`.env.local`に旧Webアプリ登録のappIdが残るドリフトを発見）、Dockerfileの死んだ`ARG`/`.env.stg`を削除。
+本番→stgデータコピーは後日の課題として残す。[[2026-09-20-env-default-stg]]作成、[[ステージング環境運用方針]]更新。
+
 ## [2026-09-20] ingest | session: フェーズ4.5 ステップ7（仕上げ）完了
 `/history`・`/settings`の3幅（767/768/1600px）目視確認・キーボード/aria確認、lint/tsc/build成功を確認。
 フェーズ4積み残し2のstg棚卸しをFirebase Rules API・Identity Toolkit Admin APIへの直接アクセスで実施し、
