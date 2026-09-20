@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { FieldValue } from 'firebase-admin/firestore';
 import { requireUser } from '@/lib/api-auth';
 import { adminDb } from '@/lib/firebase-admin';
 import { recalculatePlaylistScore } from '@/lib/review-score';
@@ -185,6 +186,7 @@ export async function POST(request: NextRequest) {
       createdAt: now,
       updatedAt: now,
     });
+    batch.update(playlistRef, { mylistCount: FieldValue.increment(1) });
   } else if (
     watchStatus &&
     MYLIST_COMPATIBLE_REVIEW_STATUSES.has(watchStatus) &&

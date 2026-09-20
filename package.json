@@ -15,7 +15,9 @@
     "seed:games:prod": "node scripts/seed-test-games.mjs --target=prod",
     "seed:ngwords:stg": "node scripts/seed-ng-words.mjs --target=stg",
     "seed:ngwords:prod": "node scripts/seed-ng-words.mjs --target=prod",
-    "set-role": "node scripts/set-role.mjs"
+    "set-role": "node scripts/set-role.mjs",
+    "recount:mylist:stg": "node scripts/recount-mylist.mjs --target=stg",
+    "recount:mylist:prod": "node scripts/recount-mylist.mjs --target=prod"
   },
   "dependencies": {
     "@opentelemetry/api": "1.9.1",

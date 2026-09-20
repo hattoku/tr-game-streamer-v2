@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   collection,
-  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -228,8 +227,15 @@ export default function MylistPage() {
   }
 
   async function handleRemove(entry: Entry) {
+    if (!user) return;
     try {
-      await deleteDoc(doc(db, 'mylist', entry.mylistId));
+      const idToken = await user.getIdToken();
+      const res = await fetch('/api/mylist', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ playlistId: entry.playlistId }),
+      });
+      if (!res.ok) throw new Error('failed to remove from mylist');
       setEntries((prev) => prev?.filter((e) => e.mylistId !== entry.mylistId) ?? prev);
       toast({ type: 'success', message: 'マイリストから削除しました' });
     } catch {

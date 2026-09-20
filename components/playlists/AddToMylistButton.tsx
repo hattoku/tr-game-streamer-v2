@@ -8,7 +8,7 @@
 'use client';
 
 import { useState } from 'react';
-import { deleteDoc, doc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
+import { doc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import type { User } from 'firebase/auth';
 import { db } from '@/lib/firebase';
 import { Button } from '@/components/ui/Button';
@@ -50,16 +50,14 @@ export function AddToMylistButton({ playlistId, user, mylist, onChange }: AddToM
     if (!user) return;
     setBusy(true);
     try {
-      const docId = `${user.uid}_${playlistId}`;
-      await setDoc(doc(db, 'mylist', docId), {
-        userId: user.uid,
-        playlistId,
-        watchStatus: status,
-        isReverseOrder: false,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
+      const idToken = await user.getIdToken();
+      const res = await fetch('/api/mylist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ playlistId, watchStatus: status }),
       });
-      onChange({ docId, status });
+      if (!res.ok) throw new Error('failed to add to mylist');
+      onChange({ docId: `${user.uid}_${playlistId}`, status });
       setPickerOpen(false);
       toast({ type: 'success', message: 'マイリストに追加しました' });
     } catch {
@@ -81,9 +79,15 @@ export function AddToMylistButton({ playlistId, user, mylist, onChange }: AddToM
   }
 
   async function remove() {
-    if (!mylist) return;
+    if (!mylist || !user) return;
     try {
-      await deleteDoc(doc(db, 'mylist', mylist.docId));
+      const idToken = await user.getIdToken();
+      const res = await fetch('/api/mylist', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ playlistId }),
+      });
+      if (!res.ok) throw new Error('failed to remove from mylist');
       onChange(null);
       toast({ type: 'success', message: 'マイリストから削除しました' });
     } catch {
