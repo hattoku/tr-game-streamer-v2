@@ -5,13 +5,16 @@
  * 審査を経ずその場で`games`に直接書き込む（同仕様書 §4.2.2 末尾の対象ユーザー注記のとおり、
  * 管理者はマスタ管理相当の直接登録ができるため提案フローの対象外）。
  *
- * フォームの先頭は楽天ブックス商品ページURL欄（2026-09-22、フェーズ5のユーザー要望）。URLを貼って
- * 「取得」すると、商品情報からゲームタイトル名（未入力時のみ）・ジャンル（未選択時のみ）・テーマ・
- * プラットフォーム・パッケージ画像URLを分かる範囲で自動セットする（`/api/admin/games/rakuten-item`、
+ * フォームの先頭は楽天ブックスのタイトル名検索欄（2026-09-22、フェーズ5のユーザー要望で商品ページURL欄と
+ * 入れ替え）。検索して候補を選ぶと、商品情報からゲームタイトル名（未入力時のみ）・ジャンル（未選択時のみ）・
+ * テーマ・プラットフォーム・パッケージ画像URLを分かる範囲で自動セットする（handleSelectRakuten→
  * applyRakutenItem参照。ジャンル/テーマは楽天のカテゴリ名とマスタ名の一致で照合、機種は
- * PLATFORM_OPTIONSと一致したもののみ）。URLが分からないときは、パッケージ画像欄の楽天ブックス
- * タイトル検索（フェーズ4.5ステップ8）→候補選択でも同じ自動セットができる。楽天に無いタイトル向けに
- * パッケージ画像URLの直接入力も残している。
+ * PLATFORM_OPTIONSと一致したもののみ）。検索で見つからない、または商品ページURLが分かっているときは、
+ * 検索欄の次にある楽天ブックス商品ページURL欄（`/api/admin/games/rakuten-item`）でも同じ自動セットが
+ * できる。どちらの結果も共通のプレビュー（RakutenItemPreview）に表示する。検索キーワード欄はゲーム
+ * タイトル名欄と連動しない独立した自由入力（2026-09-22のフォーム再構成前はタイトル入力に自動追従して
+ * いたが、検索が主導線になったため廃止）。楽天に無いタイトル向けに、パッケージ画像URLの直接入力欄を
+ * プラットフォーム欄の下に独立して残している。
  * テーマ・プラットフォームは候補が多い（テーマ50件超・機種18件）ため、複数選択プルダウン＋
  * 選択済みチップの表示にしてフォームをコンパクトに保つ。
  *
@@ -121,28 +124,18 @@ export function GameCreateModal({ open, onOpenChange, initial, onCreated, onUpda
   const [isAiGeneratedDescription, setIsAiGeneratedDescription] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // 楽天ブックス商品ページURLからの取得状態（フォーム先頭の欄）
+  // 楽天ブックス商品ページURLからの取得状態（検索欄の次に置く欄）
   const [rakutenItemFetching, setRakutenItemFetching] = useState(false);
   const [rakutenItemError, setRakutenItemError] = useState<string | null>(null);
   // 商品ページURLの取得、またはタイトル検索での候補選択の結果（プレビュー表示用）
   const [selectedRakuten, setSelectedRakuten] = useState<{ title: string; imageUrl: string } | null>(null);
 
-  // パッケージ画像欄: 楽天ブックスのタイトル検索
+  // フォーム先頭: 楽天ブックスのタイトル名検索（検索して候補を選ぶとタイトル名・ジャンル等を自動セット）
   const [rakutenQuery, setRakutenQuery] = useState('');
-  const [rakutenQueryTouched, setRakutenQueryTouched] = useState(false);
   const [rakutenSearching, setRakutenSearching] = useState(false);
   const [rakutenSearched, setRakutenSearched] = useState(false);
   const [rakutenError, setRakutenError] = useState<string | null>(null);
   const [rakutenResults, setRakutenResults] = useState<RakutenGameSearchResult[]>([]);
-
-  // 検索キーワード未編集の間は、ゲームタイトル名の入力にそのまま追従させる（別々に入力させるより
-  // 「タイトルを打てば検索候補も揃っている」体験のほうが手数が少ないため）。wasOpenと同じ
-  // 「propが変わったらstateを調整する」パターン（effect内のsetStateより1テンポ早い）
-  const [prevTitleForQuery, setPrevTitleForQuery] = useState(title);
-  if (title !== prevTitleForQuery) {
-    setPrevTitleForQuery(title);
-    if (!rakutenQueryTouched) setRakutenQuery(title);
-  }
 
   // モーダルを開くたびにフォームをリセットする（TagEditModalと同じ
   // 「propが変わったらstateを調整する」パターン。effect内のsetStateより1テンポ早い）。
@@ -160,9 +153,8 @@ export function GameCreateModal({ open, onOpenChange, initial, onCreated, onUpda
       setRakutenUrl(initial?.rakutenUrl ?? '');
       setDescription(initial?.description ?? '');
       setIsAiGeneratedDescription(initial?.isAiGeneratedDescription ?? false);
-      setRakutenQuery(initial?.title ?? '');
-      setPrevTitleForQuery(initial?.title ?? '');
-      setRakutenQueryTouched(false);
+      // 検索欄はタイトル欄と連動しないため、編集モードでも毎回空欄で開く
+      setRakutenQuery('');
       setRakutenSearching(false);
       setRakutenSearched(false);
       setRakutenError(null);
@@ -370,43 +362,99 @@ export function GameCreateModal({ open, onOpenChange, initial, onCreated, onUpda
   return (
     <Modal open={open} onOpenChange={onOpenChange} title={isEdit ? 'ゲームタイトルを編集する' : 'ゲームタイトルを登録する'} maxWidthClassName="max-w-[560px]">
       <div className="flex flex-col gap-4">
-        <Field
-          label="楽天ブックス商品ページURL"
-          error={rakutenItemError}
-          hint={
-            rakutenUrl.trim() && !rakutenItemValid
-              ? 'https://books.rakuten.co.jp/rb/…/ 形式のURLを入力してください'
-              : 'URLを貼って「取得」すると、タイトル名・ジャンル・テーマ・機種・パッケージ画像を分かる範囲で自動セットします'
-          }
-        >
-          {(props) => (
+        {/* 検索・URL取得のどちらも同じ自動セットにつながるため、1つの枠にまとめて説明文を共有する
+            （2026-09-22、ユーザー指摘: 説明文がURL欄だけにかかるように見えていた） */}
+        <div className="flex flex-col gap-3 rounded-[8px] border border-border-card p-3">
+          <p className="text-md text-text-muted">
+            検索して候補を選ぶか、商品ページURLを貼って「取得」すると、タイトル名・ジャンル・テーマ・機種・パッケージ画像を分かる範囲で自動セットします
+          </p>
+
+          <div className="flex flex-col gap-2">
+            <p className="text-md text-text-tertiary">楽天ブックスでタイトルを検索</p>
             <div className="flex gap-2">
               <Input
-                {...props}
-                type="url"
-                placeholder="https://books.rakuten.co.jp/rb/…/"
-                value={rakutenUrl}
-                onChange={(e) => {
-                  setRakutenUrl(e.target.value);
-                  setRakutenItemError(null);
-                  // URLを編集したら以前の取得結果のプレビューは古くなるので消す（画像URL自体は残す）
-                  setSelectedRakuten(null);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && rakutenItemValid && !rakutenItemFetching) {
-                    e.preventDefault();
-                    handleFetchRakutenItem();
-                  }
-                }}
+                type="text"
+                placeholder="楽天ブックスで検索するタイトル名"
+                aria-label="楽天ブックスで検索するタイトル名"
+                value={rakutenQuery}
+                onChange={(e) => setRakutenQuery(e.target.value)}
                 disabled={submitting}
                 autoFocus
               />
-              <Button variant="secondary" onClick={handleFetchRakutenItem} loading={rakutenItemFetching} disabled={submitting || !rakutenItemValid}>
-                取得
+              <Button variant="secondary" onClick={handleRakutenSearch} loading={rakutenSearching} disabled={submitting || !rakutenQuery.trim()}>
+                <SearchIcon size={14} />
+                検索
               </Button>
             </div>
-          )}
-        </Field>
+
+            {rakutenError && (
+              <p role="alert" className="text-md text-input-error">
+                {rakutenError}
+              </p>
+            )}
+
+            {rakutenResults.length > 0 && (
+              <div className="flex max-h-[240px] flex-col gap-1 overflow-y-auto rounded-[8px] border border-border-card p-1">
+                {rakutenResults.map((r, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => handleSelectRakuten(r)}
+                    className="flex items-center gap-3 rounded-[6px] p-2 text-left hover:bg-bg-input"
+                  >
+                    {r.imageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={r.imageUrl} alt="" className="h-[64px] w-[48px] shrink-0 rounded-[4px] object-cover" />
+                    ) : (
+                      <div className="h-[64px] w-[48px] shrink-0 rounded-[4px] bg-bg-btn" />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="line-clamp-2 text-sm text-text-primary">{r.title}</p>
+                      <p className="text-xs text-text-tertiary">{[r.hardware, r.salesDate].filter(Boolean).join(' / ')}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {rakutenSearched && !rakutenSearching && !rakutenError && !selectedRakuten && rakutenResults.length === 0 && (
+              <p className="text-md text-text-tertiary">見つかりませんでした。楽天ブックス商品ページURLを貼るか、パッケージ画像URLを直接入力してください</p>
+            )}
+          </div>
+
+          <Field
+            label="楽天ブックス商品ページURL"
+            error={rakutenItemError}
+            hint={rakutenUrl.trim() && !rakutenItemValid ? 'https://books.rakuten.co.jp/rb/…/ 形式のURLを入力してください' : undefined}
+          >
+            {(props) => (
+              <div className="flex gap-2">
+                <Input
+                  {...props}
+                  type="url"
+                  placeholder="https://books.rakuten.co.jp/rb/…/"
+                  value={rakutenUrl}
+                  onChange={(e) => {
+                    setRakutenUrl(e.target.value);
+                    setRakutenItemError(null);
+                    // URLを編集したら以前の取得結果のプレビューは古くなるので消す（画像URL自体は残す）
+                    setSelectedRakuten(null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && rakutenItemValid && !rakutenItemFetching) {
+                      e.preventDefault();
+                      handleFetchRakutenItem();
+                    }
+                  }}
+                  disabled={submitting}
+                />
+                <Button variant="secondary" onClick={handleFetchRakutenItem} loading={rakutenItemFetching} disabled={submitting || !rakutenItemValid}>
+                  取得
+                </Button>
+              </div>
+            )}
+          </Field>
+        </div>
 
         {selectedRakuten && (
           <RakutenItemPreview
@@ -466,66 +514,11 @@ export function GameCreateModal({ open, onOpenChange, initial, onCreated, onUpda
           disabled={submitting}
         />
 
-        <div className="flex flex-col gap-2">
-          <p className="text-md text-text-tertiary">パッケージ画像（任意）</p>
-          <div className="flex gap-2">
-            <Input
-              type="text"
-              placeholder="楽天ブックスで検索するタイトル名"
-              aria-label="楽天ブックスで検索するタイトル名"
-              value={rakutenQuery}
-              onChange={(e) => {
-                setRakutenQuery(e.target.value);
-                setRakutenQueryTouched(true);
-              }}
-              disabled={submitting}
-            />
-            <Button variant="secondary" onClick={handleRakutenSearch} loading={rakutenSearching} disabled={submitting || !rakutenQuery.trim()}>
-              <SearchIcon size={14} />
-              検索
-            </Button>
-          </div>
-
-          {rakutenError && (
-            <p role="alert" className="text-md text-input-error">
-              {rakutenError}
-            </p>
+        <Field label="パッケージ画像URL" hint="楽天ブックスに無いタイトルは画像URLを直接入力できます">
+          {(props) => (
+            <Input {...props} type="url" value={packageImageUrl} onChange={(e) => setPackageImageUrl(e.target.value)} disabled={submitting} />
           )}
-
-          {rakutenResults.length > 0 && (
-            <div className="flex max-h-[240px] flex-col gap-1 overflow-y-auto rounded-[8px] border border-border-card p-1">
-              {rakutenResults.map((r, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  onClick={() => handleSelectRakuten(r)}
-                  className="flex items-center gap-3 rounded-[6px] p-2 text-left hover:bg-bg-input"
-                >
-                  {r.imageUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={r.imageUrl} alt="" className="h-[64px] w-[48px] shrink-0 rounded-[4px] object-cover" />
-                  ) : (
-                    <div className="h-[64px] w-[48px] shrink-0 rounded-[4px] bg-bg-btn" />
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <p className="line-clamp-2 text-sm text-text-primary">{r.title}</p>
-                    <p className="text-xs text-text-tertiary">{[r.hardware, r.salesDate].filter(Boolean).join(' / ')}</p>
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-
-          {rakutenSearched && !rakutenSearching && !rakutenError && !selectedRakuten && rakutenResults.length === 0 && (
-            <p className="text-md text-text-tertiary">見つかりませんでした。楽天ブックス商品ページURLを貼るか、パッケージ画像URLを直接入力してください</p>
-          )}
-
-          <Field label="パッケージ画像URL" hint="楽天ブックスに無いタイトルは画像URLを直接入力できます">
-            {(props) => (
-              <Input {...props} type="url" value={packageImageUrl} onChange={(e) => setPackageImageUrl(e.target.value)} disabled={submitting} />
-            )}
-          </Field>
-        </div>
+        </Field>
 
         <Field label="説明文（任意）">
           {(props) => <Textarea {...props} value={description} onChange={(e) => setDescription(e.target.value)} disabled={submitting} />}
