@@ -4,14 +4,15 @@
  * 候補のサムネイルは games.packageImageUrl（楽天ブックスの縦長パッケージ画像。無ければプレースホルダー）。
  * フッターの「ゲームタイトルの登録を提案する」（§4.2.2）は一般ユーザー向けの機能のため出さない
  * （§4.2.2 対象ユーザー）。代わりに`onAddNew`が渡された場合のみ、管理者専用の直接登録導線
- * （GameCreateModal、フェーズ4.5ステップ2）へのフッターリンクを表示する。
+ * （GameCreateModal、フェーズ4.5ステップ2）として、フッターに案内文＋secondaryボタンを表示する。
  */
 'use client';
 
 import { useMemo, useState } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/Input';
-import { SearchIcon } from '@/components/ui/icons';
+import { Button } from '@/components/ui/Button';
+import { PlusIcon, SearchIcon } from '@/components/ui/icons';
 
 export interface GameOption {
   id: string;
@@ -87,17 +88,19 @@ export function GameSelectModal({ open, onOpenChange, games, onSelect, onAddNew 
         )}
 
         {onAddNew && (
-          <div className="border-t border-border-divider pt-3">
-            <button
-              type="button"
+          <div className="flex flex-col gap-3 border-t border-border-divider pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-base text-text-muted">お探しのゲームタイトルが見つかりませんか？</p>
+            <Button
+              variant="secondary"
               onClick={() => {
                 handleOpenChange(false);
                 onAddNew();
               }}
-              className="text-base text-brand-primary hover:underline"
+              className="w-full sm:w-auto"
             >
-              お探しのゲームタイトルが見つかりませんか？ → 新しいゲームタイトルを登録する
-            </button>
+              <PlusIcon size={14} />
+              新しいゲームタイトルを登録する
+            </Button>
           </div>
         )}
       </div>

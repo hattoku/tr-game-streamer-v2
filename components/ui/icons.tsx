@@ -141,6 +141,15 @@ export function CheckIcon(props: IconProps) {
   );
 }
 
+/** 追加（add） */
+export function PlusIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
+
 export function AlertIcon(props: IconProps) {
   return (
     <svg {...base(props)}>
