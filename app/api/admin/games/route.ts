@@ -2,10 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { FieldValue } from 'firebase-admin/firestore';
 import { requireAdmin } from '@/lib/api-auth';
 import { adminDb } from '@/lib/firebase-admin';
+import { fetchRakutenGameByItemUrl } from '@/lib/rakuten';
+import { normalizeRakutenBooksItemUrl } from '@/lib/rakuten-shared';
 
 // ゲームタイトルの新規登録API（管理者専用。フェーズ4.5ステップ2）。
-// 楽天ブックスAPI連携は未実装のため、genre/theme/platforms/パッケージ画像等は
-// すべて管理者の手入力（管理 マスタ管理仕様書 §7.1 の暫定手入力版）。
+// genre/theme/platforms等は管理者の手入力（管理 マスタ管理仕様書 §7.1 の暫定手入力版）。
+// パッケージ画像・楽天URLはGameCreateModal側で楽天ブックス検索/商品ページURLから解決済みの値を
+// 受け取るのが基本だが、楽天URLだけ渡されて画像が空の場合はここでも商品ページから補完する
+// （モーダルで「取得」を押し忘れても画像が欠けないようにするための安全弁）。
 export async function POST(request: NextRequest) {
   const auth = await requireAdmin(request);
   if ('errorResponse' in auth) return auth.errorResponse;
@@ -17,8 +21,8 @@ export async function POST(request: NextRequest) {
   const platforms = Array.isArray(body.platforms)
     ? body.platforms.filter((p: unknown): p is string => typeof p === 'string' && p.trim().length > 0)
     : [];
-  const packageImageUrl = typeof body.packageImageUrl === 'string' && body.packageImageUrl.trim() ? body.packageImageUrl.trim() : null;
-  const rakutenUrl = typeof body.rakutenUrl === 'string' && body.rakutenUrl.trim() ? body.rakutenUrl.trim() : null;
+  let packageImageUrl = typeof body.packageImageUrl === 'string' && body.packageImageUrl.trim() ? body.packageImageUrl.trim() : null;
+  let rakutenUrl = typeof body.rakutenUrl === 'string' && body.rakutenUrl.trim() ? body.rakutenUrl.trim() : null;
   const description = typeof body.description === 'string' && body.description.trim() ? body.description.trim() : null;
 
   if (!title) {
@@ -32,6 +36,21 @@ export async function POST(request: NextRequest) {
   const duplicateSnap = await adminDb.collection('games').where('title', '==', title).limit(1).get();
   if (!duplicateSnap.empty) {
     return NextResponse.json({ error: 'already_exists' }, { status: 409 });
+  }
+
+  // 楽天ブックス商品ページURLは計測パラメータを除いた正規形で保存する（アフィリエイトリンク変換の
+  // 元URLになるため）。パッケージ画像が未指定なら商品ページから補完する（失敗しても登録自体は続行）
+  const normalizedRakutenUrl = rakutenUrl ? normalizeRakutenBooksItemUrl(rakutenUrl) : null;
+  if (normalizedRakutenUrl) {
+    rakutenUrl = normalizedRakutenUrl;
+    if (!packageImageUrl) {
+      try {
+        const item = await fetchRakutenGameByItemUrl(normalizedRakutenUrl);
+        if (item?.imageUrl) packageImageUrl = item.imageUrl;
+      } catch (e) {
+        console.error('楽天ブックス商品ページからのパッケージ画像補完に失敗', e);
+      }
+    }
   }
 
   const genreRef = genreId ? adminDb.collection('genres').doc(genreId) : null;

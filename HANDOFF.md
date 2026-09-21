@@ -992,6 +992,67 @@ Firebase Hostingの設定のみの反映。**正式公開でnoindex/Basic認証�
 - 意識しないと自分では通らない経路が2つある: **スマホからの視聴**と**レビュー投稿**。この2つだけは
   どこかで触っておくと気づきが出やすい。
 
+**フェーズ5でその場で直したもの**:
+
+1. **2026-09-21 ゲームタイトル登録: 楽天ブックス商品ページURLからパッケージ画像を自動セット**。
+   `GameCreateModal`のURL手入力モードで、パッケージ画像URLと楽天ブックス商品ページURLを別々に
+   手入力する必要があったのを、商品ページURL（`https://books.rakuten.co.jp/rb/<商品番号>/`、
+   `?l-id=...`等の計測パラメータ付きでも可）を貼って「取得」（またはEnter）するだけで
+   パッケージ画像URL・商品名がセットされるようにした。パッケージ画像URLの直接入力欄は
+   楽天に無いタイトル向けに残している（取得結果が自動で入り、上書きも可）。
+   - `lib/rakuten-shared.ts`（新規、クライアント/サーバー共用）— 商品ページURLの検証と正規化
+     （計測パラメータ除去・末尾スラッシュ統一）。保存する`rakutenUrl`もこの正規形にする。
+   - `lib/rakuten.ts` — `fetchRakutenGameByItemUrl(url)`を追加。BooksGame/Search APIは商品番号での
+     検索に非対応のため、**商品ページHTMLからJANコードを読み取り→JANでAPI検索**する（ページ
+     ゲームタイトル 詳細 仕様書 §7の「JANコードをキーにAPI取得」方針どおり。画像URLも検索モードと
+     同じ`thumbnail.image.rakuten.co.jp`形式になる）。APIで0件なら商品ページの`og:image`/`og:title`
+     にフォールバック。タイトル検索とJAN検索は`fetchBooksGame`に共通化。
+     **実ページで確認した注記**: 商品ページはUser-Agentがブラウザ風でないと実在商品でも
+     「お探しのページが見つかりません」を返すため、Chrome相当のUA・Accept・Accept-Languageを固定で
+     送る（このヘッダー一式なら存在しない商品番号は素直に404で返る→`null`扱い）。
+   - `app/api/admin/games/rakuten-item`（新規、`requireAdmin`）— `?url=`で上記を呼ぶ。
+     無効URLは400、取得不能は404、楽天側エラーは502。
+   - `app/api/admin/games`（POST）— `rakutenUrl`だけ渡されて`packageImageUrl`が空の場合は
+     サーバー側でも商品ページから補完する安全弁（「取得」を押し忘れても画像が欠けない。失敗しても
+     登録は続行）。
+   - **動作確認**: `npm run lint` / `npx tsc --noEmit`成功。実URL3件（DQIV PS1版・ゼルダ時のオカリナ・
+     存在しない番号）で解決関数を直接検証。ローカル`npm run dev`（stg）＋Playwrightで
+     URL貼り付け→Enter→プレビュー（サムネイル＋商品名）表示・画像URL自動セット・存在しない
+     番号でのエラー表示を確認（登録は実行していないためstg DBに変更なし）。
+2. **2026-09-21 ゲームタイトル登録: 楽天の商品情報からタイトル名・ジャンル・テーマ・機種も自動セット**
+   （1.の続き、同日のユーザー要望）。検索モードで候補を選んだとき・手入力モードで「取得」したときの
+   両方で、パッケージ画像に加えて以下をフォームに反映する（`GameCreateModal.applyRakutenItem`）。
+   管理者が既に入力・選択した値は上書きしない（タイトル・ジャンルは空のときのみ、テーマ・機種は追加のみ）。
+   - **タイトル名**: 楽天の商品名から`【…】`と「特典/同梱/付き/付属」を含む丸括弧を除いた簡易正規化
+     （`lib/rakuten-shared.ts`の`normalizeRakutenGameTitle`。例「【楽天ブックス限定特典+特典】ゼルダの伝説
+     時のオカリナ(特典アイテム未定+…)」→「ゼルダの伝説 時のオカリナ」）。仕様書が想定するAI正規化案とは
+     別物の初期値用ヒューリスティック。
+   - **ジャンル/テーマ**: 商品の`booksGenreId`（例`006514003001`）を`BooksGenre/Search` APIで引き、
+     genreLevel 3（ジャンル）・4（テーマ）の名称をマスタ名と完全一致で照合する
+     （`lib/rakuten.ts`の`resolveRakutenGenre`）。**楽天ブックスのゲームカテゴリ階層をAPIで実際に取得して
+     マスタ（`document/master/ゲームジャンル・テーママスタ初期データ.md`）と突き合わせた結果、
+     ジャンル名は全一致、テーマ名は「アドベンチャー」→マスタ「アドベンチャー（一般）」の1件のみ差異**
+     （`lib/rakuten-shared.ts`の`THEME_NAME_ALIASES`で吸収）。なおマスタ文書の「第4階層/第5階層」は
+     楽天ブックスのルートを含めた数え方で、APIの`genreLevel`では3/4に当たる。
+     - 検索モードは候補10件分をまとめて解決するとレートリミットに掛かるため、選択した1件だけ
+       `/api/admin/games/rakuten-genre?booksGenreId=`（新規、`requireAdmin`）で後追い解決する。
+       手入力モードは`rakuten-item`のレスポンスに`genre`として同梱。
+     - 解決結果はプロセス内キャッシュ（`genreCache`、静的データのため無期限）。
+     - PS1等の旧機種（`booksGenreId`が`006505`=「その他」機種直下でジャンル階層無し）は解決不能→
+       自動セットなし（DQIV PS1版で確認）。
+   - **機種**: `hardware`（"Nintendo Switch 2"/"PS5"等）が`PLATFORM_OPTIONS`と完全一致した場合のみ追加。
+   - **楽天APIのレートリミットが1req/秒であることが判明**（超過時`429 {"statusCode":429,"message":
+     "Rate limit is exceeded. Try again in 1 seconds."}`）。JAN検索→ジャンル解決の連続呼び出しで
+     実際に踏んだため、`lib/rakuten.ts`の共通呼び出し`callRakutenApi`で429時は1.1秒待って1回だけ
+     再試行する。`BooksGame/Search`と`BooksGenre/Search`の呼び出し処理もここに共通化した。
+   - `lib/rakuten-url.ts`は用途が広がったため`lib/rakuten-shared.ts`に改名（URL正規化・商品名正規化・
+     テーマ名エイリアスの、秘密情報に触れないクライアント/サーバー共用関数置き場）。
+   - **動作確認**: `npm run lint` / `npx tsc --noEmit`成功。ローカル`npm run dev`（stg）＋Playwrightで、
+     検索モード（「ゼルダの伝説 時のオカリナ」の特典付き候補を選択）・手入力モード（同商品URLで
+     「取得」）の両方で、タイトル名「ゼルダの伝説 時のオカリナ」・ジャンル「アドベンチャー」・
+     テーマ「アドベンチャー（一般）」・機種「Nintendo Switch 2」が自動セットされることを確認
+     （登録は実行していないためstg DBに変更なし）。
+
 ### フェーズ6: 気づきベースの改善（フェーズ5の振り返りで計画する）
 
 フェーズ5で溜まった未解決事項と、上記「未実装機能の棚卸し」を並べ直す。**仕様書の順ではなく、
