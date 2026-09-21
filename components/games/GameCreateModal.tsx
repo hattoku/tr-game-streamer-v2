@@ -12,6 +12,11 @@
  * どちらのモードでも、楽天の商品情報からゲームタイトル名（未入力時のみ）・ジャンル（未選択時のみ）・
  * テーマ・プラットフォームを分かる範囲で自動セットする（applyRakutenItem参照。ジャンル/テーマは
  * 楽天のカテゴリ名とマスタ名の一致で照合、機種はPLATFORM_OPTIONSと一致したもののみ）。
+ *
+ * `initial` を渡すと同じフォームが編集モードになる（ゲームタイトル詳細ページの管理者向け
+ * 「ゲームタイトル情報を編集する」ボタンから。ページ ゲームタイトル 詳細 仕様書 §3.3・第7章の暫定版。
+ * 2026-09-21）。編集時は `PATCH /api/admin/games/{id}` に保存し、説明文があるときだけ
+ * 「AIによる生成」バッジ表示のON/OFF（同仕様書 §7.2）も切り替えられる。
  */
 'use client';
 
@@ -37,10 +42,28 @@ interface MasterOption {
   name: string;
 }
 
+/** 編集モードの初期値（games ドキュメントの該当フィールド） */
+export interface GameFormInitial {
+  id: string;
+  title: string;
+  genreId: string | null;
+  themeIds: string[];
+  platforms: string[];
+  packageImageUrl: string | null;
+  rakutenUrl: string | null;
+  description: string | null;
+  isAiGeneratedDescription: boolean;
+}
+
 interface GameCreateModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCreated: (game: GameOption) => void;
+  /** 指定すると編集モード（PATCH）。省略時は新規登録（POST） */
+  initial?: GameFormInitial;
+  /** 新規登録が成功したとき */
+  onCreated?: (game: GameOption) => void;
+  /** 編集の保存が成功したとき */
+  onUpdated?: () => void;
 }
 
 async function getIdToken(): Promise<string> {
@@ -48,8 +71,9 @@ async function getIdToken(): Promise<string> {
   return auth.currentUser.getIdToken();
 }
 
-export function GameCreateModal({ open, onOpenChange, onCreated }: GameCreateModalProps) {
+export function GameCreateModal({ open, onOpenChange, initial, onCreated, onUpdated }: GameCreateModalProps) {
   const { toast } = useToast();
+  const isEdit = !!initial;
 
   const [genres, setGenres] = useState<MasterOption[]>([]);
   const [themes, setThemes] = useState<MasterOption[]>([]);
@@ -62,6 +86,7 @@ export function GameCreateModal({ open, onOpenChange, onCreated }: GameCreateMod
   const [packageImageUrl, setPackageImageUrl] = useState('');
   const [rakutenUrl, setRakutenUrl] = useState('');
   const [description, setDescription] = useState('');
+  const [isAiGeneratedDescription, setIsAiGeneratedDescription] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   // パッケージ画像: 楽天ブックス検索（デフォルト）⇔ URL手入力
@@ -89,22 +114,24 @@ export function GameCreateModal({ open, onOpenChange, onCreated }: GameCreateMod
   }
 
   // モーダルを開くたびにフォームをリセットする（TagEditModalと同じ
-  // 「propが変わったらstateを調整する」パターン。effect内のsetStateより1テンポ早い）
+  // 「propが変わったらstateを調整する」パターン。effect内のsetStateより1テンポ早い）。
+  // 編集モードでは initial の値で初期化し、既に画像/楽天URLがあるときは現在値が見えるURL手入力モードで開く
   const [wasOpen, setWasOpen] = useState(open);
   if (open !== wasOpen) {
     setWasOpen(open);
     if (open) {
-      setTitle('');
+      setTitle(initial?.title ?? '');
       setTitleError(null);
-      setGenreId('');
-      setThemeIds(new Set());
-      setPlatforms(new Set());
-      setPackageImageUrl('');
-      setRakutenUrl('');
-      setDescription('');
-      setImageMode('search');
-      setRakutenQuery('');
-      setPrevTitleForQuery('');
+      setGenreId(initial?.genreId ?? '');
+      setThemeIds(new Set(initial?.themeIds ?? []));
+      setPlatforms(new Set(initial?.platforms ?? []));
+      setPackageImageUrl(initial?.packageImageUrl ?? '');
+      setRakutenUrl(initial?.rakutenUrl ?? '');
+      setDescription(initial?.description ?? '');
+      setIsAiGeneratedDescription(initial?.isAiGeneratedDescription ?? false);
+      setImageMode(initial?.packageImageUrl || initial?.rakutenUrl ? 'manual' : 'search');
+      setRakutenQuery(initial?.title ?? '');
+      setPrevTitleForQuery(initial?.title ?? '');
       setRakutenQueryTouched(false);
       setRakutenSearching(false);
       setRakutenSearched(false);
@@ -272,8 +299,8 @@ export function GameCreateModal({ open, onOpenChange, onCreated }: GameCreateMod
     setSubmitting(true);
     try {
       const idToken = await getIdToken();
-      const res = await fetch('/api/admin/games', {
-        method: 'POST',
+      const res = await fetch(initial ? `/api/admin/games/${encodeURIComponent(initial.id)}` : '/api/admin/games', {
+        method: initial ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
         body: JSON.stringify({
           title: trimmedTitle,
@@ -283,6 +310,7 @@ export function GameCreateModal({ open, onOpenChange, onCreated }: GameCreateMod
           packageImageUrl: packageImageUrl.trim() || null,
           rakutenUrl: rakutenUrl.trim() || null,
           description: description.trim() || null,
+          ...(initial ? { isAiGeneratedDescription } : {}),
         }),
       });
       const resBody = await res.json();
@@ -290,12 +318,17 @@ export function GameCreateModal({ open, onOpenChange, onCreated }: GameCreateMod
         if (resBody.error === 'already_exists') {
           setTitleError('同名のゲームタイトルが既に登録されています');
         } else {
-          toast({ type: 'error', message: '登録に失敗しました。時間をおいて再試行してください' });
+          toast({ type: 'error', message: `${isEdit ? '保存' : '登録'}に失敗しました。時間をおいて再試行してください` });
         }
         return;
       }
-      onCreated({ id: resBody.id, title: resBody.title, packageImageUrl: resBody.packageImageUrl });
-      toast({ type: 'success', message: 'ゲームタイトルを登録しました' });
+      if (initial) {
+        onUpdated?.();
+        toast({ type: 'success', message: 'ゲームタイトル情報を更新しました' });
+      } else {
+        onCreated?.({ id: resBody.id, title: resBody.title, packageImageUrl: resBody.packageImageUrl });
+        toast({ type: 'success', message: 'ゲームタイトルを登録しました' });
+      }
       onOpenChange(false);
     } catch {
       toast({ type: 'error', message: '通信エラーが発生しました。時間をおいて再試行してください' });
@@ -308,7 +341,7 @@ export function GameCreateModal({ open, onOpenChange, onCreated }: GameCreateMod
   const rakutenItemValid = normalizeRakutenBooksItemUrl(rakutenUrl) !== null;
 
   return (
-    <Modal open={open} onOpenChange={onOpenChange} title="ゲームタイトルを登録する" maxWidthClassName="max-w-[560px]">
+    <Modal open={open} onOpenChange={onOpenChange} title={isEdit ? 'ゲームタイトルを編集する' : 'ゲームタイトルを登録する'} maxWidthClassName="max-w-[560px]">
       <div className="flex flex-col gap-4">
         <Field label="ゲームタイトル名" error={titleError}>
           {(props) => (
@@ -493,13 +526,23 @@ export function GameCreateModal({ open, onOpenChange, onCreated }: GameCreateMod
         <Field label="説明文（任意）">
           {(props) => <Textarea {...props} value={description} onChange={(e) => setDescription(e.target.value)} disabled={submitting} />}
         </Field>
+        {isEdit && !!description.trim() && (
+          <div className="flex">
+            <ToggleChip
+              label="「AIによる生成」バッジを表示する"
+              selected={isAiGeneratedDescription}
+              onClick={() => setIsAiGeneratedDescription((v) => !v)}
+              disabled={submitting}
+            />
+          </div>
+        )}
 
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={submitting}>
             キャンセル
           </Button>
           <Button variant="primary" onClick={handleSubmit} loading={submitting}>
-            登録する
+            {isEdit ? '保存する' : '登録する'}
           </Button>
         </div>
       </div>

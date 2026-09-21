@@ -1,6 +1,6 @@
 # プレミテ Firestore データモデル設計書
 
-**バージョン**: v1.11  
+**バージョン**: v1.12  
 **作成日**: 2026年3月30日（更新）  
 **対象**: 開発チーム  
 **関連ドキュメント**: プレミテ企画書 / プレミテ_技術スタック仕様書 / 各機能仕様書
@@ -847,6 +847,13 @@ ai_operators ──── (1) users
 - `genres` 物理削除時: `games.genreId` を null 化。AI運営者への影響なし。
 - `games` 物理削除時: `playlists.gameId` を null 化。
 
+### 7.3 マスタ編集時の非正規化フィールド同期
+
+- `games` 編集時（`PATCH /api/admin/games/{gameId}`、ページ ゲームタイトル 詳細 仕様書 第7章）:
+  - `title` 変更 → 紐づく `playlists.gameName` を同期
+  - `genreId` 変更 → `games.genreName` を再解決し、紐づく `playlists.gameGenreIds` を同期。旧ジャンル `genres.gameTitleCount` を -1、新ジャンルを +1
+  - `themeIds` 変更 → 外れたテーマの `themes.gameTitleCount` を -1、追加されたテーマを +1
+
 ---
 
 ## 8. 改訂履歴
@@ -864,4 +871,5 @@ ai_operators ──── (1) users
 | v1.8 | 2026-09-11 | `mylist` に `watchStatus`・`isReverseOrder` フィールドを追加（マイリスト機能仕様書準拠、フェーズ2実装に伴うスキーマギャップ解消） |
 | v1.9 | 2026-09-11 | `users` に `isContinuousPlayEnabled` フィールドを追加（動画プレーヤー仕様書の連続再生設定準拠、フェーズ2実装に伴うスキーマギャップ解消） |
 | v1.10 | 2026-09-11 | `notifications` コレクションを新規追加（ユーザー通知機能仕様書準拠。フェーズ2ではシリーズ新着通知のみ実装、他3種別は将来対応） |
+| v1.12 | 2026-09-21 | 7.3節「マスタ編集時の非正規化フィールド同期」を追加（`games` 編集時の `playlists.gameName`/`gameGenreIds`、`genres`/`themes.gameTitleCount` の同期ポリシー） |
 | v1.11 | 2026-09-13 | フェーズ3ステップ1（レビュー・スコアリング機能）実装に伴うスキーマギャップ解消。`reviews` に投稿者表示用の非正規化コピー `userDisplayName`/`userProfileImageUrl` を追加（HANDOFF.md未解決事項1の対応）。`reviews.commentScore` の説明を実装（共通 信頼度スコアリングシステム仕様書 §3.3準拠、あり:1.0/なし:0.5の2値）に合わせて修正（旧記載の「0.2/0.5/1.0」は誤記）。`reviews` ドキュメントIDが `{userId}_{playlistId}` 形式であることを明記。`users` に `hideSpoilerReviews` を追加（レビュー投稿機能仕様書のネタバレフィルター設定の永続化用）。 |
