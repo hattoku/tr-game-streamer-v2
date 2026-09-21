@@ -87,8 +87,9 @@ export function MylistCard({ entry, onStatusChange, onReverseToggle, onRemove }:
           {p && (
             <div className="flex items-center gap-2">
               {p.channelIconUrl ? (
+                // referrerPolicy: yt3.ggpht.com の Referer 制限対策（PlaylistSummary 参照）
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={p.channelIconUrl} alt="" className="size-[18px] shrink-0 rounded-full md:size-[22px]" loading="lazy" />
+                <img src={p.channelIconUrl} alt="" referrerPolicy="no-referrer" className="size-[18px] shrink-0 rounded-full md:size-[22px]" loading="lazy" />
               ) : (
                 <span className="size-[18px] shrink-0 rounded-full bg-bg-btn md:size-[22px]" />
               )}

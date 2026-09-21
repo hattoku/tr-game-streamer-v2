@@ -48,8 +48,9 @@ export function HistoryCard({ entry, onDelete }: HistoryCardProps) {
           {entry.playlist && (
             <div className="flex items-center gap-2">
               {entry.playlist.channelIconUrl ? (
+                // referrerPolicy: yt3.ggpht.com の Referer 制限対策（PlaylistSummary 参照）
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={entry.playlist.channelIconUrl} alt="" className="size-[18px] shrink-0 rounded-full" loading="lazy" />
+                <img src={entry.playlist.channelIconUrl} alt="" referrerPolicy="no-referrer" className="size-[18px] shrink-0 rounded-full" loading="lazy" />
               ) : (
                 <span className="size-[18px] shrink-0 rounded-full bg-bg-btn" />
               )}

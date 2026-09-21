@@ -20,8 +20,9 @@ export function ChannelCard({ channelId, name, iconUrl }: ChannelCardProps) {
       <div className="flex items-center gap-3">
         <Link href={href} className="shrink-0">
           {iconUrl ? (
+            // referrerPolicy: yt3.ggpht.com の Referer 制限対策（PlaylistSummary 参照）
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={iconUrl} alt="" className="size-12 rounded-full bg-bg-btn object-cover" />
+            <img src={iconUrl} alt="" referrerPolicy="no-referrer" className="size-12 rounded-full bg-bg-btn object-cover" />
           ) : (
             <span className="block size-12 rounded-full bg-bg-btn" />
           )}

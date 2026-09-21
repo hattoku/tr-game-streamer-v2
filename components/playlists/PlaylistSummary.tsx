@@ -31,8 +31,10 @@ export function PlaylistSummary({ title, thumbnailUrl, channelName, channelIconU
         </p>
         <div className="flex items-center gap-2 text-base text-text-secondary">
           {channelIconUrl ? (
+            // チャンネルアイコン（yt3.ggpht.com）は localhost 等の Referer 付きリクエストに 429 を返すことがあり、
+            // 開発環境でプレビュー時にリンク切れになるため Referer を送らない（他のチャンネルアイコン表示箇所も同様）
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={channelIconUrl} alt="" className="size-6 shrink-0 rounded-full bg-bg-btn object-cover" />
+            <img src={channelIconUrl} alt="" referrerPolicy="no-referrer" className="size-6 shrink-0 rounded-full bg-bg-btn object-cover" />
           ) : (
             <span className="block size-6 shrink-0 rounded-full bg-bg-btn" />
           )}
