@@ -53,9 +53,15 @@ if (-not $RakutenAccessKeyLine) {
 }
 $RakutenAccessKey = ($RakutenAccessKeyLine -split '=', 2)[1]
 
+# RAKUTEN_AFFILIATE_IDは未設定でも動作する（アフィリエイトタグなしのURLにフォールバック）ため必須にしない。
+# NEXT_PUBLIC_プレフィックスのビルド時埋め込み値（lib/rakuten-affiliate.ts）なので、Cloud Runの
+# 実行時環境変数ではなくDockerビルド引数として渡す（cloudbuild.yaml/Dockerfile参照）
+$RakutenAffiliateIdLine = Get-Content $EnvLocalPath | Where-Object { $_ -match '^RAKUTEN_AFFILIATE_ID=' }
+$RakutenAffiliateId = if ($RakutenAffiliateIdLine) { ($RakutenAffiliateIdLine -split '=', 2)[1] } else { '' }
+
 # 1. ビルドとプッシュ
 Write-Host "Building and pushing Docker image..." -ForegroundColor Green
-gcloud builds submit --config cloudbuild.yaml --substitutions "_IMAGE_URL=$ImageUrl,_APP_ENV=$Env" . --project "$ProjectId"
+gcloud builds submit --config cloudbuild.yaml --substitutions "_IMAGE_URL=$ImageUrl,_APP_ENV=$Env,_RAKUTEN_AFFILIATE_ID=$RakutenAffiliateId" . --project "$ProjectId"
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR: Docker image build failed (exit code $LASTEXITCODE). Aborting deploy." -ForegroundColor Red
     exit $LASTEXITCODE

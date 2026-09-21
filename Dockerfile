@@ -17,10 +17,14 @@ FROM node:20-alpine AS builder
 ARG NEXT_PUBLIC_APP_ENV
 # テストモードウィジェット（UI仕様書 §7）。stg 等の検証用ビルドでのみ true を渡す。本番では渡しても lib/app-env.ts が無効化する
 ARG NEXT_PUBLIC_TEST_MODE
+# 楽天アフィリエイトID（lib/rakuten-affiliate.ts）。ブラウザで商品リンクを組み立てる際に使うため
+# ビルド時埋め込みが必要（秘密情報ではないためNEXT_PUBLIC_で問題ない。SECRET_MANAGEMENT.md参照）
+ARG NEXT_PUBLIC_RAKUTEN_AFFILIATE_ID
 
 # 環境変数の設定
 ENV NEXT_PUBLIC_APP_ENV=${NEXT_PUBLIC_APP_ENV}
 ENV NEXT_PUBLIC_TEST_MODE=${NEXT_PUBLIC_TEST_MODE}
+ENV NEXT_PUBLIC_RAKUTEN_AFFILIATE_ID=${NEXT_PUBLIC_RAKUTEN_AFFILIATE_ID}
 
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules

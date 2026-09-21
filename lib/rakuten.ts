@@ -101,6 +101,8 @@ export async function searchRakutenGames(title: string): Promise<RakutenGameSear
       hardware: item.hardware ?? '',
       label: item.label ?? '',
       salesDate: item.salesDate ?? '',
+      // アフィリエイトタグは付与しない生の商品URL。アフィリエイトIDが後で変わっても保存済みの
+      // URLを書き換えずに追従できるよう、タグ付けは表示時にlib/rakuten-affiliate.tsで行う
       itemUrl: item.itemUrl ?? '',
       imageUrl: item.largeImageUrl || item.mediumImageUrl || item.smallImageUrl || '',
     }));

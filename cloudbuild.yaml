@@ -8,11 +8,16 @@ steps:
       - 'NEXT_PUBLIC_APP_ENV=$_APP_ENV'
       - '--build-arg'
       - 'NEXT_PUBLIC_TEST_MODE=$_TEST_MODE'
+      - '--build-arg'
+      - 'NEXT_PUBLIC_RAKUTEN_AFFILIATE_ID=$_RAKUTEN_AFFILIATE_ID'
       - '.'
 
 images:
   - '$_IMAGE_URL'
 
 # テストモードウィジェット（UI仕様書 §7）を有効にする場合のみ、デプロイ時に _TEST_MODE=true を渡す。既定は無効
+# _RAKUTEN_AFFILIATE_IDは.env.localのRAKUTEN_AFFILIATE_IDからdeploy.sh/deploy.ps1が渡す。未設定時は
+# 空文字（lib/rakuten-affiliate.tsがアフィリエイトタグなしのURLにフォールバックする）
 substitutions:
   _TEST_MODE: ''
+  _RAKUTEN_AFFILIATE_ID: ''

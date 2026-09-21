@@ -15,3 +15,6 @@ export const CRON_SECRET = process.env.CRON_SECRET || '';
 // ゲームタイトル登録時のパッケージ画像検索（フェーズ4.5ステップ8）に利用する。
 export const RAKUTEN_APPLICATION_ID = process.env.RAKUTEN_APPLICATION_ID || '';
 export const RAKUTEN_ACCESS_KEY = process.env.RAKUTEN_ACCESS_KEY || '';
+
+// 楽天アフィリエイトIDはここではなくlib/rakuten-affiliate.tsで扱う（ブラウザに露出してよい値
+// であり、上記2つとは性質が異なるため）。

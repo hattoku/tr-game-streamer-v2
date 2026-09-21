@@ -22,6 +22,7 @@ import { TagEditModal } from '@/components/tags/TagEditModal';
 import { Card } from '@/components/ui/Card';
 import { Tag } from '@/components/ui/Tag';
 import { ExternalLinkButton } from '@/components/ui/Button';
+import { toRakutenAffiliateUrl } from '@/lib/rakuten-affiliate';
 import { Skeleton, SkeletonText } from '@/components/ui/Skeleton';
 import { InventoryIcon, LockIcon, PencilIcon, PlayIcon } from '@/components/ui/icons';
 
@@ -119,7 +120,7 @@ export default function GameDetailPage() {
         )}
       </div>
       {game.rakutenUrl && (
-        <ExternalLinkButton href={game.rakutenUrl} variant="rakuten" size="sm">
+        <ExternalLinkButton href={toRakutenAffiliateUrl(game.rakutenUrl)} variant="rakuten" size="sm">
           楽天ブックスで見る ↗
         </ExternalLinkButton>
       )}

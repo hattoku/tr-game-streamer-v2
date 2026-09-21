@@ -49,9 +49,14 @@ if [ -z "$RAKUTEN_ACCESS_KEY" ]; then
   exit 1
 fi
 
+# RAKUTEN_AFFILIATE_IDは未設定でも動作する（アフィリエイトタグなしのURLにフォールバック）ため必須にしない。
+# NEXT_PUBLIC_プレフィックスのビルド時埋め込み値（lib/rakuten-affiliate.ts）なので、Cloud Runの
+# 実行時環境変数ではなくDockerビルド引数として渡す（cloudbuild.yaml/Dockerfile参照）
+RAKUTEN_AFFILIATE_ID=$(grep '^RAKUTEN_AFFILIATE_ID=' "$SCRIPT_DIR/.env.local" | cut -d '=' -f2-)
+
 # 1. ビルドとプッシュ
 echo "Building and pushing Docker image..."
-gcloud builds submit --config cloudbuild.yaml --substitutions "_IMAGE_URL=$IMAGE_URL,_APP_ENV=$ENV" . --project "$PROJECT_ID"
+gcloud builds submit --config cloudbuild.yaml --substitutions "_IMAGE_URL=$IMAGE_URL,_APP_ENV=$ENV,_RAKUTEN_AFFILIATE_ID=$RAKUTEN_AFFILIATE_ID" . --project "$PROJECT_ID"
 
 # 2. Firestore ルール・インデックスをデプロイ
 # 新コードが依存するルール/インデックスを、Cloud Run に新リビジョンが載る前に反映しておく。
