@@ -4,7 +4,7 @@ import { fetchRakutenGameByItemUrl, RakutenApiError } from '@/lib/rakuten';
 import { normalizeRakutenBooksItemUrl } from '@/lib/rakuten-shared';
 
 // 楽天ブックス商品ページURLからの商品情報取得API（管理者専用。フェーズ5、2026-09-21）。
-// GameCreateModalのURL手入力モードから呼ばれる。商品ページURLを貼るだけでパッケージ画像URL・
+// GameCreateModal先頭の商品ページURL欄から呼ばれる。商品ページURLを貼るだけでパッケージ画像URL・
 // 商品名を自動セットできるようにする（rakuten-searchと同様、楽天APIキーはサーバー側に閉じる）。
 export async function GET(request: NextRequest) {
   const auth = await requireAdmin(request);

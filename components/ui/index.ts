@@ -30,8 +30,10 @@ export {
   DropdownMenuItem,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
+  DropdownMenuCheckboxItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   SelectMenu,
+  MultiSelectMenu,
 } from './DropdownMenu';
 export type { SelectOption } from './DropdownMenu';

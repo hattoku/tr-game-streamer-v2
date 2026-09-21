@@ -4,14 +4,16 @@
  * 「登録を提案する」モーダル（ページ 再生リストを追加する 仕様書 §4.2.2）とは別物で、
  * 審査を経ずその場で`games`に直接書き込む（同仕様書 §4.2.2 末尾の対象ユーザー注記のとおり、
  * 管理者はマスタ管理相当の直接登録ができるため提案フローの対象外）。
- * パッケージ画像は楽天ブックスゲーム検索API（フェーズ4.5ステップ8）でのタイトル検索→候補選択が
- * デフォルト。検索でヒットしない場合（洋ゲー・マイナータイトル等）のためURL手入力にも切替可能。
- * URL手入力モードでは楽天ブックス商品ページURLを貼って「取得」すると、パッケージ画像URL・商品名が
- * 自動でセットされる（`/api/admin/games/rakuten-item`。フェーズ5、2026-09-21）。楽天に無い
- * タイトル向けにパッケージ画像URLの直接入力も残している。
- * どちらのモードでも、楽天の商品情報からゲームタイトル名（未入力時のみ）・ジャンル（未選択時のみ）・
- * テーマ・プラットフォームを分かる範囲で自動セットする（applyRakutenItem参照。ジャンル/テーマは
- * 楽天のカテゴリ名とマスタ名の一致で照合、機種はPLATFORM_OPTIONSと一致したもののみ）。
+ *
+ * フォームの先頭は楽天ブックス商品ページURL欄（2026-09-22、フェーズ5のユーザー要望）。URLを貼って
+ * 「取得」すると、商品情報からゲームタイトル名（未入力時のみ）・ジャンル（未選択時のみ）・テーマ・
+ * プラットフォーム・パッケージ画像URLを分かる範囲で自動セットする（`/api/admin/games/rakuten-item`、
+ * applyRakutenItem参照。ジャンル/テーマは楽天のカテゴリ名とマスタ名の一致で照合、機種は
+ * PLATFORM_OPTIONSと一致したもののみ）。URLが分からないときは、パッケージ画像欄の楽天ブックス
+ * タイトル検索（フェーズ4.5ステップ8）→候補選択でも同じ自動セットができる。楽天に無いタイトル向けに
+ * パッケージ画像URLの直接入力も残している。
+ * テーマ・プラットフォームは候補が多い（テーマ50件超・機種18件）ため、複数選択プルダウン＋
+ * 選択済みチップの表示にしてフォームをコンパクトに保つ。
  *
  * `initial` を渡すと同じフォームが編集モードになる（ゲームタイトル詳細ページの管理者向け
  * 「ゲームタイトル情報を編集する」ボタンから。ページ ゲームタイトル 詳細 仕様書 §3.3・第7章の暫定版。
@@ -26,16 +28,37 @@ import { db, auth } from '@/lib/firebase';
 import { Modal } from '@/components/ui/Modal';
 import { Field, Input, Textarea } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
-import { SelectMenu } from '@/components/ui/DropdownMenu';
+import { MultiSelectMenu, SelectMenu } from '@/components/ui/DropdownMenu';
 import { useToast } from '@/components/ui/Toast';
 import { CheckIcon, SearchIcon } from '@/components/ui/icons';
 import type { GameOption } from '@/components/playlists/GameSelectModal';
 import type { RakutenGameItem, RakutenGameSearchResult, RakutenGenreInfo } from '@/lib/rakuten';
 import { normalizeRakutenBooksItemUrl, normalizeRakutenGameTitle, toMasterThemeName } from '@/lib/rakuten-shared';
 
-// プレミテの対象機種（管理_AI運営者 コンテンツ収集機能仕様書 §3参照）＋テストデータで
-// 実績のあるSteamを加えた固定候補。自由入力ではなく手入力表記のブレを防ぐ
-const PLATFORM_OPTIONS = ['Nintendo Switch', 'Nintendo Switch 2', 'PS5', 'PS4', 'Steam'];
+// 楽天ブックスのゲーム機種一覧（表記も楽天の`hardware`値に合わせ、商品情報からの自動セットが
+// そのまま照合できるようにする）＋テストデータで実績のあるSteam。メーカー別に並べて探しやすくする。
+// 自由入力ではなく固定候補にして手入力表記のブレを防ぐ（2026-09-22、5機種から拡充）
+const PLATFORM_OPTIONS = [
+  'Nintendo Switch',
+  'Nintendo Switch 2',
+  'Wii U',
+  'Wii',
+  'ニンテンドー3DS',
+  'ニンテンドーDS',
+  'PS5',
+  'PS4',
+  'PS3',
+  'PS2',
+  'PS Vita',
+  'PSP',
+  'Xbox Series X',
+  'Xbox One',
+  'Xbox 360',
+  'Steam',
+  'おもちゃ',
+  'その他',
+];
+const PLATFORM_SELECT_OPTIONS = PLATFORM_OPTIONS.map((p) => ({ value: p, label: p }));
 
 interface MasterOption {
   id: string;
@@ -66,6 +89,15 @@ interface GameCreateModalProps {
   onUpdated?: () => void;
 }
 
+// ジャンル・テーマの候補順: 五十音順だが「その他」だけは受け皿として末尾に置く
+// （五十音順のままだと一覧の途中に紛れて探しにくい。2026-09-22ユーザー指摘）
+function compareMasterOption(a: MasterOption, b: MasterOption): number {
+  const aOther = a.name === 'その他';
+  const bOther = b.name === 'その他';
+  if (aOther !== bOther) return aOther ? 1 : -1;
+  return a.name.localeCompare(b.name, 'ja');
+}
+
 async function getIdToken(): Promise<string> {
   if (!auth.currentUser) throw new Error('not signed in');
   return auth.currentUser.getIdToken();
@@ -89,20 +121,19 @@ export function GameCreateModal({ open, onOpenChange, initial, onCreated, onUpda
   const [isAiGeneratedDescription, setIsAiGeneratedDescription] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // パッケージ画像: 楽天ブックス検索（デフォルト）⇔ URL手入力
-  const [imageMode, setImageMode] = useState<'search' | 'manual'>('search');
+  // 楽天ブックス商品ページURLからの取得状態（フォーム先頭の欄）
+  const [rakutenItemFetching, setRakutenItemFetching] = useState(false);
+  const [rakutenItemError, setRakutenItemError] = useState<string | null>(null);
+  // 商品ページURLの取得、またはタイトル検索での候補選択の結果（プレビュー表示用）
+  const [selectedRakuten, setSelectedRakuten] = useState<{ title: string; imageUrl: string } | null>(null);
+
+  // パッケージ画像欄: 楽天ブックスのタイトル検索
   const [rakutenQuery, setRakutenQuery] = useState('');
   const [rakutenQueryTouched, setRakutenQueryTouched] = useState(false);
   const [rakutenSearching, setRakutenSearching] = useState(false);
   const [rakutenSearched, setRakutenSearched] = useState(false);
   const [rakutenError, setRakutenError] = useState<string | null>(null);
   const [rakutenResults, setRakutenResults] = useState<RakutenGameSearchResult[]>([]);
-  // 検索モードでの候補選択、またはURL手入力モードでの商品ページURL取得の結果（プレビュー表示用）
-  const [selectedRakuten, setSelectedRakuten] = useState<{ title: string; imageUrl: string } | null>(null);
-
-  // URL手入力モード: 楽天ブックス商品ページURLからの取得状態
-  const [rakutenItemFetching, setRakutenItemFetching] = useState(false);
-  const [rakutenItemError, setRakutenItemError] = useState<string | null>(null);
 
   // 検索キーワード未編集の間は、ゲームタイトル名の入力にそのまま追従させる（別々に入力させるより
   // 「タイトルを打てば検索候補も揃っている」体験のほうが手数が少ないため）。wasOpenと同じ
@@ -115,7 +146,7 @@ export function GameCreateModal({ open, onOpenChange, initial, onCreated, onUpda
 
   // モーダルを開くたびにフォームをリセットする（TagEditModalと同じ
   // 「propが変わったらstateを調整する」パターン。effect内のsetStateより1テンポ早い）。
-  // 編集モードでは initial の値で初期化し、既に画像/楽天URLがあるときは現在値が見えるURL手入力モードで開く
+  // 編集モードでは initial の値で初期化する（楽天URL・画像URLも各欄にそのまま見える）
   const [wasOpen, setWasOpen] = useState(open);
   if (open !== wasOpen) {
     setWasOpen(open);
@@ -129,7 +160,6 @@ export function GameCreateModal({ open, onOpenChange, initial, onCreated, onUpda
       setRakutenUrl(initial?.rakutenUrl ?? '');
       setDescription(initial?.description ?? '');
       setIsAiGeneratedDescription(initial?.isAiGeneratedDescription ?? false);
-      setImageMode(initial?.packageImageUrl || initial?.rakutenUrl ? 'manual' : 'search');
       setRakutenQuery(initial?.title ?? '');
       setPrevTitleForQuery(initial?.title ?? '');
       setRakutenQueryTouched(false);
@@ -147,16 +177,8 @@ export function GameCreateModal({ open, onOpenChange, initial, onCreated, onUpda
     if (!open || genres.length > 0) return;
     Promise.all([getDocs(collection(db, 'genres')), getDocs(collection(db, 'themes'))])
       .then(([genresSnap, themesSnap]) => {
-        setGenres(
-          genresSnap.docs
-            .map((d) => ({ id: d.id, name: (d.data().name as string) ?? '' }))
-            .sort((a, b) => a.name.localeCompare(b.name, 'ja')),
-        );
-        setThemes(
-          themesSnap.docs
-            .map((d) => ({ id: d.id, name: (d.data().name as string) ?? '' }))
-            .sort((a, b) => a.name.localeCompare(b.name, 'ja')),
-        );
+        setGenres(genresSnap.docs.map((d) => ({ id: d.id, name: (d.data().name as string) ?? '' })).sort(compareMasterOption));
+        setThemes(themesSnap.docs.map((d) => ({ id: d.id, name: (d.data().name as string) ?? '' })).sort(compareMasterOption));
       })
       .catch((e) => console.error('genres/themes の読み込みに失敗', e));
   }, [open, genres.length]);
@@ -193,7 +215,7 @@ export function GameCreateModal({ open, onOpenChange, initial, onCreated, onUpda
       });
       const body = await res.json();
       if (!res.ok) {
-        setRakutenError('検索に失敗しました。時間をおいて再試行するか、URLを直接入力してください');
+        setRakutenError('検索に失敗しました。時間をおいて再試行するか、楽天ブックス商品ページURLを貼って取得してください');
         return;
       }
       setRakutenResults(body.results ?? []);
@@ -205,20 +227,22 @@ export function GameCreateModal({ open, onOpenChange, initial, onCreated, onUpda
     }
   }
 
-  // 楽天の商品情報をフォームに反映する（検索モードの候補選択・URL手入力モードの取得で共通）。
+  // 楽天の商品情報をフォームに反映する（商品ページURLの取得・タイトル検索の候補選択で共通）。
   // 管理者が既に入力・選択した値は上書きしない（タイトル・ジャンルは空のときだけ、テーマ・機種は追加のみ）
   function applyRakutenItem(result: RakutenGameSearchResult, genre: RakutenGenreInfo | null) {
     setSelectedRakuten({ title: result.title, imageUrl: result.imageUrl });
     setPackageImageUrl(result.imageUrl);
     setRakutenUrl(result.itemUrl);
+    setRakutenItemError(null);
 
     const normalizedTitle = normalizeRakutenGameTitle(result.title);
     if (!title.trim() && normalizedTitle) {
       setTitle(normalizedTitle);
       setTitleError(null);
     }
-    if (PLATFORM_OPTIONS.includes(result.hardware)) {
-      setPlatforms((prev) => new Set(prev).add(result.hardware));
+    const hardware = result.hardware.trim();
+    if (PLATFORM_OPTIONS.includes(hardware)) {
+      setPlatforms((prev) => new Set(prev).add(hardware));
     }
     applyRakutenGenre(genre);
   }
@@ -250,13 +274,14 @@ export function GameCreateModal({ open, onOpenChange, initial, onCreated, onUpda
     }
   }
 
+  // プレビューの「変更する」: 楽天との紐付け（商品ページURL・画像URL）を外して選び直せるようにする
   function handleClearRakutenSelection() {
     setSelectedRakuten(null);
     setPackageImageUrl('');
     setRakutenUrl('');
   }
 
-  // URL手入力モード: 貼り付けた楽天ブックス商品ページURLから商品情報を取得してフォームに反映する
+  // 貼り付けた楽天ブックス商品ページURLから商品情報を取得してフォームに反映する
   async function handleFetchRakutenItem() {
     const normalized = normalizeRakutenBooksItemUrl(rakutenUrl);
     if (!normalized) return;
@@ -338,11 +363,62 @@ export function GameCreateModal({ open, onOpenChange, initial, onCreated, onUpda
   }
 
   const genreOptions = [{ value: '', label: '未設定' }, ...genres.map((g) => ({ value: g.id, label: g.name }))];
+  const themeOptions = themes.map((t) => ({ value: t.id, label: t.name }));
+  const themeNameById = new Map(themes.map((t) => [t.id, t.name]));
   const rakutenItemValid = normalizeRakutenBooksItemUrl(rakutenUrl) !== null;
 
   return (
     <Modal open={open} onOpenChange={onOpenChange} title={isEdit ? 'ゲームタイトルを編集する' : 'ゲームタイトルを登録する'} maxWidthClassName="max-w-[560px]">
       <div className="flex flex-col gap-4">
+        <Field
+          label="楽天ブックス商品ページURL"
+          error={rakutenItemError}
+          hint={
+            rakutenUrl.trim() && !rakutenItemValid
+              ? 'https://books.rakuten.co.jp/rb/…/ 形式のURLを入力してください'
+              : 'URLを貼って「取得」すると、タイトル名・ジャンル・テーマ・機種・パッケージ画像を分かる範囲で自動セットします'
+          }
+        >
+          {(props) => (
+            <div className="flex gap-2">
+              <Input
+                {...props}
+                type="url"
+                placeholder="https://books.rakuten.co.jp/rb/…/"
+                value={rakutenUrl}
+                onChange={(e) => {
+                  setRakutenUrl(e.target.value);
+                  setRakutenItemError(null);
+                  // URLを編集したら以前の取得結果のプレビューは古くなるので消す（画像URL自体は残す）
+                  setSelectedRakuten(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && rakutenItemValid && !rakutenItemFetching) {
+                    e.preventDefault();
+                    handleFetchRakutenItem();
+                  }
+                }}
+                disabled={submitting}
+                autoFocus
+              />
+              <Button variant="secondary" onClick={handleFetchRakutenItem} loading={rakutenItemFetching} disabled={submitting || !rakutenItemValid}>
+                取得
+              </Button>
+            </div>
+          )}
+        </Field>
+
+        {selectedRakuten && (
+          <RakutenItemPreview
+            item={selectedRakuten}
+            action={
+              <Button variant="ghost" size="sm" onClick={handleClearRakutenSelection} disabled={submitting}>
+                変更する
+              </Button>
+            }
+          />
+        )}
+
         <Field label="ゲームタイトル名" error={titleError}>
           {(props) => (
             <Input
@@ -354,7 +430,6 @@ export function GameCreateModal({ open, onOpenChange, initial, onCreated, onUpda
               }}
               maxLength={100}
               disabled={submitting}
-              autoFocus
             />
           )}
         </Field>
@@ -369,158 +444,87 @@ export function GameCreateModal({ open, onOpenChange, initial, onCreated, onUpda
           />
         </Field>
 
-        {themes.length > 0 && (
-          <div className="flex flex-col gap-2">
-            <p className="text-md text-text-tertiary">テーマ</p>
-            <div className="flex flex-wrap gap-2">
-              {themes.map((t) => (
-                <ToggleChip key={t.id} label={t.name} selected={themeIds.has(t.id)} onClick={() => toggleTheme(t.id)} disabled={submitting} />
-              ))}
-            </div>
-          </div>
-        )}
+        <MultiSelectField
+          label="テーマ"
+          placeholder="テーマを選択"
+          filterPlaceholder="テーマ名で絞り込み"
+          options={themeOptions}
+          values={themeIds}
+          onToggle={toggleTheme}
+          labelOf={(id) => themeNameById.get(id) ?? id}
+          disabled={submitting || themes.length === 0}
+        />
 
-        <div className="flex flex-col gap-2">
-          <p className="text-md text-text-tertiary">プラットフォーム</p>
-          <div className="flex flex-wrap gap-2">
-            {PLATFORM_OPTIONS.map((p) => (
-              <ToggleChip key={p} label={p} selected={platforms.has(p)} onClick={() => togglePlatform(p)} disabled={submitting} />
-            ))}
-          </div>
-        </div>
+        <MultiSelectField
+          label="プラットフォーム"
+          placeholder="プラットフォームを選択"
+          filterPlaceholder="機種名で絞り込み"
+          options={PLATFORM_SELECT_OPTIONS}
+          values={platforms}
+          onToggle={togglePlatform}
+          labelOf={(p) => p}
+          disabled={submitting}
+        />
 
         <div className="flex flex-col gap-2">
           <p className="text-md text-text-tertiary">パッケージ画像（任意）</p>
-          {imageMode === 'search' ? (
-            <>
-              <div className="flex gap-2">
-                <Input
-                  type="text"
-                  placeholder="楽天ブックスで検索するタイトル名"
-                  aria-label="楽天ブックスで検索するタイトル名"
-                  value={rakutenQuery}
-                  onChange={(e) => {
-                    setRakutenQuery(e.target.value);
-                    setRakutenQueryTouched(true);
-                  }}
-                  disabled={submitting}
-                />
-                <Button
-                  variant="secondary"
-                  onClick={handleRakutenSearch}
-                  loading={rakutenSearching}
-                  disabled={submitting || !rakutenQuery.trim()}
-                >
-                  <SearchIcon size={14} />
-                  検索
-                </Button>
-              </div>
+          <div className="flex gap-2">
+            <Input
+              type="text"
+              placeholder="楽天ブックスで検索するタイトル名"
+              aria-label="楽天ブックスで検索するタイトル名"
+              value={rakutenQuery}
+              onChange={(e) => {
+                setRakutenQuery(e.target.value);
+                setRakutenQueryTouched(true);
+              }}
+              disabled={submitting}
+            />
+            <Button variant="secondary" onClick={handleRakutenSearch} loading={rakutenSearching} disabled={submitting || !rakutenQuery.trim()}>
+              <SearchIcon size={14} />
+              検索
+            </Button>
+          </div>
 
-              {rakutenError && (
-                <p role="alert" className="text-md text-input-error">
-                  {rakutenError}
-                </p>
-              )}
-
-              {selectedRakuten ? (
-                <RakutenItemPreview
-                  item={selectedRakuten}
-                  action={
-                    <Button variant="ghost" size="sm" onClick={handleClearRakutenSelection} disabled={submitting}>
-                      変更する
-                    </Button>
-                  }
-                />
-              ) : (
-                rakutenResults.length > 0 && (
-                  <div className="flex max-h-[240px] flex-col gap-1 overflow-y-auto rounded-[8px] border border-border-card p-1">
-                    {rakutenResults.map((r, i) => (
-                      <button
-                        key={i}
-                        type="button"
-                        onClick={() => handleSelectRakuten(r)}
-                        className="flex items-center gap-3 rounded-[6px] p-2 text-left hover:bg-bg-input"
-                      >
-                        {r.imageUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={r.imageUrl} alt="" className="h-[64px] w-[48px] shrink-0 rounded-[4px] object-cover" />
-                        ) : (
-                          <div className="h-[64px] w-[48px] shrink-0 rounded-[4px] bg-bg-btn" />
-                        )}
-                        <div className="min-w-0 flex-1">
-                          <p className="line-clamp-2 text-sm text-text-primary">{r.title}</p>
-                          <p className="text-xs text-text-tertiary">{[r.hardware, r.salesDate].filter(Boolean).join(' / ')}</p>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )
-              )}
-
-              {rakutenSearched && !rakutenSearching && !rakutenError && !selectedRakuten && rakutenResults.length === 0 && (
-                <p className="text-md text-text-tertiary">見つかりませんでした。URLを直接入力してください</p>
-              )}
-
-              <Button variant="ghost" size="sm" className="self-start" onClick={() => setImageMode('manual')} disabled={submitting}>
-                URLを直接入力する
-              </Button>
-            </>
-          ) : (
-            <>
-              <Field
-                label="楽天ブックス商品ページURL"
-                error={rakutenItemError}
-                hint={
-                  rakutenUrl.trim() && !rakutenItemValid
-                    ? 'https://books.rakuten.co.jp/rb/…/ 形式のURLを入力してください'
-                    : 'URLを貼って「取得」すると、パッケージ画像のほかタイトル名・ジャンル・テーマ・機種も分かる範囲で自動セットします'
-                }
-              >
-                {(props) => (
-                  <div className="flex gap-2">
-                    <Input
-                      {...props}
-                      type="url"
-                      placeholder="https://books.rakuten.co.jp/rb/…/"
-                      value={rakutenUrl}
-                      onChange={(e) => {
-                        setRakutenUrl(e.target.value);
-                        setRakutenItemError(null);
-                        // URLを編集したら以前の取得結果のプレビューは古くなるので消す（画像URL自体は残す）
-                        setSelectedRakuten(null);
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && rakutenItemValid && !rakutenItemFetching) {
-                          e.preventDefault();
-                          handleFetchRakutenItem();
-                        }
-                      }}
-                      disabled={submitting}
-                    />
-                    <Button
-                      variant="secondary"
-                      onClick={handleFetchRakutenItem}
-                      loading={rakutenItemFetching}
-                      disabled={submitting || !rakutenItemValid}
-                    >
-                      取得
-                    </Button>
-                  </div>
-                )}
-              </Field>
-
-              {selectedRakuten && <RakutenItemPreview item={selectedRakuten} />}
-
-              <Field label="パッケージ画像URL" hint="楽天ブックスに無いタイトルは画像URLを直接入力できます">
-                {(props) => (
-                  <Input {...props} type="url" value={packageImageUrl} onChange={(e) => setPackageImageUrl(e.target.value)} disabled={submitting} />
-                )}
-              </Field>
-              <Button variant="ghost" size="sm" className="self-start" onClick={() => setImageMode('search')} disabled={submitting}>
-                楽天ブックスで検索する
-              </Button>
-            </>
+          {rakutenError && (
+            <p role="alert" className="text-md text-input-error">
+              {rakutenError}
+            </p>
           )}
+
+          {rakutenResults.length > 0 && (
+            <div className="flex max-h-[240px] flex-col gap-1 overflow-y-auto rounded-[8px] border border-border-card p-1">
+              {rakutenResults.map((r, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => handleSelectRakuten(r)}
+                  className="flex items-center gap-3 rounded-[6px] p-2 text-left hover:bg-bg-input"
+                >
+                  {r.imageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={r.imageUrl} alt="" className="h-[64px] w-[48px] shrink-0 rounded-[4px] object-cover" />
+                  ) : (
+                    <div className="h-[64px] w-[48px] shrink-0 rounded-[4px] bg-bg-btn" />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="line-clamp-2 text-sm text-text-primary">{r.title}</p>
+                    <p className="text-xs text-text-tertiary">{[r.hardware, r.salesDate].filter(Boolean).join(' / ')}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {rakutenSearched && !rakutenSearching && !rakutenError && !selectedRakuten && rakutenResults.length === 0 && (
+            <p className="text-md text-text-tertiary">見つかりませんでした。楽天ブックス商品ページURLを貼るか、パッケージ画像URLを直接入力してください</p>
+          )}
+
+          <Field label="パッケージ画像URL" hint="楽天ブックスに無いタイトルは画像URLを直接入力できます">
+            {(props) => (
+              <Input {...props} type="url" value={packageImageUrl} onChange={(e) => setPackageImageUrl(e.target.value)} disabled={submitting} />
+            )}
+          </Field>
         </div>
 
         <Field label="説明文（任意）">
@@ -550,8 +554,8 @@ export function GameCreateModal({ open, onOpenChange, initial, onCreated, onUpda
   );
 }
 
-// 楽天ブックスから取得した商品のプレビュー（サムネイル＋商品名）。検索モードの選択結果と
-// URL手入力モードの取得結果で共用。actionは右端に置く操作ボタン（検索モードの「変更する」）
+// 楽天ブックスから取得した商品のプレビュー（サムネイル＋商品名）。商品ページURLの取得結果と
+// タイトル検索の候補選択結果で共用。actionは右端に置く操作ボタン（「変更する」）
 function RakutenItemPreview({ item, action }: { item: { title: string; imageUrl: string }; action?: ReactNode }) {
   return (
     <div className="flex items-center gap-3 rounded-[8px] border border-border-card bg-bg-input p-2">
@@ -563,6 +567,50 @@ function RakutenItemPreview({ item, action }: { item: { title: string; imageUrl:
       )}
       <p className="line-clamp-2 flex-1 text-sm text-text-primary">{item.title}</p>
       {action}
+    </div>
+  );
+}
+
+// 複数選択の入力欄（テーマ・プラットフォーム）。候補が多いので一覧はプルダウンに畳み、
+// 選択済みだけをチップで並べる（チップのクリックで解除）
+function MultiSelectField({
+  label,
+  placeholder,
+  filterPlaceholder,
+  options,
+  values,
+  onToggle,
+  labelOf,
+  disabled,
+}: {
+  label: string;
+  placeholder: string;
+  filterPlaceholder?: string;
+  options: Array<{ value: string; label: string }>;
+  values: Set<string>;
+  onToggle: (value: string) => void;
+  labelOf: (value: string) => string;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-md text-text-tertiary">{label}</p>
+      <MultiSelectMenu
+        values={values}
+        onToggle={onToggle}
+        options={options}
+        placeholder={placeholder}
+        filterPlaceholder={filterPlaceholder}
+        aria-label={label}
+        disabled={disabled}
+      />
+      {values.size > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {[...values].map((v) => (
+            <ToggleChip key={v} label={labelOf(v)} selected onClick={() => onToggle(v)} disabled={disabled} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
