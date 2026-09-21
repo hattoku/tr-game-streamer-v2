@@ -39,6 +39,20 @@ if (-not $CronSecretLine) {
 }
 $CronSecret = ($CronSecretLine -split '=', 2)[1]
 
+$RakutenAppIdLine = Get-Content $EnvLocalPath | Where-Object { $_ -match '^RAKUTEN_APPLICATION_ID=' }
+if (-not $RakutenAppIdLine) {
+    Write-Host "ERROR: .env.local に RAKUTEN_APPLICATION_ID が見つかりません" -ForegroundColor Red
+    exit 1
+}
+$RakutenAppId = ($RakutenAppIdLine -split '=', 2)[1]
+
+$RakutenAccessKeyLine = Get-Content $EnvLocalPath | Where-Object { $_ -match '^RAKUTEN_ACCESS_KEY=' }
+if (-not $RakutenAccessKeyLine) {
+    Write-Host "ERROR: .env.local に RAKUTEN_ACCESS_KEY が見つかりません" -ForegroundColor Red
+    exit 1
+}
+$RakutenAccessKey = ($RakutenAccessKeyLine -split '=', 2)[1]
+
 # 1. ビルドとプッシュ
 Write-Host "Building and pushing Docker image..." -ForegroundColor Green
 gcloud builds submit --config cloudbuild.yaml --substitutions "_IMAGE_URL=$ImageUrl,_APP_ENV=$Env" . --project "$ProjectId"
@@ -64,7 +78,7 @@ gcloud run deploy "$ServiceName" `
     --region "$Region" `
     --platform managed `
     --allow-unauthenticated `
-    --update-env-vars "YOUTUBE_API_KEY=$YoutubeApiKey,CRON_SECRET=$CronSecret" `
+    --update-env-vars "YOUTUBE_API_KEY=$YoutubeApiKey,CRON_SECRET=$CronSecret,RAKUTEN_APPLICATION_ID=$RakutenAppId,RAKUTEN_ACCESS_KEY=$RakutenAccessKey" `
     --project "$ProjectId"
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR: Cloud Run deploy failed (exit code $LASTEXITCODE). Aborting deploy." -ForegroundColor Red

@@ -10,3 +10,8 @@ export const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY || '';
 // Cloud Schedulerからの新着動画バッチ呼び出し認証用シークレット（YOUTUBE_API_KEYと同じ方式）。
 // `app/api/admin/refresh-new-videos`がX-Cron-Secretヘッダーとの一致でrequireAdminをスキップする。
 export const CRON_SECRET = process.env.CRON_SECRET || '';
+
+// 楽天ウェブサービス（楽天ブックスAPI）のアプリID・アクセスキー（YOUTUBE_API_KEYと同じ方式）。
+// ゲームタイトル登録時のパッケージ画像検索（フェーズ4.5ステップ8）に利用する。
+export const RAKUTEN_APPLICATION_ID = process.env.RAKUTEN_APPLICATION_ID || '';
+export const RAKUTEN_ACCESS_KEY = process.env.RAKUTEN_ACCESS_KEY || '';

@@ -17,7 +17,9 @@
     "seed:ngwords:prod": "node scripts/seed-ng-words.mjs --target=prod",
     "set-role": "node scripts/set-role.mjs",
     "recount:mylist:stg": "node scripts/recount-mylist.mjs --target=stg",
-    "recount:mylist:prod": "node scripts/recount-mylist.mjs --target=prod"
+    "recount:mylist:prod": "node scripts/recount-mylist.mjs --target=prod",
+    "backfill:package-images:stg": "node scripts/backfill-package-images.mjs --target=stg",
+    "backfill:package-images:prod": "node scripts/backfill-package-images.mjs --target=prod"
   },
   "dependencies": {
     "@opentelemetry/api": "1.9.1",

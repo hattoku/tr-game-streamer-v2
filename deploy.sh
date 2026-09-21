@@ -37,6 +37,18 @@ if [ -z "$CRON_SECRET" ]; then
   exit 1
 fi
 
+RAKUTEN_APPLICATION_ID=$(grep '^RAKUTEN_APPLICATION_ID=' "$SCRIPT_DIR/.env.local" | cut -d '=' -f2-)
+if [ -z "$RAKUTEN_APPLICATION_ID" ]; then
+  echo "ERROR: .env.local に RAKUTEN_APPLICATION_ID が見つかりません"
+  exit 1
+fi
+
+RAKUTEN_ACCESS_KEY=$(grep '^RAKUTEN_ACCESS_KEY=' "$SCRIPT_DIR/.env.local" | cut -d '=' -f2-)
+if [ -z "$RAKUTEN_ACCESS_KEY" ]; then
+  echo "ERROR: .env.local に RAKUTEN_ACCESS_KEY が見つかりません"
+  exit 1
+fi
+
 # 1. ビルドとプッシュ
 echo "Building and pushing Docker image..."
 gcloud builds submit --config cloudbuild.yaml --substitutions "_IMAGE_URL=$IMAGE_URL,_APP_ENV=$ENV" . --project "$PROJECT_ID"
@@ -54,7 +66,7 @@ gcloud run deploy "$SERVICE_NAME" \
   --region "$REGION" \
   --platform managed \
   --allow-unauthenticated \
-  --update-env-vars "YOUTUBE_API_KEY=$YOUTUBE_API_KEY,CRON_SECRET=$CRON_SECRET" \
+  --update-env-vars "YOUTUBE_API_KEY=$YOUTUBE_API_KEY,CRON_SECRET=$CRON_SECRET,RAKUTEN_APPLICATION_ID=$RAKUTEN_APPLICATION_ID,RAKUTEN_ACCESS_KEY=$RAKUTEN_ACCESS_KEY" \
   --project "$PROJECT_ID"
 
 # 4. Firebase Hosting デプロイ (Cloud Run へのリライト設定を反映)
