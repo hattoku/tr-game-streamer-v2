@@ -2,7 +2,8 @@
  * TOPページ マイリストセクションのカード（ページ top 仕様書 §5.4）。
  * マイリストページのカード（components/mylist/MylistCard.tsx）と異なり、ステータス変更・逆順トグル・
  * 削除の操作は持たない一覧専用の簡易カード（§5.4 実装注記）。カード全体がクリック可能なため
- * `/playlists/[id]`への`Link`にする（動画プレーヤーページへの遷移。最後に開いた話数から再生開始）。
+ * `/playlists/[id]`への`Link`にする（詳細ページへの遷移。最後に開いた話数から続きを再生できる状態で開く。
+ * その場での自動再生はしない）。
  */
 import Link from 'next/link';
 import { Card, CardChildArea } from '@/components/ui/Card';

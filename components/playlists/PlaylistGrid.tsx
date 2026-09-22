@@ -12,7 +12,8 @@
  *   ページング・ソートを呼び出し側に委ねられるよう分離したもの
  *   （一覧セクションの共通UIは components/playlists/PlaylistListSection.tsx）。
  * 見た目: 共通 デザイントークン仕様書 v2.0 §6.1（カード・ホバーの浮き上がり）・§6.5（サムネイル: 下部オーバーレイ・
- * 話数「N話」・ホバー時の再生ボタン）。
+ * 話数「N話」）。クリックは詳細ページへの遷移でその場では再生しないため、サムネイルにボタンは重ねず
+ * カード全体の浮き上がり（§6.1）のみでホバーを示す（ゲームタイトルカードと同じ方針）。
  */
 'use client';
 
@@ -23,7 +24,7 @@ import { Card } from '@/components/ui/Card';
 import { CountLabel } from '@/components/ui/Badge';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Tag } from '@/components/ui/Tag';
-import { CommentIcon, InventoryIcon, PlayIcon, StarIcon, UsersIcon } from '@/components/ui/icons';
+import { CommentIcon, InventoryIcon, StarIcon, UsersIcon } from '@/components/ui/icons';
 import { cn } from '@/components/ui/cn';
 import { fetchTagsMap, resolveTags, type ResolvedTag, type TagInfo } from '@/lib/tags';
 
@@ -87,9 +88,9 @@ export function PlaylistCard({
   className?: string;
 }) {
   return (
-    <Link href={`/playlists/${p.id}`} className={cn('group block h-full', className)}>
+    <Link href={`/playlists/${p.id}`} className={cn('block h-full', className)}>
       <Card interactive flush className="flex h-full flex-col">
-        {/* サムネイル（§6.5）: 下部オーバーレイ・話数・ホバー時の再生ボタン */}
+        {/* サムネイル（§6.5）: 下部オーバーレイ・話数。ホバー表現はカード全体の浮き上がり（§6.1）のみ */}
         <div className="relative aspect-video w-full bg-bg-player">
           {p.thumbnailUrl && (
             // absolute化: 通常フローの子だと画像自身の縦横比がaspect-videoコンテナの高さに影響してしまうため
@@ -98,12 +99,6 @@ export function PlaylistCard({
           )}
           <div aria-hidden className="absolute inset-x-0 bottom-0 h-[46%] bg-thumb-overlay" />
           <CountLabel className="absolute bottom-2 right-2">{p.videoCount}話</CountLabel>
-          <span
-            aria-hidden
-            className="absolute left-1/2 top-1/2 flex size-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-gradient-primary text-white opacity-0 shadow-primary transition-opacity duration-[120ms] group-hover:opacity-100"
-          >
-            <PlayIcon size={20} />
-          </span>
         </div>
         <div className="flex flex-1 flex-col gap-2 px-[14px] pb-[14px] pt-3">
           <p className="line-clamp-2 text-lg font-medium leading-snug text-text-primary">{p.title}</p>
