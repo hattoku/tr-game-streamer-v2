@@ -70,10 +70,11 @@ export function MylistCard({ entry, onStatusChange, onReverseToggle, onRemove }:
       {/* 親エリア（§5.2） */}
       <div className="flex gap-3 p-3 md:gap-[18px] md:p-[18px]">
         <Link href={href} className="relative block w-[128px] shrink-0 overflow-hidden rounded-[8px] bg-bg-player md:w-[224px]">
-          <span className="block aspect-video">
+          <span className="relative block aspect-video">
             {p?.thumbnailUrl && (
+              // absolute化: 通常フローの子だと画像自身の縦横比がaspect-videoコンテナの高さに影響してしまうため
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={p.thumbnailUrl} alt="" className="size-full object-cover" loading="lazy" />
+              <img src={p.thumbnailUrl} alt="" className="absolute inset-0 size-full object-cover" loading="lazy" />
             )}
           </span>
           <span aria-hidden className="absolute inset-x-0 bottom-0 h-[46%] bg-thumb-overlay" />
@@ -112,10 +113,11 @@ export function MylistCard({ entry, onStatusChange, onReverseToggle, onRemove }:
           <div className="flex items-center gap-[10px] md:contents">
             <span className="hidden whitespace-nowrap text-sm text-text-muted md:inline">最後に再生</span>
             <div className="flex w-[96px] shrink-0 flex-col md:w-[124px]">
-              <span className="block aspect-video overflow-hidden rounded-t-[6px] bg-bg-player">
+              <span className="relative block aspect-video overflow-hidden rounded-t-[6px] bg-bg-player">
                 {entry.lastPlayed.thumbnailUrl && (
+                  // absolute化: 通常フローの子だと画像自身の縦横比がaspect-videoコンテナの高さに影響してしまうため
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={entry.lastPlayed.thumbnailUrl} alt="" className="size-full object-cover" loading="lazy" />
+                  <img src={entry.lastPlayed.thumbnailUrl} alt="" className="absolute inset-0 size-full object-cover" loading="lazy" />
                 )}
               </span>
               <ProgressBar value={entry.lastPlayed.percent} size="md" className="rounded-t-none rounded-b-[6px]" label="前回の再生位置" />

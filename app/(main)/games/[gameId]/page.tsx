@@ -124,10 +124,11 @@ export default function GameDetailPage() {
 
   const packageArea = (
     <div className="flex w-full flex-col gap-3 sm:w-[200px] sm:shrink-0">
-      <div className="aspect-[3/4] w-full overflow-hidden rounded-[10px] bg-bg-btn">
+      <div className="relative aspect-[3/4] w-full overflow-hidden rounded-[10px] bg-bg-btn">
         {game.packageImageUrl ? (
+          // absolute化: 通常フローの子だと画像自身の縦横比がaspectコンテナの高さに影響してしまうため
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={game.packageImageUrl} alt="" className="size-full object-cover" />
+          <img src={game.packageImageUrl} alt="" className="absolute inset-0 size-full object-cover" />
         ) : (
           <div className="flex size-full items-center justify-center text-text-muted">
             <InventoryIcon size={40} />

@@ -92,8 +92,9 @@ export function PlaylistCard({
         {/* サムネイル（§6.5）: 下部オーバーレイ・話数・ホバー時の再生ボタン */}
         <div className="relative aspect-video w-full bg-bg-player">
           {p.thumbnailUrl && (
+            // absolute化: 通常フローの子だと画像自身の縦横比がaspect-videoコンテナの高さに影響してしまうため
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={p.thumbnailUrl} alt="" className="size-full object-cover" loading="lazy" />
+            <img src={p.thumbnailUrl} alt="" className="absolute inset-0 size-full object-cover" loading="lazy" />
           )}
           <div aria-hidden className="absolute inset-x-0 bottom-0 h-[46%] bg-thumb-overlay" />
           <CountLabel className="absolute bottom-2 right-2">{p.videoCount}話</CountLabel>

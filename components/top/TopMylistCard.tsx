@@ -20,8 +20,9 @@ export function TopMylistCard({ entry, className }: { entry: MylistEntry; classN
       <Card interactive flush className="flex h-full flex-col">
         <div className="relative aspect-video w-full bg-bg-player">
           {p?.thumbnailUrl && (
+            // absolute化: 通常フローの子だと画像自身の縦横比がaspect-videoコンテナの高さに影響してしまうため
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={p.thumbnailUrl} alt="" className="size-full object-cover" loading="lazy" />
+            <img src={p.thumbnailUrl} alt="" className="absolute inset-0 size-full object-cover" loading="lazy" />
           )}
           <div aria-hidden className="absolute inset-x-0 bottom-0 h-[46%] bg-thumb-overlay" />
           {p && <CountLabel className="absolute bottom-2 right-2">{p.videoCount}話</CountLabel>}
@@ -39,10 +40,11 @@ export function TopMylistCard({ entry, className }: { entry: MylistEntry; classN
         {entry.lastPlayed ? (
           <CardChildArea className="flex items-center gap-[10px] px-[14px]">
             <div className="flex w-[64px] shrink-0 flex-col">
-              <span className="block aspect-video overflow-hidden rounded-t-[6px] bg-bg-player">
+              <span className="relative block aspect-video overflow-hidden rounded-t-[6px] bg-bg-player">
                 {entry.lastPlayed.thumbnailUrl && (
+                  // absolute化: 通常フローの子だと画像自身の縦横比がaspect-videoコンテナの高さに影響してしまうため
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={entry.lastPlayed.thumbnailUrl} alt="" className="size-full object-cover" loading="lazy" />
+                  <img src={entry.lastPlayed.thumbnailUrl} alt="" className="absolute inset-0 size-full object-cover" loading="lazy" />
                 )}
               </span>
               <ProgressBar value={entry.lastPlayed.percent} size="md" className="rounded-t-none rounded-b-[6px]" label="前回の再生位置" />

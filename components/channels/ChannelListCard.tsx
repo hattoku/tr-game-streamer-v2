@@ -60,10 +60,11 @@ export function ChannelListCard({ channel }: { channel: ChannelCardData }) {
                 href={`/playlists/${encodeURIComponent(p.id)}`}
                 className="flex items-center gap-3 rounded-[8px] px-1 py-1 hover:bg-bg-hover"
               >
-                <div className="aspect-video w-[64px] shrink-0 overflow-hidden rounded-[6px] bg-bg-player">
+                <div className="relative aspect-video w-[64px] shrink-0 overflow-hidden rounded-[6px] bg-bg-player">
                   {p.thumbnailUrl && (
+                    // absolute化: 通常フローの子だと画像自身の縦横比がaspect-videoコンテナの高さに影響してしまうため
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={p.thumbnailUrl} alt="" className="size-full object-cover" loading="lazy" />
+                    <img src={p.thumbnailUrl} alt="" className="absolute inset-0 size-full object-cover" loading="lazy" />
                   )}
                 </div>
                 <span className="min-w-0 flex-1 truncate text-base text-text-secondary">{p.title}</span>

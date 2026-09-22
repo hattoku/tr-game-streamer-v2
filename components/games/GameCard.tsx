@@ -29,10 +29,11 @@ export function GameCard({ game, highlightTagIds }: { game: GameCardData; highli
   return (
     <Link href={`/games/${game.id}`} className="group block h-full">
       <Card interactive className="flex h-full gap-3">
-        <div className="aspect-[3/4] w-[88px] shrink-0 overflow-hidden rounded-[8px] bg-bg-btn">
+        <div className="relative aspect-[3/4] w-[88px] shrink-0 overflow-hidden rounded-[8px] bg-bg-btn">
           {game.packageImageUrl ? (
+            // absolute化: 通常フローの子だと画像自身の縦横比がaspectコンテナの高さに影響してしまうため
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={game.packageImageUrl} alt="" className="size-full object-cover" loading="lazy" />
+            <img src={game.packageImageUrl} alt="" className="absolute inset-0 size-full object-cover" loading="lazy" />
           ) : (
             <div className="flex size-full items-center justify-center text-text-muted">
               <InventoryIcon size={28} />

@@ -19,10 +19,11 @@ interface PlaylistSummaryProps {
 export function PlaylistSummary({ title, thumbnailUrl, channelName, channelIconUrl, videoCount, gameName }: PlaylistSummaryProps) {
   return (
     <div className="flex flex-col gap-3 md:flex-row md:gap-4">
-      <div className="aspect-video w-full shrink-0 overflow-hidden rounded-[8px] bg-bg-btn md:w-[200px]">
+      <div className="relative aspect-video w-full shrink-0 overflow-hidden rounded-[8px] bg-bg-btn md:w-[200px]">
         {thumbnailUrl && (
+          // absolute化: 通常フローの子だと画像自身の縦横比がaspect-videoコンテナの高さに影響してしまうため
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={thumbnailUrl} alt="" className="size-full object-cover" />
+          <img src={thumbnailUrl} alt="" className="absolute inset-0 size-full object-cover" />
         )}
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-2">

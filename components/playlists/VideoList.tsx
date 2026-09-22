@@ -89,8 +89,9 @@ export function VideoList({ videos, currentIndex, progressByVideo, reverseOrder,
                 <span className="relative w-[120px] shrink-0">
                   <span className="relative block aspect-video overflow-hidden rounded-[4px] bg-bg-player">
                     {video.thumbnailUrl && (
+                      // absolute化: 通常フローの子だと画像自身の縦横比がaspect-videoコンテナの高さに影響してしまうため
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={video.thumbnailUrl} alt="" className="size-full object-cover" loading="lazy" />
+                      <img src={video.thumbnailUrl} alt="" className="absolute inset-0 size-full object-cover" loading="lazy" />
                     )}
                     {isCurrent && (
                       <>

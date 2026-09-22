@@ -32,10 +32,11 @@ export function HistoryCard({ entry, onDelete }: HistoryCardProps) {
     <Card flush className="relative">
       <Link href={href} className="flex gap-3 p-3 pr-10 md:gap-4 md:p-4">
         <div className="flex w-[128px] shrink-0 flex-col md:w-[224px]">
-          <span className="block aspect-video overflow-hidden rounded-t-[8px] bg-bg-player">
+          <span className="relative block aspect-video overflow-hidden rounded-t-[8px] bg-bg-player">
             {entry.video?.thumbnailUrl && (
+              // absolute化: 通常フローの子だと画像自身の縦横比がaspect-videoコンテナの高さに影響してしまうため
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={entry.video.thumbnailUrl} alt="" className="size-full object-cover" loading="lazy" />
+              <img src={entry.video.thumbnailUrl} alt="" className="absolute inset-0 size-full object-cover" loading="lazy" />
             )}
           </span>
           <ProgressBar value={entry.progressPercent} size="md" className="rounded-t-none rounded-b-[8px]" label="視聴進捗" />
