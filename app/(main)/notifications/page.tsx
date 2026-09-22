@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { collection, doc, getDocs, orderBy, query, updateDoc, where, writeBatch } from 'firebase/firestore';
-import { auth, db } from '@/lib/firebase';
+import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/Button';
 import { Card, SectionHeading } from '@/components/ui/Card';
@@ -24,8 +24,8 @@ import { cn } from '@/components/ui/cn';
 // - カード: 未読ドット・種別ラベル・本文・日時（相対表示、title に絶対時刻）。クリックで個別既読＋遷移（§5.4）
 // - ページネーション 20件（§5.5）。クライアント側で分割（通知は本人分のみで件数が小さい）
 // - 空状態2種（§5.7）。未ログインは /login へ（§5.1）
-// - 管理者向け「新着動画を再取得」は本来の管理画面ができるまでの暫定で、ページ下部の「管理者用」カードに隔離
-//   （app/api/admin/refresh-new-videos/route.ts）
+// - 管理者向け「新着動画を再取得」はフェーズ6ステップ3で管理画面ダッシュボード（/admin）へ移設した
+//   （app/api/admin/refresh-new-videos/route.ts。旧・ページ下部の「管理者用（暫定）」カードは撤去）
 // 見送り: 通知ドロップダウン（§4.2）、FCM プッシュ（§6）、90日保持バッチ（§8）
 
 type NotificationType = 'series_new_episode' | 'notice' | 'review_result' | 'inquiry_reply';
@@ -72,7 +72,7 @@ function formatAbsolute(ms: number): string {
 }
 
 export default function NotificationsPage() {
-  const { user, role, loading } = useAuth();
+  const { user, loading } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
 
@@ -80,11 +80,6 @@ export default function NotificationsPage() {
   const [filter, setFilter] = useState<Filter>('all');
   const [page, setPage] = useState(1);
   const [marking, setMarking] = useState(false);
-
-  const [refreshBusy, setRefreshBusy] = useState(false);
-  const [refreshResult, setRefreshResult] = useState<string | null>(null);
-
-  const isAdmin = role === 'owner' || role === 'operator';
 
   useEffect(() => {
     if (!loading && !user) router.replace('/login');
@@ -179,28 +174,6 @@ export default function NotificationsPage() {
     }
   }
 
-  async function handleRefresh() {
-    setRefreshBusy(true);
-    setRefreshResult(null);
-    try {
-      const idToken = await auth.currentUser?.getIdToken();
-      const res = await fetch('/api/admin/refresh-new-videos', { method: 'POST', headers: { Authorization: `Bearer ${idToken}` } });
-      const body = await res.json();
-      if (!res.ok) {
-        setRefreshResult('再取得に失敗しました');
-        return;
-      }
-      setRefreshResult(
-        `確認済み ${body.playlistsChecked} 件中 ${body.playlistsWithNewVideos} 件に新着（動画 ${body.totalNewVideos} 本、通知 ${body.notificationsCreated} 件生成）`,
-      );
-      if (user) await load(user.uid);
-    } catch {
-      setRefreshResult('再取得に失敗しました');
-    } finally {
-      setRefreshBusy(false);
-    }
-  }
-
   if (loading || !user || items === null) {
     return <NotificationsSkeleton />;
   }
@@ -277,22 +250,6 @@ export default function NotificationsPage() {
             </nav>
           )}
         </>
-      )}
-
-      {isAdmin && (
-        // 管理画面（フェーズ3以降）ができるまでの暫定。目立たないよう下部に隔離
-        <Card className="mt-6 flex flex-col gap-3 border-dashed">
-          <p className="text-md font-medium text-text-muted">管理者用（暫定）</p>
-          <p className="text-base text-text-secondary">
-            マイリスト登録のある公開再生リストを YouTube から再取得し、新着動画があれば登録ユーザーに通知を生成します。
-          </p>
-          <div className="flex flex-wrap items-center gap-3">
-            <Button variant="secondary" onClick={handleRefresh} loading={refreshBusy}>
-              新着動画を再取得
-            </Button>
-            {refreshResult && <span className="text-md text-text-muted">{refreshResult}</span>}
-          </div>
-        </Card>
       )}
     </div>
   );

@@ -58,9 +58,11 @@ export function UserAvatar({
 }
 
 export function UserDropdown({ compact = false }: { compact?: boolean }) {
-  const { user, displayName } = useAuth();
+  const { user, displayName, role } = useAuth();
   const router = useRouter();
   if (!user) return null;
+
+  const isAdmin = role === 'owner' || role === 'operator';
 
   const name = displayName ?? user.email?.split('@')[0] ?? 'ユーザー';
 
@@ -101,6 +103,13 @@ export function UserDropdown({ compact = false }: { compact?: boolean }) {
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={() => router.push(`/profile/`)}>プロフィール</DropdownMenuItem>
         <DropdownMenuItem onSelect={() => router.push('/settings')}>設定</DropdownMenuItem>
+        {isAdmin && (
+          <>
+            <DropdownMenuSeparator />
+            {/* 管理者（オーナー・運営者）のみ。フェーズ6ステップ3 管理画面（/admin）への導線 */}
+            <DropdownMenuItem onSelect={() => router.push('/admin')}>管理画面</DropdownMenuItem>
+          </>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={handleSignOut}>ログアウト</DropdownMenuItem>
       </DropdownMenuContent>

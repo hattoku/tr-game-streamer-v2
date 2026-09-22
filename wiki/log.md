@@ -1,5 +1,23 @@
 # 操作ログ
 
+## [2026-09-22] ingest | session: フェーズ6 ステップ3（管理画面の最小版）
+HANDOFF.mdで「どの管理操作を最小版に含めるかから決める」と未確定だったため、着手時にユーザーへ範囲を
+確認（範囲: ダッシュボード集約＋審査ワークフローのうち通報のみ、権限: operator/owner共通）。`/admin`
+（通報未処理件数サマリー＋`/notifications`から移設した新着動画再取得ボタン）、`/admin/workflows`
+（通報一覧、`type`の等価条件のみでクライアント取得）、`/admin/workflows/[workflowId]`（申請内容・
+通報対象レビュー引用・運営メモ・承認/却下確認ダイアログ）を新規実装。STEP1/STEP2の二段階審査・
+AI運営者・ジャンル別アサインは実装せず単一ステップの承認/却下とし、承認時は対象レビューを
+`app/api/admin/workflows/[workflowId]/route.ts`（PATCH）でAdmin SDKにより物理削除しスコア再計算
+（`lib/review-score.ts`の`recalculatePlaylistScore`再利用）。ログイン後リダイレクトのロール別分岐
+（管理者→`/admin`）、UserDropdownへの管理画面導線も追加。dev-orchestrator経由でspec-conformance-reviewer・
+design-consistency-reviewer・phase-finish-checkerを並列レビューし、①仕様書側への実装注記追記漏れ
+（管理_ダッシュボード仕様書v1.5・管理_審査ワークフロー仕様書v8.0に追加、ページ一覧仕様書の古い
+`/admin/login`表記もv1.7で修正）、②ダッシュボードの`text-3xl`がデザイントークン仕様書スケール外
+（`text-score`に修正）、③管理画面ヘッダーナビのモバイル幅折り返し対策漏れ（ヘッダー2段目に移動）の
+3件を対応。stg＋Playwrightでテスト通報の作成→一覧→詳細→承認/却下→レビュー削除とスコア再計算を確認、
+確認用データは削除して復元。
+→ [[2026-09-22-phase6-step3-admin-minimal]]
+
 ## [2026-09-22] ingest | session: フェーズ6 ステップ2（TOP本実装）
 `ページ top 仕様書.md`（v1.3）に基づきTOPページを本実装。未ログイン: ヒーロー→注目→タグピックアップ、
 ログイン済み: マイリスト→注目→新着→タグピックアップ。カルーセル共通部品（`Carousel`・`useCarouselNav`・

@@ -1,7 +1,8 @@
 /**
  * レビューコメント通報モーダル（レビュー投稿機能仕様書「通報機能」節）。
- * フェーズ3計画の合意により、通報は`workflows`（type: "review_report"）へのレコード作成のみ
- * 行い、AI審査・オーナー承認等の処理は完全に先送りする（管理画面フェーズで別途対応）。
+ * `workflows`（type: "review_report"）へのレコード作成のみ行う。承認・却下の処理は
+ * 管理画面（フェーズ6ステップ3 /admin/workflows）で行う。AI運営者による一次審査・
+ * STEP1/STEP2の二段階フローは引き続き先送り（管理_審査ワークフロー仕様書 実装注記参照）。
  */
 'use client';
 
@@ -12,15 +13,7 @@ import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { Textarea } from '@/components/ui/Input';
 import { useToast } from '@/components/ui/Toast';
-
-const REPORT_REASONS = [
-  { value: 'spam', label: 'スパム・宣伝' },
-  { value: 'harassment', label: '荒らし・嫌がらせ' },
-  { value: 'inappropriate', label: '不適切な内容（暴力・差別など）' },
-  { value: 'other', label: 'その他' },
-] as const;
-
-type ReportReason = (typeof REPORT_REASONS)[number]['value'];
+import { REPORT_REASONS, type ReportReason } from '@/lib/report-reasons';
 
 interface ReportModalProps {
   open: boolean;

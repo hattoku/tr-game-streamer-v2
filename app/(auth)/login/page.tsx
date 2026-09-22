@@ -21,7 +21,8 @@ import { SIGNUP_HREF } from '@/components/layout/nav';
 // フェーズ2.5ステップ7でデザイン適用（wiki/sources/2026-09-12-login-and-register-design-plan.md）。
 // - `?mode=signup`（components/layout/nav.ts の SIGNUP_HREF）でアカウント作成モード。/signup 専用ページは
 //   フェーズ3以降のため、当面はこのページ内のモード切替で代替する
-// - ログイン成功後は全員 TOP へ（§5.4 の管理者 /admin 分岐は管理画面ができるまで据え置き）
+// - ログイン成功後、管理者（オーナー・運営者）は /admin へ、一般ユーザーは TOP へ（§5.4。
+//   フェーズ6ステップ3で管理画面ができたため分岐を実装）
 // - ログアウトはヘッダーのユーザードロップダウン（components/layout/UserDropdown.tsx）
 // 据え置き（HANDOFF.md 未解決事項 8・9、および計画書 §2.2）:
 // - 「パスワードをお忘れの方はこちら」（§5.1・§9）: /password-reset 未実装のためリンクを置かない
@@ -85,15 +86,16 @@ export default function LoginPage() {
 }
 
 function LoginPageBody() {
-  const { user, loading } = useAuth();
+  const { user, role, loading } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const mode: Mode = searchParams.get('mode') === 'signup' ? 'signup' : 'login';
 
-  // ログイン済みでこのページに来た場合は TOP へ戻す
+  // ログイン済みでこのページに来た場合は、管理者（オーナー・運営者）はダッシュボードへ、
+  // 一般ユーザーは TOP へ戻す（§5.4）
   useEffect(() => {
-    if (!loading && user) router.replace('/');
-  }, [loading, user, router]);
+    if (!loading && user) router.replace(role === 'owner' || role === 'operator' ? '/admin' : '/');
+  }, [loading, user, role, router]);
 
   if (loading || user) return <CenteredSpinner />;
 
