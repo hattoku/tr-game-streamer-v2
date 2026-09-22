@@ -1,5 +1,16 @@
 # 操作ログ
 
+## [2026-09-22] ingest | session: フェーズ6 ステップ2（TOP本実装）
+`ページ top 仕様書.md`（v1.3）に基づきTOPページを本実装。未ログイン: ヒーロー→注目→タグピックアップ、
+ログイン済み: マイリスト→注目→新着→タグピックアップ。カルーセル共通部品（`Carousel`・`useCarouselNav`・
+`SectionHeaderRow`）を新設し、デザイントークン仕様書に§6.7として先に定義。`PlaylistCardGrid`から
+`PlaylistCard`を切り出しTOPでも再利用、`/mylist`のデータ取得を`lib/mylist-entries.ts`へ共用化、
+`/playlists`に`?q=`/`?sort=`/`?tag=`のTOP流入対応を追加。dev-orchestrator経由で
+spec-conformance-reviewer・design-consistency-reviewerを並列レビューし、ジャンルタブの横スクロール
+バグ（`TabsList`の`className`が内側`RadixTabs.List`に届いていなかった）・進捗バーサイズ・
+モバイル限定の見出しサイズ不整合・マイリストセクションのみ送りボタン欠落・検索ボタン欠落の5件を修正。
+→ [[2026-09-22-phase6-step2-top]]
+
 ## [2026-09-22] ingest | session: フェーズ6 計画確定 ＋ ステップ1（チャンネル探す・詳細）
 「channelsページがまだ無いが計画上どうなっているか」という問いから、フェーズ5を切り上げてフェーズ6へ移行
 （ユーザー決定）。順序はチャンネル→TOP→管理画面→まとめ→プロフィール、完了後にフェーズ6.5として

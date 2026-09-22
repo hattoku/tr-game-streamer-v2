@@ -5,6 +5,7 @@ date: 2026-09-08
 updated: 2026-09-22
 ---
 
+
 # Wiki 索引
 
 tr-game-streamer-v2 の**コーディング支援用**Wiki（実装の変更履歴・技術的決定を記録）。
@@ -35,6 +36,7 @@ tr-game-streamer-v2 の**コーディング支援用**Wiki（実装の変更履�
 - [[2026-09-15-phase3-step5-finish]] — フェーズ3 ステップ5（仕上げ）。768pxで再生リスト詳細ページがオーバーフローする不具合を発見・修正（グリッドアイテムのmin-w-0欠落）、タグ絞り込みパネルの本番E2E確認。フェーズ3完了
 - [[2026-09-20-phase4.5-step7-partial]] — フェーズ4.5 ステップ7（仕上げ）。/history・/settingsの3幅/aria確認、stg棚卸し（ルール一致・インデックス差分1件・Auth一致・マスタデータほぼ一致）、stg/本番デプロイ実施。本番向けgcloud操作はauto modeにブロックされユーザーが自ら実行。フェーズ4.5完了
 - [[2026-09-22-phase6-plan-and-step1-channels]] — フェーズ6の順序確定（チャンネル→TOP→管理画面→まとめ→プロフィール、完了後にフェーズ6.5で自己ユーザーテスト再）とステップ1（`/channels`・`/channels/[channelId]`本実装）。`PlaylistListSection`への共用化、`fetchChannelAggregates`、説明文の管理者編集API、`/playlists/new?channelId=`の流入元チャンネル一致確認
+- [[2026-09-22-phase6-step2-top]] — フェーズ6 ステップ2（TOP本実装）。ヒーロー・マイリスト・注目（ジャンルタブ）・新着・タグピックアップの各セクション、共通カルーセル部品（`Carousel`・`useCarouselNav`・`SectionHeaderRow`）、`/mylist`のデータ取得を`lib/mylist-entries.ts`へ共用化、`/playlists`の`?q=`/`?sort=`/`?tag=`流入対応。dev-orchestrator経由のレビューでジャンルタブの横スクロールバグ・進捗バーサイズ・見出しサイズ不整合・送りボタンの欠落・検索ボタン欠落を修正
 - [[2026-09-20-env-default-stg]] — stg/本番のDB分離を調査（分離済みと確認）。「共通」の正体だった「`NEXT_PUBLIC_APP_ENV`未指定時の接続先が本番」を`lib/app-env.ts`新設で「明示しない限りstg」に反転。`dev:prod`/`build:prod`追加、テストモードを本番で無効化。併せて`deploy.ps1`にFirestoreルール/インデックスデプロイを組み込み、Firebase Webアプリ設定を`lib/firebase.ts`直書き一本化（`.env.local`に旧appIdが残っていた）
 
 ## Entities

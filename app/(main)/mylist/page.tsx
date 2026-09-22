@@ -2,19 +2,10 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  limit,
-  query,
-  serverTimestamp,
-  updateDoc,
-  where,
-} from 'firebase/firestore';
+import { doc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
+import { fetchMylistEntries, type MylistEntry } from '@/lib/mylist-entries';
 import { LinkButton } from '@/components/ui/Button';
 import { Card, CardChildArea, SectionHeading } from '@/components/ui/Card';
 import { CountBadge } from '@/components/ui/Badge';
@@ -33,7 +24,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { useToast } from '@/components/ui/Toast';
 import { ChevronDownIcon, FavoriteIcon } from '@/components/ui/icons';
 import { cn } from '@/components/ui/cn';
-import { MylistCard, type MylistCardData } from '@/components/mylist/MylistCard';
+import { MylistCard } from '@/components/mylist/MylistCard';
 
 // マイリストページ。document/specification/page/ページ マイリスト機能仕様書.md 準拠。
 // フェーズ2.5ステップ5でデザイン適用（wiki/sources/2026-09-11-phase2.5-design-plan.md §4）。
@@ -42,16 +33,14 @@ import { MylistCard, type MylistCardData } from '@/components/mylist/MylistCard'
 //   再生リスト名（昇順））
 // - カード（§5: 親＝再生リスト情報・ステータス変更・逆順トグル・削除、子＝最後に再生した動画）
 // - 空状態（§2.2）。未ログインはログインページへ（§1.2）
-// 「新着動画がある」判定は、未読の新着通知（notifications.type == 'series_new_episode'）がその再生リストに
-// あるかで行う（新着通知バッチが playlists.videoCount を更新すると同時に通知を作るため。ユーザー通知機能仕様書）。
-// 「最終話を視聴済み」判定は、最終話（逆順なら先頭）の watch_history.progressPercent が 95 以上。
-// 最終話は videos を position == videoCount-1 の等価条件で引く（orderBy+limitToLast は降順の複合索引が要る）。
+// データ取得（「最後に再生した動画」「最終話視聴済み」「新着動画あり」の判定を含む）は
+// lib/mylist-entries.ts の fetchMylistEntries に切り出し、TOPページのマイリストセクション
+// （components/top/MylistSection.tsx、フェーズ6ステップ2）と共用している。判定の詳細は同ファイル参照。
 // スコープ外（据え置き）:
 // - 新着通知の ON/OFF トグル（§5.4）: フェーズ4.5ステップ6で/settingsに実装したが、
 //   showNewArrivalNotificationはFCMプッシュ通知の送信可否を絞るためのフィールド（FCMプッシュ通知
 //   基盤仕様書参照）で、FCM自体が未実装のため現時点では見た目上の効果はない。in-app通知一覧
 //   （notifications）の生成はこのフラグを見ずに常に行う仕様のため、マイリストページ側の対応は不要
-// - TOP ページ連携（§6）はフェーズ3
 
 type FilterValue = 'all' | WatchStatus;
 type SortValue = 'lastPlayed' | 'titleAsc';
@@ -61,19 +50,13 @@ const SORT_OPTIONS: Array<{ value: SortValue; label: string }> = [
   { value: 'lastPlayed', label: '最後に再生した動画（新しい順）' },
   { value: 'titleAsc', label: '再生リスト名（昇順）' },
 ];
-const WATCHED_THRESHOLD = 95;
-
-interface Entry extends MylistCardData {
-  updatedAt: number;
-  lastPlayedAt: number;
-}
 
 export default function MylistPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
 
-  const [entries, setEntries] = useState<Entry[] | null>(null);
+  const [entries, setEntries] = useState<MylistEntry[] | null>(null);
   const [filter, setFilter] = useState<FilterValue>('all');
   const [sort, setSort] = useState<SortValue>('lastPlayed');
 
@@ -82,100 +65,13 @@ export default function MylistPage() {
     if (!loading && !user) router.replace('/login');
   }, [loading, user, router]);
 
-  async function loadEntries(uid: string) {
-    const [mylistSnap, progressSnap, historySnap, newSnap] = await Promise.all([
-      getDocs(query(collection(db, 'mylist'), where('userId', '==', uid))),
-      getDocs(query(collection(db, 'watch_progress'), where('userId', '==', uid))),
-      getDocs(query(collection(db, 'watch_history'), where('userId', '==', uid))),
-      getDocs(query(collection(db, 'notifications'), where('userId', '==', uid), where('isRead', '==', false))),
-    ]);
-
-    // 再生リストごとの最後に再生した動画（watch_progress の最新）
-    const latestProgress = new Map<string, { youtubeVideoId: string; lastPlayedSeconds: number; updatedAt: number }>();
-    progressSnap.docs.forEach((d) => {
-      const data = d.data();
-      const updatedAt = data.updatedAt?.toMillis?.() ?? 0;
-      const prev = latestProgress.get(data.playlistId);
-      if (!prev || updatedAt > prev.updatedAt) {
-        latestProgress.set(data.playlistId, { youtubeVideoId: data.youtubeVideoId, lastPlayedSeconds: data.lastPlayedSeconds ?? 0, updatedAt });
-      }
-    });
-    const historyPercent = new Map<string, number>();
-    historySnap.docs.forEach((d) => historyPercent.set(d.data().youtubeVideoId, d.data().progressPercent ?? 0));
-    const newPlaylistIds = new Set<string>();
-    newSnap.docs.forEach((d) => {
-      if (d.data().type === 'series_new_episode' && d.data().playlistId) newPlaylistIds.add(d.data().playlistId);
-    });
-
-    const rows = await Promise.all(
-      mylistSnap.docs.map(async (d): Promise<Entry> => {
-        const data = d.data();
-        const playlistId: string = data.playlistId;
-        const isReverseOrder: boolean = data.isReverseOrder ?? false;
-        const progress = latestProgress.get(playlistId);
-
-        const [playlistDoc, lastPlayedDoc] = await Promise.all([
-          getDoc(doc(db, 'playlists', playlistId)),
-          progress ? getDoc(doc(db, 'videos', `${playlistId}_${progress.youtubeVideoId}`)) : Promise.resolve(null),
-        ]);
-
-        // 最終話（逆順なら先頭）。position は 0 始まりで playlists.videoCount と同期しているため等価条件で引く
-        // （orderBy + limitToLast は降順の複合索引を要求するため使わない）
-        const videoCount: number = playlistDoc.exists() ? (playlistDoc.data().videoCount ?? 0) : 0;
-        const lastPosition = isReverseOrder ? 0 : videoCount - 1;
-        const lastVideoSnap =
-          videoCount > 0
-            ? await getDocs(query(collection(db, 'videos'), where('playlistId', '==', playlistId), where('position', '==', lastPosition), limit(1)))
-            : null;
-        const lastVideoId: string | undefined = lastVideoSnap?.docs[0]?.data().youtubeVideoId;
-        const finished = lastVideoId != null && (historyPercent.get(lastVideoId) ?? 0) >= WATCHED_THRESHOLD;
-
-        let lastPlayed: MylistCardData['lastPlayed'] = null;
-        if (progress && lastPlayedDoc?.exists() && !finished) {
-          const v = lastPlayedDoc.data();
-          const duration: number | null = v.durationSeconds ?? null;
-          const percent =
-            historyPercent.get(progress.youtubeVideoId) ??
-            (duration ? Math.min(100, Math.round((progress.lastPlayedSeconds / duration) * 100)) : 0);
-          lastPlayed = {
-            title: v.title,
-            thumbnailUrl: v.thumbnailUrl,
-            percent,
-            remainingSeconds: duration != null ? Math.max(0, duration - progress.lastPlayedSeconds) : null,
-          };
-        }
-
-        return {
-          mylistId: d.id,
-          playlistId,
-          watchStatus: (data.watchStatus as WatchStatus) ?? 'want_to_watch',
-          isReverseOrder,
-          updatedAt: data.updatedAt?.toMillis?.() ?? 0,
-          lastPlayedAt: progress?.updatedAt ?? 0,
-          playlist: playlistDoc.exists()
-            ? {
-                title: playlistDoc.data().title,
-                thumbnailUrl: playlistDoc.data().thumbnailUrl,
-                channelName: playlistDoc.data().channelName,
-                channelIconUrl: playlistDoc.data().channelIconUrl,
-                videoCount: playlistDoc.data().videoCount ?? 0,
-              }
-            : null,
-          lastPlayed,
-          hasNew: newPlaylistIds.has(playlistId),
-        };
-      }),
-    );
-    setEntries(rows);
-  }
-
   useEffect(() => {
     if (!user) return;
     const uid = user.uid;
     // 非同期 IIFE にして、effect 本体で同期的に setState しない形にする（react-hooks/set-state-in-effect）
     (async () => {
       try {
-        await loadEntries(uid);
+        setEntries(await fetchMylistEntries(uid));
       } catch (e) {
         console.error('マイリストの読み込みに失敗しました', e);
         setEntries([]);
@@ -207,7 +103,7 @@ export default function MylistPage() {
     return sorted;
   }, [entries, filter, sort]);
 
-  async function handleStatusChange(entry: Entry, status: WatchStatus) {
+  async function handleStatusChange(entry: MylistEntry, status: WatchStatus) {
     if (status === entry.watchStatus) return;
     try {
       await updateDoc(doc(db, 'mylist', entry.mylistId), { watchStatus: status, updatedAt: serverTimestamp() });
@@ -218,18 +114,18 @@ export default function MylistPage() {
     }
   }
 
-  async function handleReverseToggle(entry: Entry, value: boolean) {
+  async function handleReverseToggle(entry: MylistEntry, value: boolean) {
     try {
       await updateDoc(doc(db, 'mylist', entry.mylistId), { isReverseOrder: value, updatedAt: serverTimestamp() });
       // 逆順を切り替えると「最終話」が変わるため読み直す
-      if (user) await loadEntries(user.uid);
+      if (user) setEntries(await fetchMylistEntries(user.uid));
       toast({ type: 'success', message: value ? '逆順で再生するように設定しました' : '本来の順序で再生するように設定しました' });
     } catch {
       toast({ type: 'error', message: '通信エラーが発生しました。時間をおいて再試行してください' });
     }
   }
 
-  async function handleRemove(entry: Entry) {
+  async function handleRemove(entry: MylistEntry) {
     if (!user) return;
     try {
       const idToken = await user.getIdToken();

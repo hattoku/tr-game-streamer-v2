@@ -18,14 +18,28 @@ export const TabsContent = RadixTabs.Content;
 interface TabsListProps extends ComponentProps<typeof RadixTabs.List> {
   /** タブ列の右端に置く要素（ソートセレクト等） */
   trailing?: ReactNode;
+  /**
+   * true の場合、タブ列を折り返さず横スクロールにする（TOPページ 注目セクションのジャンルタブ等）。
+   * `cn` は tailwind-merge を持たないため、`flex-wrap`/`flex-nowrap` を両方渡して後勝ちに賭けるのではなく
+   * どちらか一方だけを出し分ける。
+   */
+  scrollable?: boolean;
 }
 
-export function TabsList({ className, trailing, children, ...rest }: TabsListProps) {
+export function TabsList({ className, trailing, scrollable = false, children, ...rest }: TabsListProps) {
   // モバイル: タブ列（折り返し可・ラベルは折り返さない）の下に trailing を右寄せで置く
   // PC: タブ列と trailing を同じ行に置き、下線は行全体に引く
   return (
     <div className={cn('flex flex-col gap-2 md:flex-row md:items-end md:justify-between md:gap-3 md:border-b md:border-border-tabs', className)}>
-      <RadixTabs.List className="flex flex-wrap items-end gap-[2px] border-b border-border-tabs md:border-0" {...rest}>
+      <RadixTabs.List
+        className={cn(
+          'flex items-end gap-[2px] border-b border-border-tabs md:border-0',
+          scrollable
+            ? 'flex-nowrap overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'
+            : 'flex-wrap',
+        )}
+        {...rest}
+      >
         {children}
       </RadixTabs.List>
       {trailing && <div className="shrink-0 self-end md:mb-2">{trailing}</div>}

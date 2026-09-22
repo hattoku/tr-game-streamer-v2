@@ -1129,7 +1129,43 @@ Firebase Hostingの設定のみの反映。**正式公開でnoindex/Basic認証�
      AIバッジ、一般ユーザーでは編集UIが出ない、存在しないIDは404）、`/playlists/new?channelId=`（案内エリア、
      別チャンネルの再生リストURLで不一致NG行表示・登録ボタン非活性）、ゲーム詳細の関連再生リスト（共用化後の
      回帰なし）を確認。1440/768/767/390px幅で横スクロール無し。確認で保存したstgの説明文は空保存で戻した。
-2. **TOP本実装**（`ページ top 仕様書`）— 着手時に計画。
+2. ~~**TOP本実装**~~（`ページ top 仕様書`）→ **2026-09-22対応済み**（`wiki/sources/2026-09-22-phase6-step2-top.md`）。
+   - `app/(main)/page.tsx`をクライアント化し、未ログイン（ヒーロー→注目→タグピックアップ）／
+     ログイン済み（マイリスト→注目→新着→タグピックアップ）で出し分け。公開`playlists`全件・`tags`・
+     `genres`を1回だけ取得して各セクションへ渡す簡易実装方針。
+   - カルーセル共通部品を新設（`components/ui/Carousel.tsx`、送りボタンの状態管理
+     `components/top/useCarouselNav.ts`、ヘッダー行`components/top/SectionHeaderRow.tsx`）。
+     デザイントークン仕様書に先に§6.7として定義してから実装（v2.2）。
+   - `PlaylistCardGrid`内にインラインだったカードを`PlaylistCard`として切り出し（`PlaylistGrid.tsx`）、
+     TOPのカルーセルでも再利用。`PlaylistSummary`に`gameGenreIds`を追加（ジャンルタブ絞り込み用）。
+   - `/mylist`の`loadEntries`ロジックを`lib/mylist-entries.ts`の`fetchMylistEntries`に切り出し、
+     TOPのマイリストセクションと共用（`/mylist`自体の挙動は変更なし）。
+   - `components/top/`配下に新規: `HeroSection`（検索フォーム）・`MylistSection`・`TopMylistCard`
+     （操作を持たない簡易カード）・`FeaturedSection`（ジャンルタブは対象があるジャンルのみ、
+     `Tabs`をフィルタUIとしてのみ使用し`TabsContent`は使わない`/mylist`と同じパターン）・
+     `NewArrivalsSection`（`registeredAt`降順。「探す」ページの新着順＝`latestVideoPublishedAt`とは基準が別）・
+     `TagPickupSections`（`usagePlaylistCount`降順上位6件）。
+   - `/playlists`にTOP流入用クエリパラメータ`?q=`/`?sort=`/`?tag=`対応を追加（`/games`の`?tag=`と同じ
+     遅延初期化パターン、初回表示時のみ反映）。
+   - **dev-orchestratorレビュー**（`spec-conformance-reviewer`・`design-consistency-reviewer`を並列委任）で
+     5件対応: ①`FeaturedSection`のジャンルタブがモバイルで横スクロールでなく折り返しになるバグ
+     （`TabsList`の`className`が内側`RadixTabs.List`に届いていなかった。`scrollable`propで
+     `flex-wrap`/`flex-nowrap`を排他的に出し分ける方式に修正）、②`TopMylistCard`子エリアの
+     `ProgressBar`サイズ誤り（`sm`→`md`）、③マイリストセクションだけPC送りボタンが無かった
+     （§6.7は4セクション共通と明記。`useCarouselNav`/`SectionHeaderRow`で統一）、④ヒーロー検索バーに
+     クリック可能な検索ボタンが無かった（仕様§4.3「Enterキー or 検索ボタンクリック」、実ボタンに変更）、
+     ⑤セクション見出しがモバイルのみ`text-xl`に縮小され他ページと不整合（上書きを削除）。
+     ついでに`HeroSection`の`Card`パディング上書き（`cn`がtailwind-mergeを持たないためのクラス競合
+     リスク）も`flush`＋自前パディングに変更。教訓は[[デザイントークン運用方針]]に追記。
+   - 仕様書: TOP仕様書 v1.3（§4.2/§4.3/§5.4/§6.3/§7.2-3/§8.2-3実装注記、関連ドキュメント整備）、
+     再生リストを探す仕様書 v1.7（§1.3にクエリパラメータ実装注記）、デザイントークン仕様書 v2.2
+     （§6.7カルーセル新設）。
+   - **動作確認**: `npm run lint` / `npx tsc --noEmit` / `npm run build`成功（レビュー対応前後の両方で実施）。
+     ローカル`npm run dev`（stg）＋Playwrightで、未ログイン（ヒーロー・検索送信・初めての方へ）、
+     一般ユーザー（マイリスト空状態・視聴中カード・完走+新着なしの除外、新着セクション、実際にレビュー
+     投稿してスコアを発生させた上での注目セクション出現・ジャンルタブ絞り込み・送りボタンの有効/無効）、
+     `?q=`/`?sort=`/`?tag=`の反映、`/mylist`のリグレッション無しを確認。1440/768/390px幅で横スクロール無し。
+     確認用に投稿したレビュー・マイリスト登録はすべて削除しstgのデータを元に戻した。
 3. **管理画面の最小版** — 着手時に計画（どの管理操作を最小版に含めるかから決める）。
 4. **まとめ機能**（`ページ 再生リスト まとめ機能仕様書`）— 着手時に計画。
 5. **プロフィール**（`ページ 設定 プロフィール仕様書`＋まとめ仕様書 §9）— 着手時に計画。

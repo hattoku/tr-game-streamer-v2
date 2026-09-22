@@ -8,9 +8,13 @@
  *   `tags`スキーマにカテゴリを表す情報が無いため`/games`と同じくフラットな一覧として実装する。
  * - キーワード検索の「デバウンス300ms」（§4.2）はクライアント内メモリ配列のフィルタのため実施しない
  *   （`/games`と同じ判断）。
+ *
+ * TOPページからの流入（§1.3実装注記）: `?q=`（キーワード）・`?sort=`・`?tag=`を初回表示時にのみ
+ * 初期値として読み込む（`/games`の`?tag=`と同じ遅延初期化パターン。以降のURL同期はしない）。
  */
 'use client';
 
+import { useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { fetchPublicPlaylists, PlaylistCardGrid, sortPlaylists, type PlaylistSort, type PlaylistSummary } from '@/components/playlists/PlaylistGrid';
 import { fetchTagsMap, type TagInfo } from '@/lib/tags';
@@ -30,15 +34,25 @@ const SORT_OPTIONS: Array<{ value: PlaylistSort; label: string }> = [
   { value: 'mylist', label: 'マイリスト登録者数順' },
   { value: 'newest', label: '新着順' },
 ];
+const SORT_VALUES: PlaylistSort[] = ['score', 'mylist', 'newest'];
 
 export default function PlaylistsPage() {
+  const searchParams = useSearchParams();
+
   const [playlists, setPlaylists] = useState<PlaylistSummary[] | null>(null);
   const [tags, setTags] = useState<TagInfo[]>([]);
 
-  const [keyword, setKeyword] = useState('');
-  const [selectedTagIds, setSelectedTagIds] = useState<Set<string>>(new Set());
+  // TOPページからの流入用クエリパラメータ（?q=, ?sort=, ?tag=）。初回表示時にのみ読み込む
+  const [keyword, setKeyword] = useState(() => searchParams.get('q') ?? '');
+  const [selectedTagIds, setSelectedTagIds] = useState<Set<string>>(() => {
+    const tagId = searchParams.get('tag');
+    return tagId ? new Set([tagId]) : new Set();
+  });
   const [showAllTags, setShowAllTags] = useState(false);
-  const [sort, setSort] = useState<PlaylistSort>('score');
+  const [sort, setSort] = useState<PlaylistSort>(() => {
+    const s = searchParams.get('sort');
+    return (SORT_VALUES as string[]).includes(s ?? '') ? (s as PlaylistSort) : 'score';
+  });
   const [page, setPage] = useState(1);
   const [panelOpen, setPanelOpen] = useState(false);
 
