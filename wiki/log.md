@@ -1,5 +1,15 @@
 # 操作ログ
 
+## [2026-09-22] ingest | session: フェーズ6 計画確定 ＋ ステップ1（チャンネル探す・詳細）
+「channelsページがまだ無いが計画上どうなっているか」という問いから、フェーズ5を切り上げてフェーズ6へ移行
+（ユーザー決定）。順序はチャンネル→TOP→管理画面→まとめ→プロフィール、完了後にフェーズ6.5として
+自己ユーザーテストを再度設ける。ステップ1として`/channels`（`ComingSoon`から本実装へ）と
+`/channels/[channelId]`（新規）を実装。`GamePlaylistSection`の一覧UIを`PlaylistListSection`に共用化、
+`fetchChannelAggregates`で動画数・ピックアップを集計、説明文の管理者編集API、`/playlists/new?channelId=`の
+案内エリアと流入元チャンネル一致確認（クライアント＋register APIの二重チェック）。探す仕様書 v1.3・
+詳細仕様書 v1.7（冒頭の重複・入れ違いを整形）・追加する仕様書 v3.13。stg＋Playwrightで動作確認。
+→ [[2026-09-22-phase6-plan-and-step1-channels]]
+
 ## [2026-09-20] ingest | session: stg/本番の環境分離の調査とローカル接続先のstg反転
 ユーザーの「stgと本番でDBが共通では」という確認を受けて調査。Firestore/Auth/Cloud Run/Hostingは
 GCPプロジェクト単位で分離済みだったが、`NEXT_PUBLIC_APP_ENV`未指定時の接続先が本番だったため

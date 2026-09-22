@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs } from 'firebase/firestore';
 import { db, auth } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button, LinkButton } from '@/components/ui/Button';
@@ -23,7 +23,9 @@ import { PlaylistSummary } from '@/components/playlists/PlaylistSummary';
 // フェーズ2.5ステップ7でデザイン適用（wiki/sources/2026-09-12-login-and-register-design-plan.md）。
 // スコープ外（フェーズ3以降。wiki/sources/2026-09-10-phase2-plan.md）:
 // - 一般ユーザーの提案フロー（§5.4・§6.2）・ゲームタイトル追加提案モーダル（§4.2.2）・AI説明文自動生成（§4.1.4）
-// - 流入元による案内エリア（§3。ゲーム詳細・チャンネル詳細ページが未実装）
+// 流入元対応: `?gameId=`（ゲーム詳細から、§3.2）はゲームタイトルを事前選択、`?channelId=`（チャンネル詳細から、§3.3）は
+// 案内エリアを表示し、プレビューした再生リストのチャンネルが流入元と一致しなければ登録不可にする（§5.2、
+// サーバー側 register/route.ts でも `sourceChannelId` で再検証）。
 // 未ログインは /login へ（§1.2）。一般ユーザーには「管理者のみ」の空状態を出す（提案フローができるまで）。
 
 interface PreviewResult {
@@ -71,8 +73,11 @@ const PREVIEW_ERRORS: Record<string, { inline: string; toast: string }> = {
   playlist_not_found: { inline: '再生リストが見つかりませんでした。URLを確認してください', toast: '再生リストの取得に失敗しました' },
   default: { inline: '再生リストの取得に失敗しました', toast: '再生リストの取得に失敗しました' },
 };
+// チャンネル詳細から流入時のチャンネル不一致（§5.2・§7.2）
+const CHANNEL_MISMATCH_ERROR = { inline: 'このチャンネルの再生リストではありません。URLを確認してください', toast: 'チャンネルが一致しません' };
 const REGISTER_ERRORS: Record<string, { inline: string; toast: string }> = {
   already_registered: { inline: 'この再生リストはすでに登録されています', toast: '登録済みの再生リストです' },
+  channel_mismatch: CHANNEL_MISMATCH_ERROR,
   not_public: { inline: 'この再生リストは非公開または限定公開のため登録できません', toast: '公開されていない再生リストです' },
   game_not_found: { inline: 'ゲームタイトルが見つかりませんでした', toast: '送信に失敗しました。時間をおいて再試行してください' },
   default: { inline: '', toast: '送信に失敗しました。時間をおいて再試行してください' },
@@ -102,6 +107,22 @@ export default function NewPlaylistPage() {
   const [completion, setCompletion] = useState<CompletionResult | null>(null);
 
   const isAdmin = role === 'owner' || role === 'operator';
+
+  // チャンネル詳細ページ「再生リストを追加する」からの流入（§3.3）。案内エリアの表示と
+  // チャンネル一致確認（§5.2）に使う。channels は公開読み取りのためクライアントSDKで直接取得する
+  const sourceChannelId = searchParams.get('channelId');
+  const [fetchedChannel, setFetchedChannel] = useState<{ id: string; name: string; iconUrl: string } | null>(null);
+  useEffect(() => {
+    if (!sourceChannelId) return;
+    getDoc(doc(db, 'channels', sourceChannelId))
+      .then((snap) => {
+        if (!snap.exists()) return;
+        setFetchedChannel({ id: snap.id, name: (snap.data().name as string) ?? '', iconUrl: (snap.data().iconUrl as string) ?? '' });
+      })
+      .catch((e) => console.error('channels の読み込みに失敗', e));
+  }, [sourceChannelId]);
+  // クエリが外れた／変わった直後に古いチャンネルを見せないよう、取得済みの id とクエリが一致するときだけ使う
+  const sourceChannel = sourceChannelId && fetchedChannel?.id === sourceChannelId ? fetchedChannel : null;
 
   // 未ログインはログインページへ（§1.2）
   useEffect(() => {
@@ -177,10 +198,15 @@ export default function NewPlaylistPage() {
       }
       const result = body as PreviewResult;
       setPreview(result);
-      // 制約チェック（§4.1.5）の NG は確認エリアに出しつつトーストでも知らせる（§7.2）
+      // 制約チェック（§4.1.5）の NG は確認エリアに出しつつトーストでも知らせる（§7.2）。
+      // チェック順序（§5.2）: 公開状態 → チャンネル一致 → 登録済み → 流入元チャンネル一致
       if (!result.playlist.isPublic) toast({ type: 'error', message: '公開されていない再生リストです' });
       else if (!result.channelMatches) toast({ type: 'error', message: '登録できない再生リストです' });
       else if (result.playlistAlreadyRegistered) toast({ type: 'error', message: '登録済みの再生リストです' });
+      else if (sourceChannelId && result.channel.youtubeChannelId !== sourceChannelId) {
+        setUrlError(CHANNEL_MISMATCH_ERROR.inline);
+        toast({ type: 'error', message: CHANNEL_MISMATCH_ERROR.toast });
+      }
     } catch {
       setUrlError(PREVIEW_ERRORS.default.inline);
       toast({ type: 'error', message: PREVIEW_ERRORS.default.toast });
@@ -189,7 +215,9 @@ export default function NewPlaylistPage() {
     }
   }
 
-  const constraintsOk = !!preview && preview.playlist.isPublic && preview.channelMatches && !preview.playlistAlreadyRegistered;
+  const sourceChannelMismatch = !!preview && !!sourceChannelId && preview.channel.youtubeChannelId !== sourceChannelId;
+  const constraintsOk =
+    !!preview && preview.playlist.isPublic && preview.channelMatches && !preview.playlistAlreadyRegistered && !sourceChannelMismatch;
   const canSubmit = constraintsOk && !!selectedGame && !submitting;
 
   async function handleSubmit() {
@@ -210,6 +238,7 @@ export default function NewPlaylistPage() {
           playlistUrl: playlistUrl.trim(),
           gameId: selectedGame.id,
           channelDescription: preview?.channelAlreadyRegistered ? undefined : channelDescription,
+          sourceChannelId: sourceChannelId ?? undefined,
         }),
       });
       const body = await res.json();
@@ -296,6 +325,21 @@ export default function NewPlaylistPage() {
     <div className="mx-auto max-w-[720px]">
       <SectionHeading className="mb-5">再生リストを追加する</SectionHeading>
 
+      {/* チャンネル詳細ページから流入時の案内エリア（§3.3） */}
+      {sourceChannel && (
+        <Card className="mb-4 flex items-center gap-3">
+          {sourceChannel.iconUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={sourceChannel.iconUrl} alt="" referrerPolicy="no-referrer" className="size-10 shrink-0 rounded-full bg-bg-btn object-cover" />
+          ) : (
+            <span className="block size-10 shrink-0 rounded-full bg-bg-btn" />
+          )}
+          <p className="text-base text-text-secondary">
+            「<span className="font-medium text-text-primary">{sourceChannel.name}</span>」の再生リストを追加する
+          </p>
+        </Card>
+      )}
+
       <Card flush>
         <div className="flex flex-col gap-4 p-[18px]">
           <Field label="再生リストURL" error={urlError}>
@@ -352,6 +396,7 @@ export default function NewPlaylistPage() {
                       <CheckLine state="ng">チャンネルが作成した再生リストではないため登録できません</CheckLine>
                     ))}
                   {preview.playlistAlreadyRegistered && <CheckLine state="ng">この再生リストはすでに登録されています</CheckLine>}
+                  {sourceChannelMismatch && <CheckLine state="ng">{CHANNEL_MISMATCH_ERROR.inline}</CheckLine>}
                   {showChannelState &&
                     (preview.channelAlreadyRegistered ? (
                       <CheckLine state="ok">プレミテ登録済みチャンネルです。再生リストと紐づけます。</CheckLine>

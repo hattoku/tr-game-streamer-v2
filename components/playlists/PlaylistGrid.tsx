@@ -2,10 +2,11 @@
  * 公開再生リストのカードグリッドと関連ユーティリティ。
  * - `PlaylistGrid`: TOP最小版（`app/(main)/page.tsx`）専用。isPublic==true＋registeredAt降順
  *   （firestore.indexes.jsonに複合索引あり）で新着順に最大`max`件取得する。
- * - `PlaylistCardGrid`・`fetchPlaylistsByGame`・`fetchPublicPlaylists`・`sortPlaylists`: ゲームタイトル
- *   詳細ページの「関連する再生リスト」節（components/games/GamePlaylistSection.tsx）と「再生リストを探す」
+ * - `PlaylistCardGrid`・`fetchPlaylistsByGame`・`fetchPlaylistsByChannel`・`fetchPublicPlaylists`・`sortPlaylists`:
+ *   ゲームタイトル詳細ページの「関連する再生リスト」節（components/games/GamePlaylistSection.tsx）・
+ *   チャンネル詳細ページの「再生リスト一覧」節（app/(main)/channels/[channelId]/page.tsx）・「再生リストを探す」
  *   本実装（`app/(main)/playlists/page.tsx`）向けに、データ取得とページング・ソートを呼び出し側に
- *   委ねられるよう分離したもの。
+ *   委ねられるよう分離したもの（一覧セクションの共通UIは components/playlists/PlaylistListSection.tsx）。
  * カードの構成: ページ 再生リストを探す 仕様書 §3.3（サムネイル／タイトル2行／チャンネル／スコア・マイリスト数・
  * レビュー数／タグ）。タグは§3.5の表示優先順位（固定→登録日順）で最大3件+「+N」、絞り込み中のタグは太字で強調する
  * （フェーズ3ステップ3のタグシステム導入によりgameNameの仮置きから実データに置き換え済み）。
@@ -191,6 +192,19 @@ export function sortPlaylists(list: PlaylistSummary[], sort: PlaylistSort): Play
 export async function fetchPlaylistsByGame(gameId: string): Promise<PlaylistSummary[]> {
   const [snap, tagsMap] = await Promise.all([
     getDocs(query(collection(db, 'playlists'), where('isPublic', '==', true), where('gameId', '==', gameId))),
+    fetchTagsMap(),
+  ]);
+  return snap.docs.map((d) => toSummary(d, tagsMap));
+}
+
+/**
+ * 指定チャンネルの公開再生リストを取得する（チャンネル詳細ページ「再生リスト一覧」節、
+ * ページ チャンネル 詳細 仕様書 第4章）。`fetchPlaylistsByGame`と同じく等価条件のみのため複合indexは不要。
+ * 呼び出し側: app/(main)/channels/[channelId]/page.tsx
+ */
+export async function fetchPlaylistsByChannel(channelId: string): Promise<PlaylistSummary[]> {
+  const [snap, tagsMap] = await Promise.all([
+    getDocs(query(collection(db, 'playlists'), where('isPublic', '==', true), where('channelId', '==', channelId))),
     fetchTagsMap(),
   ]);
   return snap.docs.map((d) => toSummary(d, tagsMap));

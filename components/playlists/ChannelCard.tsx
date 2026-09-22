@@ -1,7 +1,7 @@
 /**
  * 配信者情報セクション（ページ 再生リスト詳細 仕様書「配信者情報セクション」）。
  * チャンネルアイコン（円形）／チャンネル名／「他の再生リストを見る →」。いずれもチャンネル詳細
- * （/channels/[channelId]）へ遷移する（ページ本体はフェーズ3以降のため当面 404）。
+ * （/channels/[channelId]、app/(main)/channels/[channelId]/page.tsx）へ遷移する。
  */
 import Link from 'next/link';
 import { Card, CardTitle } from '@/components/ui/Card';

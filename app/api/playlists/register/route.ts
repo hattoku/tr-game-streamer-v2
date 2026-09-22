@@ -14,11 +14,13 @@ import {
 // YouTube APIとFirestoreの状態をサーバー側で取り直してから書き込む。
 // AI説明文自動生成（仕様書4.1.4節）はスコープ外のため、新規チャンネルの説明文は
 // 管理者の手入力（channelDescription、任意）をそのまま保存する。
+// チャンネル詳細ページから流入した場合は `sourceChannelId`（任意）を受け取り、再生リストのチャンネルと
+// 一致しなければ登録を拒否する（仕様書5.2節「流入元チャンネル一致」。クライアント側の判定を信用しない二重チェック）。
 export async function POST(request: NextRequest) {
   const auth = await requireAdmin(request);
   if ('errorResponse' in auth) return auth.errorResponse;
 
-  const { playlistUrl, gameId, channelDescription } = await request.json();
+  const { playlistUrl, gameId, channelDescription, sourceChannelId } = await request.json();
   if (typeof playlistUrl !== 'string' || typeof gameId !== 'string') {
     return NextResponse.json({ error: 'invalid_request' }, { status: 400 });
   }
@@ -62,6 +64,11 @@ export async function POST(request: NextRequest) {
   }
   if (!gameDoc.exists) {
     return NextResponse.json({ error: 'game_not_found' }, { status: 404 });
+  }
+  // チェック順序（5.2節）: URL形式 → API取得 → 公開状態 → チャンネル一致 → ゲームタイトル選択 →
+  // （チャンネル詳細流入時のみ）流入元チャンネル一致。この判定を最後に置くのはその順序に合わせるため
+  if (typeof sourceChannelId === 'string' && sourceChannelId && sourceChannelId !== channel.youtubeChannelId) {
+    return NextResponse.json({ error: 'channel_mismatch' }, { status: 422 });
   }
   const game = gameDoc.data()!;
 

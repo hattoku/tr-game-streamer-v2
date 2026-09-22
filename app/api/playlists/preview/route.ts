@@ -51,8 +51,9 @@ export async function POST(request: NextRequest) {
     playlist,
     channel,
     // 再生リストのchannelIdはfetchChannelSnippetの引数に使った値そのものなので、
-    // この時点では構造的に一致する（4.1.5節「チャンネル一致」）。将来チャンネル詳細
-    // ページからの流入導線を実装する際は、流入元チャンネルIDとの比較をここに追加する。
+    // この時点では構造的に一致する（4.1.5節「チャンネル一致」）。チャンネル詳細ページから
+    // 流入した場合の「流入元チャンネル一致」（5.2節）は、レスポンスの channel.youtubeChannelId を
+    // クライアント側（/playlists/new）で比較し、本登録の register/route.ts でも再検証する。
     channelMatches: true,
     channelAlreadyRegistered: channelDoc.exists,
     playlistAlreadyRegistered: playlistDoc.exists,
