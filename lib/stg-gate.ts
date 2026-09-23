@@ -5,7 +5,10 @@
 // proxy.ts はEdge相当ランタイムで動くため、Node専用の crypto.createHmac ではなく
 // Web Crypto API（globalThis.crypto.subtle）を使う。
 
-export const STG_GATE_COOKIE_NAME = 'stg_gate';
+// Firebase Hostingは`__session`以外の名前のCookieをCloud Runへのリクエストからすべて除去するため、
+// この名前を使う必要がある（他の名前だと直接のCloud Run URLでは動くがpuremite.net経由で認証が
+// 通らない不具合になる。2026-09-23に本番で発覚・特定）
+export const STG_GATE_COOKIE_NAME = '__session';
 export const STG_GATE_MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30日間
 
 const SIGNING_MESSAGE = 'stg-gate-v1';

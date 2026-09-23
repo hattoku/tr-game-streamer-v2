@@ -73,6 +73,17 @@ Cookie属性（httpOnly/secure/sameSite/maxAge）、`config.matcher`の除外設
 `HANDOFF.md`（運用ログ、`document/specification/`外）に残るBasic認証時代のPlaywright確認手順・
 curl確認手順は、過去の作業記録として意図的に未修正（他の過去ログ同様、事後の書き換えをしない方針）。
 
+## 本番デプロイ後に発覚・修正した不具合: Firebase Hostingのcookie制限
+
+stg・本番とも実装をデプロイし、Cloud Run側で`STAGING_GATE_PASSWORD`を手動設定した後、本番
+(`puremite.net`)でログインしてもスピナーが回り続けたまま進まない不具合が発覚。`curl`で
+直接Cloud Run URLと`puremite.net`を比較したところ、直接URLでは発行したCookieが正しく認証に
+使われるが、`puremite.net`(Firebase Hosting経由)だけ同じCookieがサーバーに届いていないことが
+判明。**Firebase Hostingは`__session`という名前以外のCookieをCloud Runへのリクエストから
+すべて除去する**という既知の制限が原因(詳細は[[Firebase Hostingのcookie制限]])。
+`lib/stg-gate.ts`のCookie名を`stg_gate`から`__session`に変更して解消。stg・本番とも
+再デプロイして動作確認済み。
+
 ## デプロイ時の注意（手動作業）
 
 `STAGING_BASIC_AUTH_USER`/`STAGING_BASIC_AUTH_PASSWORD`はCloud Runの環境変数に直接設定されており

@@ -1,5 +1,18 @@
 # 操作ログ
 
+## [2026-09-23] ingest | session: 本番デプロイ後、Firebase Hostingのcookie制限でログインが完了しない不具合を修正
+ユーザー依頼で[[2026-09-23-stg-cookie-gate]]をコミット・stg/本番両方にデプロイ（`.\deploy.ps1 stg`
+/ `.\deploy.ps1 prod`とも成功。ユーザーの推測に反し今回は本番デプロイがauto modeにブロックされ
+なかった、[[auto modeの本番操作制限]]に追記）。Cloud Run環境変数`STAGING_GATE_PASSWORD`は
+最初ユーザーの編集がコンソール上で未デプロイのまま/値が空のままだった2回の勘違いを経て、
+最終的に正しく設定・デプロイされたことを確認。しかし本番(`puremite.net`)でパスワードを
+入力してもログインが完了せずスピナーが回り続ける不具合が発生。`curl`で直接Cloud Run URLと
+`puremite.net`を比較し、前者は発行したCookieで正しく認証が通るが後者だけ同じCookieが
+サーバーに届いていないことを特定。WebSearchで調査し、**Firebase Hostingが`__session`以外の
+名前のCookieをCloud Runへのリクエストから除去する**という既知の制限が原因と判明。
+`lib/stg-gate.ts`のCookie名を`stg_gate`から`__session`に変更して解消、lint/tsc確認済み。
+[[Firebase Hostingのcookie制限]]を新規作成。
+
 ## [2026-09-23] ingest | session: HTTP Basic認証→Cookieベースの共有パスワードゲートへ移行
 友人にテストを依頼するにあたり、既存のBasic認証（proxy.ts）が「毎日再入力を求められる」体感の
 障壁になっているとの指摘を受けて着手。ユーザー確認の上、適用範囲は全環境のまま維持・Cookie

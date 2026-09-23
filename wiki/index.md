@@ -53,7 +53,8 @@ tr-game-streamer-v2 の**コーディング支援用**Wiki（実装の変更履�
 - [[デザイントークン運用方針]] — 仕様書トークン→`@theme`の1対1対応、`@utility`のグラデーション面、1px半透明白の枠線、奥行きの3段階、刺し色の原則（2色目を足さない）、セレクトはSelectMenu、ヘッドレスUI方針
 - [[react-hooksのset-state-in-effect対応]] — 購読系はコールバック/クリーンアップで、「propが変わったらstateを調整する」は描画中に直接setState、導出値はstate化しない
 - [[CSSグリッドのmin-width対策]] — `fr`単位でもグリッドアイテムのmin-width初期値はauto。直下の子要素にmin-w-0が無いと内容の最小幅でトラックがオーバーフローする
-- [[auto modeの本番操作制限]] — 本番プロジェクトへのgcloud/deploy操作（読み取り専用含む）はauto modeの許可分類器にブロックされ、Claude自身では解除もできない。本番操作はユーザーが直接実行する運用にする
+- [[auto modeの本番操作制限]] — 本番プロジェクトへのgcloud/deploy操作はauto modeの許可分類器の対象になりうるが、何がブロックされるかは一定ではない（2026-09-23追記: ユーザー依頼のdeploy.ps1 prodは通り、gcloud describeでのシークレット値読み取りはブロックされた）
+- [[Firebase Hostingのcookie制限]] — Firebase Hostingは`__session`以外の名前のCookieをCloud Runへのリクエストから除去する。直接のCloud Run URLでは動くがカスタムドメイン経由だけ認証が通らない、という形で発覚
 
 ## Analyses
 （まだページなし）
