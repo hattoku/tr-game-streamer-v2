@@ -6,9 +6,9 @@
  * このカードは表示専用（ページ マイリスト機能仕様書 §1.3）。
  */
 import { Card } from '@/components/ui/Card';
-import { Tag } from '@/components/ui/Tag';
 import { StarRating } from '@/components/ui/StarRating';
-import { LockIcon, PencilIcon, YouTubeIcon } from '@/components/ui/icons';
+import { YouTubeIcon } from '@/components/ui/icons';
+import { TagRow } from '@/components/tags/TagRow';
 import type { ResolvedTag } from '@/lib/tags';
 
 interface PlaylistInfoCardProps {
@@ -47,32 +47,7 @@ export function PlaylistInfoCard({ title, score, mylistCount, reviewCount, tags,
         </span>
       </div>
 
-      {(tags.length > 0 || onEditTags) && (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          {tags.map((t) =>
-            t.fixed ? (
-              <span key={t.id} className="inline-flex items-center gap-1 text-sm text-text-secondary">
-                <LockIcon size={11} />
-                {t.name}
-              </span>
-            ) : (
-              <Tag key={t.id} href={`/playlists?tag=${encodeURIComponent(t.id)}`}>
-                {t.name}
-              </Tag>
-            ),
-          )}
-          {onEditTags && (
-            <button
-              type="button"
-              aria-label="タグを編集する"
-              onClick={onEditTags}
-              className="rounded-[6px] p-1 text-text-muted hover:bg-bg-hover hover:text-text-primary"
-            >
-              <PencilIcon size={13} />
-            </button>
-          )}
-        </div>
-      )}
+      <TagRow tags={tags} hrefForTag={(id) => `/playlists?tag=${encodeURIComponent(id)}`} onEdit={onEditTags} />
 
       <a
         href={referenceUrl}

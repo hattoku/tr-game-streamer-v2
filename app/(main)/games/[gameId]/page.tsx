@@ -21,12 +21,12 @@ import { fetchPlaylistsByGame } from '@/components/playlists/PlaylistGrid';
 import { GamePlaylistSection } from '@/components/games/GamePlaylistSection';
 import { GameCreateModal, type GameFormInitial } from '@/components/games/GameCreateModal';
 import { TagEditModal } from '@/components/tags/TagEditModal';
+import { TagRow } from '@/components/tags/TagRow';
 import { Card } from '@/components/ui/Card';
-import { Tag } from '@/components/ui/Tag';
 import { Button, ExternalLinkButton } from '@/components/ui/Button';
 import { toRakutenAffiliateUrl } from '@/lib/rakuten-affiliate';
 import { Skeleton, SkeletonText } from '@/components/ui/Skeleton';
-import { InventoryIcon, LockIcon, PencilIcon, PlayIcon } from '@/components/ui/icons';
+import { InventoryIcon, PencilIcon, PlayIcon } from '@/components/ui/icons';
 
 interface GameDetail {
   title: string;
@@ -170,32 +170,11 @@ export default function GameDetailPage() {
                 {(videoCount ?? 0).toLocaleString()} 動画
               </span>
             </div>
-            {(tags.length > 0 || user) && (
-              <div className="flex flex-wrap items-center gap-[6px]">
-                {tags.map((t) =>
-                  t.fixed ? (
-                    <span key={t.id} className="inline-flex items-center gap-1 text-sm text-text-secondary">
-                      <LockIcon size={11} />
-                      {t.name}
-                    </span>
-                  ) : (
-                    <Tag key={t.id} href={`/games?tag=${encodeURIComponent(t.id)}`}>
-                      {t.name}
-                    </Tag>
-                  ),
-                )}
-                {user && (
-                  <button
-                    type="button"
-                    aria-label="タグを編集する"
-                    onClick={() => setTagModalOpen(true)}
-                    className="rounded-[6px] p-1 text-text-muted hover:bg-bg-hover hover:text-text-primary"
-                  >
-                    <PencilIcon size={13} />
-                  </button>
-                )}
-              </div>
-            )}
+            <TagRow
+              tags={tags}
+              hrefForTag={(id) => `/games?tag=${encodeURIComponent(id)}`}
+              onEdit={user ? () => setTagModalOpen(true) : undefined}
+            />
             {game.description && (
               <div className="mt-1 flex flex-col gap-1">
                 <p className="text-base text-text-secondary">{game.description}</p>

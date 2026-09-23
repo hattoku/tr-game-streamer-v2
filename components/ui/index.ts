@@ -11,7 +11,7 @@ export { Card, CardDivider, CardTitle, CardChildArea, SectionHeading } from './C
 export { Chip, StatusChip, chipClassName, WATCH_STATUS_LABEL, WATCH_STATUS_ORDER, WATCH_STATUS_PRIMARY, WATCH_STATUS_OTHER, normalizeWatchStatus } from './Chip';
 export type { WatchStatus } from './Chip';
 export { TrendingBadge, PlayingBadge, CountLabel, NewBadge, UnreadDot, CountBadge } from './Badge';
-export { Tag } from './Tag';
+export { Tag, TAG_BASE_CLASS } from './Tag';
 export { ProgressBar } from './ProgressBar';
 export { StarRating } from './StarRating';
 export { Pagination } from './Pagination';
