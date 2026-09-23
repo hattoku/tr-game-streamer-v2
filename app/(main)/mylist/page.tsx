@@ -9,7 +9,7 @@ import { fetchMylistEntries, type MylistEntry } from '@/lib/mylist-entries';
 import { LinkButton } from '@/components/ui/Button';
 import { Card, CardChildArea, SectionHeading } from '@/components/ui/Card';
 import { CountBadge } from '@/components/ui/Badge';
-import { WATCH_STATUS_LABEL, type WatchStatus } from '@/components/ui/Chip';
+import { WATCH_STATUS_LABEL, WATCH_STATUS_OTHER, type WatchStatus } from '@/components/ui/Chip';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -45,7 +45,7 @@ import { MylistCard } from '@/components/mylist/MylistCard';
 type FilterValue = 'all' | WatchStatus;
 type SortValue = 'lastPlayed' | 'titleAsc';
 
-const OTHER_FILTERS: WatchStatus[] = ['on_hold', 'dropped'];
+const OTHER_FILTERS = WATCH_STATUS_OTHER;
 const SORT_OPTIONS: Array<{ value: SortValue; label: string }> = [
   { value: 'lastPlayed', label: '最後に再生した動画（新しい順）' },
   { value: 'titleAsc', label: '再生リスト名（昇順）' },

@@ -16,14 +16,14 @@ import { Skeleton, SkeletonText } from '@/components/ui/Skeleton';
 import { Card } from '@/components/ui/Card';
 import { ChevronLeftIcon, ChevronRightIcon, PauseIcon, PlayIcon } from '@/components/ui/icons';
 import { cn } from '@/components/ui/cn';
-import { AddToMylistButton, type MylistState } from '@/components/playlists/AddToMylistButton';
 import { ChannelCard } from '@/components/playlists/ChannelCard';
 import { PlaylistInfoCard } from '@/components/playlists/PlaylistInfoCard';
 import { VideoList, type VideoItem } from '@/components/playlists/VideoList';
 import { ReviewSection } from '@/components/reviews/ReviewSection';
+import { type MylistState } from '@/components/reviews/ReviewForm';
 import { TagEditModal } from '@/components/tags/TagEditModal';
 import { fetchTagsMap, resolveTags, type ResolvedTag } from '@/lib/tags';
-import type { WatchStatus } from '@/components/ui/Chip';
+import { normalizeWatchStatus } from '@/components/ui/Chip';
 
 // 再生リスト詳細ページ。
 // document/specification/page/ページ 再生リスト詳細 仕様書.md（レイアウト・基本情報・配信者情報）と
@@ -173,7 +173,7 @@ export default function PlaylistDetailPage() {
         const mylistDoc = mylistSnap.docs[0];
         let reverse = false;
         if (mylistDoc) {
-          setMylist({ docId: mylistDoc.id, status: (mylistDoc.data().watchStatus as WatchStatus) ?? 'want_to_watch' });
+          setMylist({ docId: mylistDoc.id, status: normalizeWatchStatus(mylistDoc.data().watchStatus) ?? 'want_to_watch' });
           reverse = mylistDoc.data().isReverseOrder ?? false;
           setReverseOrder(reverse);
         }
@@ -214,7 +214,7 @@ export default function PlaylistDetailPage() {
     })();
   }, [playlistId, user, authLoading]);
 
-  // スコア・レビュー数はレビュー投稿（app/api/reviews/upsert）のたびに、タグは
+  // スコア・レビュー数・マイリスト数はレビュー投稿（app/api/reviews/upsert）のたびに、タグは
   // タグ編集（app/api/tags/attach・detach）のたびにサーバー側で更新されるため、
   // 操作直後に画面へ反映されるよう購読する
   useEffect(() => {
@@ -222,7 +222,9 @@ export default function PlaylistDetailPage() {
     return onSnapshot(doc(db, 'playlists', playlistId), (snap) => {
       if (!snap.exists()) return;
       const data = snap.data();
-      setPlaylist((prev) => (prev ? { ...prev, score: data.score ?? null, reviewCount: data.reviewCount ?? 0 } : prev));
+      setPlaylist((prev) =>
+        prev ? { ...prev, score: data.score ?? null, reviewCount: data.reviewCount ?? 0, mylistCount: data.mylistCount ?? 0 } : prev,
+      );
       fetchTagsMap().then((tagsMap) => setTags(resolveTags(data.playlistTagIds ?? [], data.playlistTagsFixed ?? [], tagsMap)));
     });
   }, [playlistId]);
@@ -452,7 +454,6 @@ export default function PlaylistDetailPage() {
       reviewCount={playlist.reviewCount}
       tags={tags}
       referenceUrl={playlist.referenceUrl}
-      mylistAction={<AddToMylistButton playlistId={playlistId} user={user} mylist={mylist} onChange={setMylist} />}
       onEditTags={user ? () => setTagModalOpen(true) : undefined}
     />
   );
@@ -470,7 +471,7 @@ export default function PlaylistDetailPage() {
   );
 
   const channelCard = <ChannelCard channelId={playlist.channelId} name={playlist.channelName} iconUrl={playlist.channelIconUrl} />;
-  const reviewSection = <ReviewSection playlistId={playlistId} user={user} />;
+  const reviewSection = <ReviewSection playlistId={playlistId} user={user} mylist={mylist} onMylistChange={setMylist} />;
 
   // 通常モード: PC 2カラム（左 62% / 右 38%: ヒーロー・レビュー | 基本情報・動画リスト・配信者）、
   //             モバイルは ヒーロー→基本情報→動画リスト→レビュー→配信者 の縦積み

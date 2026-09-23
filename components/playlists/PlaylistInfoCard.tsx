@@ -2,10 +2,10 @@
  * 基本情報セクション（ページ 再生リスト詳細 仕様書「基本情報セクション」）。
  * 表示順: タイトル（1行省略）／スコア・マイリスト数・レビュー数／タグ／参照元URL。
  * スコアはレビューが無い間は「評価なし」（信頼度スコアリングシステム仕様書）。
- * マイリスト追加ボタン（マイリスト仕様書 §1.3）はこのカードの下部に置く。
+ * マイリスト登録は再生リスト詳細ページの視聴ステータス記録UI（ReviewForm）に一本化しており、
+ * このカードは表示専用（ページ マイリスト機能仕様書 §1.3）。
  */
-import type { ReactNode } from 'react';
-import { Card, CardDivider } from '@/components/ui/Card';
+import { Card } from '@/components/ui/Card';
 import { Tag } from '@/components/ui/Tag';
 import { StarRating } from '@/components/ui/StarRating';
 import { LockIcon, PencilIcon, YouTubeIcon } from '@/components/ui/icons';
@@ -18,13 +18,11 @@ interface PlaylistInfoCardProps {
   reviewCount: number;
   tags: ResolvedTag[];
   referenceUrl: string;
-  /** AddToMylistButton を渡す */
-  mylistAction?: ReactNode;
   /** ログイン済みのときのみ渡す（タグ編集アイコンの表示条件。ゲームタイトル詳細仕様書 §8.2準拠） */
   onEditTags?: () => void;
 }
 
-export function PlaylistInfoCard({ title, score, mylistCount, reviewCount, tags, referenceUrl, mylistAction, onEditTags }: PlaylistInfoCardProps) {
+export function PlaylistInfoCard({ title, score, mylistCount, reviewCount, tags, referenceUrl, onEditTags }: PlaylistInfoCardProps) {
   return (
     <Card className="flex flex-col gap-3">
       <h1 className="truncate text-2xl font-medium text-text-primary" title={title}>
@@ -85,13 +83,6 @@ export function PlaylistInfoCard({ title, score, mylistCount, reviewCount, tags,
         <YouTubeIcon />
         YouTubeの再生リストを見る ↗
       </a>
-
-      {mylistAction && (
-        <>
-          <CardDivider />
-          {mylistAction}
-        </>
-      )}
     </Card>
   );
 }

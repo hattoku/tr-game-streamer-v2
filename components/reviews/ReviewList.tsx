@@ -20,7 +20,7 @@ import { MoreIcon, CommentIcon, FavoriteIcon } from '@/components/ui/icons';
 import { UserAvatar } from '@/components/layout/UserDropdown';
 import { LoginRequiredModal } from '@/components/layout/LoginRequiredModal';
 import { ReportModal } from './ReportModal';
-import { REVIEW_WATCH_STATUS_LABEL, type ReviewWatchStatus } from '@/lib/review-status';
+import { StatusChip, normalizeWatchStatus, type WatchStatus } from '@/components/ui/Chip';
 
 const SPOILER_PREF_STORAGE_KEY = 'puremite:hideSpoilerReviews';
 
@@ -30,7 +30,7 @@ interface ReviewItem {
   userDisplayName: string;
   userProfileImageUrl: string | null;
   starRating: number | null;
-  watchStatus: ReviewWatchStatus | null;
+  watchStatus: WatchStatus | null;
   comment: string | null;
   hasSpoiler: boolean;
   helpfulCount: number;
@@ -86,7 +86,7 @@ export function ReviewList({
           userDisplayName: data.userDisplayName ?? 'ユーザー',
           userProfileImageUrl: data.userProfileImageUrl ?? null,
           starRating: data.starRating ?? null,
-          watchStatus: data.watchStatus ?? null,
+          watchStatus: normalizeWatchStatus(data.watchStatus),
           comment: data.comment ?? null,
           hasSpoiler: data.hasSpoiler ?? false,
           helpfulCount: data.helpfulCount ?? 0,
@@ -243,11 +243,7 @@ export function ReviewList({
                   </div>
 
                   <div className="flex flex-wrap items-center gap-3">
-                    {review.watchStatus && (
-                      <span className="rounded-[20px] border border-border-chip bg-bg-input px-3 py-[3px] text-sm text-text-tertiary">
-                        {REVIEW_WATCH_STATUS_LABEL[review.watchStatus]}
-                      </span>
-                    )}
+                    {review.watchStatus && <StatusChip status={review.watchStatus} readOnly />}
                     {review.starRating != null && (
                       <span className="inline-flex items-center gap-2">
                         <StarRating value={review.starRating} readOnly size={15} />

@@ -1,43 +1,61 @@
 /**
- * レビュー投稿UI（ページ 再生リスト レビュー投稿機能 仕様書「レビュー投稿UI」節）。
- * 星評価・視聴ステータスの選択は即時保存（マイリスト登録を伴う、仕様書「マイリスト登録」節）。
+ * 視聴ステータス記録＋レビュー投稿UI（ページ 再生リスト レビュー投稿機能 仕様書
+ * 「視聴ステータスを記録するUI」「レビュー投稿UI」節）。
+ * 視聴ステータスの選択は即時保存（マイリスト登録を伴う、仕様書「マイリスト登録」節）。
  * コメントは「レビューを投稿する」で展開し、明示的な「投稿する」操作でのみ保存する。
  * 信頼度スコアの算出はクライアントで信頼できないため app/api/reviews/upsert を介する
  * （フェーズ3計画参照）。
+ *
+ * 視聴ステータスは `mylist.watchStatus` を正とする（Firestore データモデル設計書 3.11節）。
+ * `reviews.watchStatus` はレビュー一覧での表示用の非正規化コピーであり、書き込みは常に
+ * この upsert API 経由で両方に反映する。呼び出し側（再生リスト詳細ページ）が持つ mylist
+ * state を props で受け取り、チップの選択状態はそちらから描画する。
  */
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { doc, onSnapshot } from 'firebase/firestore';
 import type { User } from 'firebase/auth';
 import { db, auth } from '@/lib/firebase';
 import { Button } from '@/components/ui/Button';
-import { Card } from '@/components/ui/Card';
+import { Card, CardDivider } from '@/components/ui/Card';
 import { Modal } from '@/components/ui/Modal';
 import { StarRating } from '@/components/ui/StarRating';
 import { Textarea, Checkbox } from '@/components/ui/Input';
 import { useToast } from '@/components/ui/Toast';
-import { ChevronDownIcon } from '@/components/ui/icons';
+import { ChevronDownIcon, InfoIcon } from '@/components/ui/icons';
+import {
+  StatusChip,
+  chipClassName,
+  WATCH_STATUS_LABEL,
+  WATCH_STATUS_PRIMARY,
+  WATCH_STATUS_OTHER,
+  normalizeWatchStatus,
+  type WatchStatus,
+} from '@/components/ui/Chip';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
-  DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
 } from '@/components/ui/DropdownMenu';
 import { LoginRequiredModal } from '@/components/layout/LoginRequiredModal';
-import {
-  REVIEW_PRIMARY_STATUSES,
-  REVIEW_OTHER_STATUSES,
-  REVIEW_WATCH_STATUS_LABEL,
-  type ReviewWatchStatus,
-} from '@/lib/review-status';
 
 const MAX_COMMENT_LENGTH = 2000;
 const NG_WORD_CHECK_DELAY_MS = 500;
 
+/** 再生リスト詳細ページが保持するマイリスト登録状態（呼び出し側と共有する） */
+export interface MylistState {
+  docId: string;
+  status: WatchStatus;
+}
+
 interface ReviewDoc {
   starRating: number | null;
-  watchStatus: ReviewWatchStatus | null;
+  /** レビュー一覧表示用の非正規化コピー。視聴ステータスの正は mylist（props の `mylist`） */
+  watchStatus: WatchStatus | null;
   comment: string | null;
   hasSpoiler: boolean;
 }
@@ -55,11 +73,17 @@ async function getIdToken(): Promise<string> {
   return auth.currentUser.getIdToken();
 }
 
-export function ReviewForm({ playlistId, user }: { playlistId: string; user: User | null }) {
+interface ReviewFormProps {
+  playlistId: string;
+  user: User | null;
+  mylist: MylistState | null;
+  onMylistChange: (next: MylistState | null) => void;
+}
+
+export function ReviewForm({ playlistId, user, mylist, onMylistChange }: ReviewFormProps) {
   const { toast } = useToast();
   const [saved, setSaved] = useState<ReviewDoc>(EMPTY_REVIEW);
   const [starRating, setStarRating] = useState<number | null>(null);
-  const [watchStatus, setWatchStatus] = useState<ReviewWatchStatus | null>(null);
   const [commentOpen, setCommentOpen] = useState(false);
   const [comment, setComment] = useState('');
   const [hasSpoiler, setHasSpoiler] = useState(false);
@@ -81,14 +105,13 @@ export function ReviewForm({ playlistId, user }: { playlistId: string; user: Use
       const data = snap.exists()
         ? {
             starRating: (snap.data().starRating as number | null) ?? null,
-            watchStatus: (snap.data().watchStatus as ReviewWatchStatus | null) ?? null,
+            watchStatus: normalizeWatchStatus(snap.data().watchStatus),
             comment: (snap.data().comment as string | null) ?? null,
             hasSpoiler: (snap.data().hasSpoiler as boolean) ?? false,
           }
         : EMPTY_REVIEW;
       setSaved(data);
       setStarRating(data.starRating);
-      setWatchStatus(data.watchStatus);
       setComment(data.comment ?? '');
       setHasSpoiler(data.hasSpoiler);
     });
@@ -96,7 +119,6 @@ export function ReviewForm({ playlistId, user }: { playlistId: string; user: Use
       unsubscribe();
       setSaved(EMPTY_REVIEW);
       setStarRating(null);
-      setWatchStatus(null);
       setComment('');
       setHasSpoiler(false);
     };
@@ -133,8 +155,18 @@ export function ReviewForm({ playlistId, user }: { playlistId: string; user: Use
     };
   }, [comment, user]);
 
-  async function persist(next: { starRating?: number | null; watchStatus?: ReviewWatchStatus | null; comment?: string; hasSpoiler?: boolean }) {
-    if (!user) return;
+  /**
+   * `reviews.watchStatus` はサーバー側で mylist にも反映され、結果の mylist 状態が
+   * レスポンスで返る（app/api/reviews/upsert/route.ts）。呼び出し側はそれで mylist state を
+   * 同期するため、成否と併せてレスポンスを返す。
+   */
+  async function persist(next: {
+    starRating?: number | null;
+    watchStatus?: WatchStatus | null;
+    comment?: string;
+    hasSpoiler?: boolean;
+  }): Promise<{ mylist: MylistState | null } | null> {
+    if (!user) return null;
     setBusy(true);
     try {
       const idToken = await getIdToken();
@@ -144,20 +176,20 @@ export function ReviewForm({ playlistId, user }: { playlistId: string; user: Use
         body: JSON.stringify({
           playlistId,
           starRating: next.starRating !== undefined ? next.starRating : starRating,
-          watchStatus: next.watchStatus !== undefined ? next.watchStatus : watchStatus,
-          comment: next.comment !== undefined ? next.comment : saved.comment ?? '',
+          watchStatus: next.watchStatus !== undefined ? next.watchStatus : (mylist?.status ?? null),
+          comment: next.comment !== undefined ? next.comment : (saved.comment ?? ''),
           hasSpoiler: next.hasSpoiler !== undefined ? next.hasSpoiler : hasSpoiler,
         }),
       });
       const body = await res.json();
       if (!res.ok) {
         toast({ type: 'error', message: UPSERT_ERROR_MESSAGE[body.error] ?? '送信に失敗しました。時間をおいて再試行してください' });
-        return false;
+        return null;
       }
-      return true;
+      return { mylist: body.mylist ?? null };
     } catch {
       toast({ type: 'error', message: '通信エラーが発生しました。時間をおいて再試行してください' });
-      return false;
+      return null;
     } finally {
       setBusy(false);
     }
@@ -173,25 +205,29 @@ export function ReviewForm({ playlistId, user }: { playlistId: string; user: Use
     if (!requireLogin()) return;
     const previous = starRating;
     setStarRating(v);
-    const ok = await persist({ starRating: v });
-    if (ok) {
+    const result = await persist({ starRating: v });
+    if (result) {
+      onMylistChange(result.mylist);
       toast({ type: 'success', message: v == null ? '評価を取り消しました' : '評価を保存しました' });
     } else {
       setStarRating(previous);
     }
   }
 
-  async function handlePickStatus(s: ReviewWatchStatus) {
+  async function handlePickStatus(s: WatchStatus) {
     if (!requireLogin()) return;
-    const previous = watchStatus;
-    const next = watchStatus === s ? null : s;
-    setWatchStatus(next);
-    const ok = await persist({ watchStatus: next });
-    if (ok) {
-      toast({ type: 'success', message: next == null ? 'ステータスを解除しました' : `ステータスを「${REVIEW_WATCH_STATUS_LABEL[s]}」にしました` });
-    } else {
-      setWatchStatus(previous);
-    }
+    const previousMylist = mylist;
+    const desired = mylist?.status === s ? null : s;
+    const result = await persist({ watchStatus: desired });
+    if (!result) return;
+    onMylistChange(result.mylist);
+    const message =
+      desired == null
+        ? 'ステータスを解除し、マイリストから削除しました'
+        : previousMylist == null
+          ? `ステータスを「${WATCH_STATUS_LABEL[s]}」にして、マイリストに追加しました`
+          : `ステータスを「${WATCH_STATUS_LABEL[s]}」に変更しました`;
+    toast({ type: 'success', message });
   }
 
   function handleOpenComment() {
@@ -210,8 +246,9 @@ export function ReviewForm({ playlistId, user }: { playlistId: string; user: Use
   async function handleSubmitComment() {
     if (!requireLogin()) return;
     if (urlError || ngWordDisplayError) return;
-    const ok = await persist({ comment, hasSpoiler });
-    if (ok) {
+    const result = await persist({ comment, hasSpoiler });
+    if (result) {
+      onMylistChange(result.mylist);
       toast({ type: 'success', message: saved.comment ? '更新しました' : '投稿しました' });
       setCommentOpen(false);
     }
@@ -231,8 +268,9 @@ export function ReviewForm({ playlistId, user }: { playlistId: string; user: Use
         toast({ type: 'error', message: '削除に失敗しました。時間をおいて再試行してください' });
         return;
       }
+      // レビュー（星・コメント）のみリセットする。マイリスト登録・視聴ステータスは維持する
+      // （仕様書「削除」節: 「削除してもマイリスト登録自体は維持される」）
       setStarRating(null);
-      setWatchStatus(null);
       setComment('');
       setHasSpoiler(false);
       setCommentOpen(false);
@@ -245,95 +283,119 @@ export function ReviewForm({ playlistId, user }: { playlistId: string; user: Use
     }
   }
 
-  const hasSavedReview = saved.starRating != null || saved.watchStatus != null || !!saved.comment;
+  const hasSavedReview = saved.starRating != null || !!saved.comment;
   const canSubmitComment = !urlError && !ngWordDisplayError && !busy;
+  const otherActive = !!mylist && WATCH_STATUS_OTHER.includes(mylist.status);
 
   return (
     <Card className="flex flex-col gap-4">
-      <h2 className="text-xl font-medium text-text-primary">この再生リストに対してレビューする</h2>
-
       <div className="flex flex-col gap-2">
-        <StarRating
-          value={starRating}
-          onChange={(v) => handlePickStar(v)}
-          size={26}
-          aria-label="この再生リストの星評価"
-        />
-        {!commentOpen && starRating != null && !saved.comment && (
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-            <p className="text-base text-text-secondary">この再生リストに対する評価を書いてみませんか？</p>
-            <Button variant="secondary" size="sm" onClick={handleOpenComment}>
-              レビューを投稿する
+        <h2 className="text-xl font-medium text-text-primary">この再生リストに対して視聴ステータスを記録する</h2>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {WATCH_STATUS_PRIMARY.map((s) => (
+            <StatusChip key={s} status={s} active={mylist?.status === s} disabled={busy} onClick={() => handlePickStatus(s)} />
+          ))}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button type="button" disabled={busy} className={chipClassName(otherActive)} aria-label="その他の視聴ステータスを選ぶ">
+                {otherActive ? `その他: ${WATCH_STATUS_LABEL[mylist!.status]}` : 'その他'}
+                <ChevronDownIcon size={12} />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuRadioGroup value={otherActive ? mylist!.status : ''}>
+                {WATCH_STATUS_OTHER.map((s) => (
+                  <DropdownMenuRadioItem key={s} value={s} onSelect={() => handlePickStatus(s)}>
+                    {WATCH_STATUS_LABEL[s]}
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+
+        <p className="flex items-center gap-1 text-md text-text-muted">
+          <InfoIcon size={13} />
+          {mylist ? (
+            <>
+              マイリストに追加済みです（
+              <Link href="/mylist" className="text-text-secondary underline underline-offset-2 hover:text-text-primary">
+                マイリストを見る
+              </Link>
+              ）
+            </>
+          ) : (
+            'いずれかを選ぶとマイリストに追加されます'
+          )}
+        </p>
+      </div>
+
+      <CardDivider />
+
+      <div className="flex flex-col gap-4">
+        <h2 className="text-xl font-medium text-text-primary">この再生リストに対してレビューする</h2>
+
+        <div className="flex flex-col gap-2">
+          <StarRating
+            value={starRating}
+            onChange={(v) => handlePickStar(v)}
+            size={26}
+            aria-label="この再生リストの星評価"
+          />
+          {!commentOpen && starRating != null && !saved.comment && (
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+              <p className="text-base text-text-secondary">この再生リストに対する評価を書いてみませんか？</p>
+              <Button variant="secondary" size="sm" onClick={handleOpenComment}>
+                レビューを投稿する
+              </Button>
+            </div>
+          )}
+        </div>
+
+        {!commentOpen && !starRating && !saved.comment && (
+          <Button variant="secondary" size="sm" className="self-start" onClick={handleOpenComment}>
+            レビューを投稿する
+          </Button>
+        )}
+
+        {(commentOpen || saved.comment) && (
+          <div className="flex flex-col gap-2 border-t border-border-divider pt-4">
+            <Textarea
+              value={comment}
+              onChange={(e) => setComment(e.target.value.slice(0, MAX_COMMENT_LENGTH))}
+              placeholder="この再生リストのレビューを書く（任意）"
+              aria-label="レビューコメント"
+              aria-invalid={!!(urlError || ngWordDisplayError)}
+            />
+            <div className="flex items-center justify-between text-md text-text-muted">
+              <span>
+                {(urlError || ngWordDisplayError) && <span className="text-input-error">{urlError ?? ngWordDisplayError}</span>}
+              </span>
+              <span>
+                {comment.length} / {MAX_COMMENT_LENGTH}
+              </span>
+            </div>
+            <Checkbox label="ネタバレを含む" checked={hasSpoiler} onChange={(e) => setHasSpoiler(e.target.checked)} />
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={handleCancelComment} disabled={busy}>
+                キャンセル
+              </Button>
+              <Button variant="primary" onClick={handleSubmitComment} disabled={!canSubmitComment} loading={busy}>
+                {saved.comment ? '更新する' : '投稿する'}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {hasSavedReview && !commentOpen && (
+          <div className="flex justify-end">
+            <Button variant="ghost" size="sm" onClick={() => setConfirmDeleteOpen(true)} disabled={busy}>
+              レビューを削除する
             </Button>
           </div>
         )}
       </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        {REVIEW_PRIMARY_STATUSES.map((s) => (
-          <Button key={s} variant="secondary" active={watchStatus === s} onClick={() => handlePickStatus(s)} disabled={busy}>
-            {REVIEW_WATCH_STATUS_LABEL[s]}
-          </Button>
-        ))}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="secondary" active={!!watchStatus && REVIEW_OTHER_STATUSES.includes(watchStatus)} disabled={busy}>
-              その他
-              <ChevronDownIcon size={12} />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            {REVIEW_OTHER_STATUSES.map((s) => (
-              <DropdownMenuItem key={s} onSelect={() => handlePickStatus(s)}>
-                {REVIEW_WATCH_STATUS_LABEL[s]}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-
-      {!commentOpen && !starRating && !saved.comment && (
-        <Button variant="secondary" size="sm" className="self-start" onClick={handleOpenComment}>
-          レビューを投稿する
-        </Button>
-      )}
-
-      {(commentOpen || saved.comment) && (
-        <div className="flex flex-col gap-2 border-t border-border-divider pt-4">
-          <Textarea
-            value={comment}
-            onChange={(e) => setComment(e.target.value.slice(0, MAX_COMMENT_LENGTH))}
-            placeholder="この再生リストのレビューを書く（任意）"
-            aria-label="レビューコメント"
-            aria-invalid={!!(urlError || ngWordDisplayError)}
-          />
-          <div className="flex items-center justify-between text-md text-text-muted">
-            <span>
-              {(urlError || ngWordDisplayError) && <span className="text-input-error">{urlError ?? ngWordDisplayError}</span>}
-            </span>
-            <span>
-              {comment.length} / {MAX_COMMENT_LENGTH}
-            </span>
-          </div>
-          <Checkbox label="ネタバレを含む" checked={hasSpoiler} onChange={(e) => setHasSpoiler(e.target.checked)} />
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={handleCancelComment} disabled={busy}>
-              キャンセル
-            </Button>
-            <Button variant="primary" onClick={handleSubmitComment} disabled={!canSubmitComment} loading={busy}>
-              {saved.comment ? '更新する' : '投稿する'}
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {hasSavedReview && !commentOpen && (
-        <div className="flex justify-end">
-          <Button variant="ghost" size="sm" onClick={() => setConfirmDeleteOpen(true)} disabled={busy}>
-            レビューを削除する
-          </Button>
-        </div>
-      )}
 
       <LoginRequiredModal open={loginOpen} onOpenChange={setLoginOpen} title="レビューを投稿するにはアカウントが必要です" />
 

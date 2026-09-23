@@ -1,6 +1,6 @@
 # プレミテ Firestore データモデル設計書
 
-**バージョン**: v1.12  
+**バージョン**: v1.13  
 **作成日**: 2026年3月30日（更新）  
 **対象**: 開発チーム  
 **関連ドキュメント**: プレミテ企画書 / プレミテ_技術スタック仕様書 / 各機能仕様書
@@ -333,7 +333,7 @@ YouTubeチャンネルの情報。
 | `userId` | string | ✅ | 投稿者のuserId |
 | `playlistId` | string | ✅ | 対象再生リストのドキュメントID |
 | `starRating` | number? | — | 星評価（0.5〜5.0、0.5刻み）。未設定の場合はnull |
-| `watchStatus` | string? | — | 視聴ステータス：`"want_to_watch"` / `"watching"` / `"reviewing"` / `"completed"` / `"on_hold"` / `"dropped"` |
+| `watchStatus` | string? | — | 視聴ステータス：`"want_to_watch"` / `"watching"` / `"completed"` / `"on_hold"` / `"dropped"`。`mylist.watchStatus`（3.11節）の非正規化コピー（正はmylist側）。表示（レビュー一覧）専用で、書き込みは常に app/api/reviews/upsert 経由で両方に同時反映する |
 | `comment` | string? | — | レビューコメント（任意） |
 | `hasSpoiler` | boolean | ✅ | ネタバレフラグ（デフォルト：`false`） |
 | `helpfulCount` | number | ✅ | 「参考になった」獲得数（変数H、デフォルト：0） |
@@ -382,7 +382,8 @@ YouTubeチャンネルの情報。
 | `createdAt` | Timestamp | ✅ | 登録日時 |
 | `updatedAt` | Timestamp | ✅ | 最終更新日時 |
 
-> **設計注記**: `watchStatus`は`reviews.watchStatus`（3.9節）と値の構成が異なる（`"reviewing"`を含まない）。マイリストの視聴ステータスとレビューの視聴ステータスは別概念として扱う（マイリスト機能仕様書1.3節参照）。
+> **設計注記**: `watchStatus`はこちら（`mylist`）が正であり、`reviews.watchStatus`（3.9節）はレビュー一覧での表示用にこのフィールドをそのままコピーした非正規化フィールドとする。書き込みは常に app/api/reviews/upsert 経由で両方を同時に更新するため、原則ズレは発生しない。ただしマイリストページ・マイリストカードからの直接更新（クライアントSDKで`mylist`のみ更新）経路もあり、そちらは`reviews.watchStatus`へ即時反映されない（次回そのレビューを更新するまで古いままになりうる。`userDisplayName`等、他の非正規化フィールドと同じ許容範囲の設計）。
+> 旧仕様（レビュー投稿機能仕様書 v1.3.0以前）では`reviews.watchStatus`のみ`"reviewing"`という値を持ち得たが、`mylist`側に対応する概念が無く不整合だったため廃止した（v1.4.0で「完走」に統合）。既存データに残る`"reviewing"`はアプリ側で読み取り時に`"completed"`へ丸めて扱う（`components/ui/Chip.tsx`の`normalizeWatchStatus`）。
 
 ---
 
@@ -873,3 +874,4 @@ ai_operators ──── (1) users
 | v1.10 | 2026-09-11 | `notifications` コレクションを新規追加（ユーザー通知機能仕様書準拠。フェーズ2ではシリーズ新着通知のみ実装、他3種別は将来対応） |
 | v1.12 | 2026-09-21 | 7.3節「マスタ編集時の非正規化フィールド同期」を追加（`games` 編集時の `playlists.gameName`/`gameGenreIds`、`genres`/`themes.gameTitleCount` の同期ポリシー） |
 | v1.11 | 2026-09-13 | フェーズ3ステップ1（レビュー・スコアリング機能）実装に伴うスキーマギャップ解消。`reviews` に投稿者表示用の非正規化コピー `userDisplayName`/`userProfileImageUrl` を追加（HANDOFF.md未解決事項1の対応）。`reviews.commentScore` の説明を実装（共通 信頼度スコアリングシステム仕様書 §3.3準拠、あり:1.0/なし:0.5の2値）に合わせて修正（旧記載の「0.2/0.5/1.0」は誤記）。`reviews` ドキュメントIDが `{userId}_{playlistId}` 形式であることを明記。`users` に `hideSpoilerReviews` を追加（レビュー投稿機能仕様書のネタバレフィルター設定の永続化用）。 |
+| v1.13 | 2026-09-23 | `reviews.watchStatus` から `"reviewing"` を削除し、`mylist.watchStatus` と同じ5値に統一（視聴ステータス記録UI・レビュー投稿UI統合）。3.11節の設計注記を「`mylist.watchStatus` が正、`reviews.watchStatus` はその非正規化コピー」に更新 |
