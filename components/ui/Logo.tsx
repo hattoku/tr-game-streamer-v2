@@ -9,22 +9,19 @@ import { PlayIcon } from './icons';
 import { cn } from './cn';
 
 interface LogoProps {
-  /** シアターモード時など縮小表示する場合 true */
-  compact?: boolean;
   className?: string;
 }
 
-export function Logo({ compact = false, className }: LogoProps) {
-  const box = compact ? 18 : 26;
+export function Logo({ className }: LogoProps) {
   return (
     <Link href="/" aria-label="プレミテ トップページ" className={cn('inline-flex items-center gap-2', className)}>
       <span
         className="inline-flex items-center justify-center rounded-[6px] bg-gradient-primary text-white shadow-logo"
-        style={{ width: box, height: box }}
+        style={{ width: 26, height: 26 }}
       >
-        <PlayIcon size={compact ? 11 : 15} />
+        <PlayIcon size={15} />
       </span>
-      <span className={cn('whitespace-nowrap font-semibold text-text-primary', compact ? 'text-base' : 'text-xl')}>プレミテ</span>
+      <span className="whitespace-nowrap text-xl font-semibold text-text-primary">プレミテ</span>
     </Link>
   );
 }

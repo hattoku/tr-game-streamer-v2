@@ -17,7 +17,7 @@ import { BellIcon } from '@/components/ui/icons';
 import { cn } from '@/components/ui/cn';
 import { isActivePath } from './nav';
 
-export function NotificationBell({ compact = false }: { compact?: boolean }) {
+export function NotificationBell() {
   const { user } = useAuth();
   const pathname = usePathname();
   const [unread, setUnread] = useState(0);
@@ -48,20 +48,15 @@ export function NotificationBell({ compact = false }: { compact?: boolean }) {
       aria-label={label}
       title={label}
       className={cn(
-        'relative inline-flex items-center justify-center rounded-full transition-colors duration-[120ms] hover:text-text-primary',
-        compact ? 'size-6' : 'size-9',
+        'relative inline-flex size-9 items-center justify-center rounded-full transition-colors duration-[120ms] hover:text-text-primary',
         active ? 'text-text-primary' : 'text-text-tertiary',
       )}
     >
-      <BellIcon size={compact ? 14 : 20} />
+      <BellIcon size={20} />
       {unread > 0 && (
         <span
           aria-hidden
-          className={cn(
-            'absolute inline-flex items-center justify-center rounded-[8px] bg-brand-primary px-1 text-xs font-semibold leading-none text-white',
-            'shadow-[0_0_0_2px_var(--color-bg-base)]',
-            compact ? 'right-0 top-0 h-[14px] min-w-[14px] text-[9px]' : 'right-0 top-0 h-4 min-w-4',
-          )}
+          className="absolute right-0 top-0 inline-flex h-4 min-w-4 items-center justify-center rounded-[8px] bg-brand-primary px-1 text-xs font-semibold leading-none text-white shadow-[0_0_0_2px_var(--color-bg-base)]"
         >
           {unread > 99 ? '99+' : unread}
         </span>

@@ -62,7 +62,7 @@ export function AdminFrame({ children }: { children: React.ReactNode }) {
             <Link href="/" className="hidden whitespace-nowrap text-md text-text-tertiary transition-colors duration-[120ms] hover:text-text-primary md:inline">
               サービスへ戻る
             </Link>
-            <UserDropdown compact />
+            <UserDropdown />
           </div>
         </div>
         <div className="border-t border-border-divider md:hidden">

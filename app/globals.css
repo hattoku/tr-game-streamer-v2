@@ -113,7 +113,6 @@
   --spacing-header: 60px;
   --spacing-header-mobile: 52px;
   --spacing-header-mobile-tabs: 52px; /* モバイル「さがす」一覧ページのヘッダー直下タブ列（2行ラベル） */
-  --spacing-header-compact: 30px;
   --spacing-bottom-tabs: 56px; /* モバイルのボトムタブバー（セーフエリアは別途加算） */
 
   /* §9.1 スケルトンのシマー */

@@ -24,10 +24,10 @@ const ICONS: Record<BottomTabKey, typeof HomeIcon> = {
 export function BottomTabBar() {
   const pathname = usePathname();
   const { user } = useAuth();
-  const { compactHeader } = useLayout();
+  const { headerHidden } = useLayout();
   const active = activeBottomTab(pathname);
 
-  if (compactHeader) return null;
+  if (headerHidden) return null;
 
   return (
     <nav

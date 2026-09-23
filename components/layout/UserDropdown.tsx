@@ -57,7 +57,7 @@ export function UserAvatar({
   );
 }
 
-export function UserDropdown({ compact = false }: { compact?: boolean }) {
+export function UserDropdown() {
   const { user, displayName, role } = useAuth();
   const router = useRouter();
   if (!user) return null;
@@ -77,16 +77,15 @@ export function UserDropdown({ compact = false }: { compact?: boolean }) {
       <DropdownMenuTrigger
         aria-label="ユーザーメニュー"
         className={cn(
-          'inline-flex items-center rounded-full border border-white/10 bg-white/4 text-text-tertiary',
+          'inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/4 py-1 pl-1 pr-[10px] text-text-tertiary',
           'transition-[color,border-color,background-color] duration-[120ms] hover:border-border-control hover:text-text-primary',
           'data-[state=open]:border-border-control data-[state=open]:text-text-primary',
-          compact ? 'gap-1 py-[2px] pl-[2px] pr-[6px]' : 'gap-2 py-1 pl-1 pr-[10px]',
         )}
       >
-        <UserAvatar name={name} size={compact ? 18 : 24} />
+        <UserAvatar name={name} size={24} />
         {/* 表示名は 1024px 以上でのみ。768〜1023px はヘッダーに収まらないためアイコン＋▾ だけにする（UI仕様書 §2.9） */}
-        <span className={cn('max-w-[6em] truncate text-text-primary', compact ? 'text-md' : 'hidden text-base lg:inline')}>{name}</span>
-        <ChevronDownIcon size={compact ? 10 : 12} />
+        <span className="hidden max-w-[6em] truncate text-base text-text-primary lg:inline">{name}</span>
+        <ChevronDownIcon size={12} />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-[220px]">
         <DropdownMenuLabel className="py-2">

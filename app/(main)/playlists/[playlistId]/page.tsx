@@ -81,7 +81,7 @@ function loadYouTubeApi(): Promise<void> {
 export default function PlaylistDetailPage() {
   const { playlistId } = useParams<{ playlistId: string }>();
   const { user, loading: authLoading } = useAuth();
-  const { setCompactHeader } = useLayout();
+  const { setHeaderHidden } = useLayout();
 
   const [playlist, setPlaylist] = useState<PlaylistDoc | null>(null);
   const [videos, setVideos] = useState<VideoItem[]>([]);
@@ -117,12 +117,12 @@ export default function PlaylistDetailPage() {
     continuousPlayRef.current = continuousPlay;
   }, [continuousPlay]);
 
-  // シアターモード: ヘッダーを 30px・黒背景に（動画プレーヤー仕様書「シアターモード」）。
+  // シアターモード: ヘッダーを非表示にしてプレーヤーを画面最上部に出す（動画プレーヤー仕様書「シアターモード」）。
   // ページを離れたらリセット（状態は保持しない仕様）
   useEffect(() => {
-    setCompactHeader(theaterMode);
-    return () => setCompactHeader(false);
-  }, [theaterMode, setCompactHeader]);
+    setHeaderHidden(theaterMode);
+    return () => setHeaderHidden(false);
+  }, [theaterMode, setHeaderHidden]);
 
   // 初期データ読み込み
   useEffect(() => {
@@ -383,7 +383,18 @@ export default function PlaylistDetailPage() {
   // クラスだけを切り替える（親要素が変わると React が再マウントし、再生中の動画が止まる）
   const hero = (
     <div className={cn(theaterMode && '-mx-4 -mt-6 bg-bg-player px-4 pt-4 md:-mx-6 md:-mt-8 md:px-6')}>
-      <div className={cn('relative aspect-video w-full overflow-hidden bg-bg-player', !theaterMode && 'rounded-[12px] shadow-card')}>
+      {/* シアターモード: 横持ちスマホ・低い画面高さのウィンドウでもプレーヤー＋コントローラが画面内に収まるよう、
+          幅いっぱいにせず「高さがビューポートから128px（コントローラ行＋余白の概算）を引いた値を超えない幅」
+          まで縮め、左右を bg-bg-player の黒で埋める（YouTube のシアターモードと同じ考え方）。
+          128px は下の w-[...] と max-h-[...] の2箇所に直書き。Tailwind の任意値クラスは静的にソースを
+          読んでCSSを生成するため、JSの変数やテンプレートリテラルで値を差し込むとクラスが生成されなくなる。
+          値を変える際はこの2箇所を手動で合わせること */}
+      <div
+        className={cn(
+          'relative aspect-video overflow-hidden bg-bg-player',
+          theaterMode ? 'mx-auto w-[min(100%,calc((100dvh-128px)*16/9))] max-h-[calc(100dvh-128px)]' : 'w-full rounded-[12px] shadow-card',
+        )}
+      >
         {/* プレーヤーのマウント先は常に置いておき、開始前はサムネイルを重ねる */}
         <div id="yt-player-target" className="absolute inset-0 size-full" />
         {!playerStarted && (
