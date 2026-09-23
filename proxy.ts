@@ -1,44 +1,26 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { STG_GATE_COOKIE_NAME, computeStgGateToken } from './lib/stg-gate';
 
-export function proxy(request: NextRequest) {
-  const authUser = process.env.STAGING_BASIC_AUTH_USER;
-  const authPass = process.env.STAGING_BASIC_AUTH_PASSWORD;
+// 検証段階のため環境を問わずCookieゲートを適用する（変数名の"STAGING_"はBasic認証導入時の名残）。
+// gatePasswordがCloud Run側に設定されている場合のみ動作する
+export async function proxy(request: NextRequest) {
+  const gatePassword = process.env.STAGING_GATE_PASSWORD;
+  if (!gatePassword) return NextResponse.next();
 
-  // 検証段階のため環境を問わずBasic認証を適用する（変数名の"STAGING_"はstg導入時の名残）。
-  // authUser/authPassがCloud Run側に設定されている場合のみ動作する
-  if (authUser && authPass) {
-    const basicAuth = request.headers.get('authorization');
+  const cookieToken = request.cookies.get(STG_GATE_COOKIE_NAME)?.value;
+  const expectedToken = await computeStgGateToken(gatePassword);
 
-    if (basicAuth) {
-      const authValue = basicAuth.split(' ')[1];
-      try {
-        const decoded = Buffer.from(authValue, 'base64').toString();
-        const [user, password] = decoded.split(':');
+  if (cookieToken === expectedToken) return NextResponse.next();
 
-        if (user === authUser && password === authPass) {
-          return NextResponse.next();
-        }
-      } catch (e) {
-        // デコード失敗時は認証エラーへ
-      }
-    }
-
-    return new NextResponse('Auth Required.', {
-      status: 401,
-      headers: {
-        'WWW-Authenticate': 'Basic realm="Secure Area"',
-      },
-    });
-  }
-
-  return NextResponse.next();
+  const loginUrl = new URL('/stg-login', request.url);
+  loginUrl.searchParams.set('redirect', `${request.nextUrl.pathname}${request.nextUrl.search}`);
+  return NextResponse.redirect(loginUrl);
 }
 
-// staticファイルや画像、APIルートを除外
+// staticファイルや画像、APIルート、ゲート自体のログインページを除外
 // APIルートはFirebase IDトークン（Authorization: Bearer）で別途保護されているため対象外とする。
-// Basic認証もAuthorizationヘッダーを使うため、両方を同時に満たすことができず、
-// APIルート込みで対象にするとBearerトークン送信時にBasic認証チェックが常に失敗してしまう。
+// /api/stg-gate（ログインフォームの送信先）もapi配下のため自動的に対象外。
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|api).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|api|stg-login).*)'],
 };

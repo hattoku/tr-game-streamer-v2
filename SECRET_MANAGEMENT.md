@@ -7,8 +7,7 @@
 | ファイル | 内容 |
 |---------|------|
 | `lib/firebase.ts` | Firebase 認証情報 |
-| (Cloud Run 設定) | `STAGING_BASIC_AUTH_USER` (Basic認証。変数名の"STAGING_"は導入時の名残で、検証段階のため本番にも同じ値を設定している) |
-| (Cloud Run 設定) | `STAGING_BASIC_AUTH_PASSWORD` (Basic認証。同上) |
+| (Cloud Run 設定) | `STAGING_GATE_PASSWORD` (Cookieベースの共有パスワードゲート。変数名の"STAGING_"は導入時の名残で、検証段階のため本番にも同じ値を設定している。旧 `STAGING_BASIC_AUTH_USER`/`STAGING_BASIC_AUTH_PASSWORD` のBasic認証から移行) |
 
 新たに秘密情報を追加する場合も、同様の構成ファイルに追加する。
 

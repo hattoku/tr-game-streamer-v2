@@ -23,7 +23,7 @@ import {
 // （ユーザー通知機能仕様書の「シリーズ新着通知」のみ実装。他3種別はスコープ外）。
 //
 // Cloud Schedulerからの呼び出しはX-Cron-SecretヘッダーがCRON_SECRETと一致すれば
-// requireAdminをスキップする（/apiはproxy.tsのBasic認証対象外のため、Cloud Run URLを
+// requireAdminをスキップする（/apiはproxy.tsのCookieゲート対象外のため、Cloud Run URLを
 // 直接叩ける。CRON_SECRET自体はYOUTUBE_API_KEYと同じくdeploy.sh/deploy.ps1が
 // .env.localから読み取って注入する）。
 export async function POST(request: NextRequest) {

@@ -1,5 +1,26 @@
 # 操作ログ
 
+## [2026-09-23] ingest | session: HTTP Basic認証→Cookieベースの共有パスワードゲートへ移行
+友人にテストを依頼するにあたり、既存のBasic認証（proxy.ts）が「毎日再入力を求められる」体感の
+障壁になっているとの指摘を受けて着手。ユーザー確認の上、適用範囲は全環境のまま維持・Cookie
+有効期限30日・認証項目はパスワードのみに簡略化（ユーザー名廃止）で実装。`lib/stg-gate.ts`を
+新設し、生パスワードをCookieに保持せず`STAGING_GATE_PASSWORD`をHMAC鍵として固定メッセージに
+署名した値をトークンとして使う方式に（Web Crypto API、proxy.tsのEdgeランタイム対応）。proxy.ts
+をCookie検証＋`/stg-login`へのリダイレクトに置き換え、`app/api/stg-gate/route.ts`（Cookie発行）・
+`app/stg-login/page.tsx`（`(auth)`ルートグループとは分離、`AuthLayout`のみ流用）を新規実装。
+`SECRET_MANAGEMENT.md`・技術スタック仕様書§2.7（v2.10）を更新。lint/tsc成功、HMACトークン
+導出ロジックの決定性はNodeスクリプトで確認、`/stg-login`表示・ゲート未設定時の各挙動は稼働中の
+dev serverへのcurlで確認したが、既存dev serverが`STAGING_GATE_PASSWORD`未設定のまま稼働中で
+二重起動できなかったため、Cookie発行→再入力不要の完全なフローはブラウザ実機未確認（次回dev
+server再起動時またはstgデプロイ後に要確認）。デプロイ時はCloud Run側で`STAGING_GATE_PASSWORD`を
+手動設定し旧2変数を削除する必要がある点を記録。dev-orchestrator経由でspec-conformance-reviewer・
+design-consistency-reviewerを並列レビューし、①`/stg-login`の`redirect`クエリを未検証のまま
+`router.replace()`していたオープンリダイレクト（外部URLへ誘導可能）、②技術スタック仕様書
+§2.7新設時に後続セクション番号を繰り下げ忘れていた重複・バージョン表記のずれ、③入力必須
+エラーを既存`/login`の規約と異なりフォーム全体アラートで表示していた不一致、の3件を修正。
+lint/tsc再確認済み。
+→ [[2026-09-23-stg-cookie-gate]]
+
 ## [2026-09-22] ingest | session: フェーズ6 ステップ3（管理画面の最小版）
 HANDOFF.mdで「どの管理操作を最小版に含めるかから決める」と未確定だったため、着手時にユーザーへ範囲を
 確認（範囲: ダッシュボード集約＋審査ワークフローのうち通報のみ、権限: operator/owner共通）。`/admin`

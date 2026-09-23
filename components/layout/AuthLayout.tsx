@@ -1,7 +1,8 @@
 /**
  * 認証フロー用の簡易レイアウト（共通 uiコンポーネント フロント 仕様書 §1 適用範囲、
  * ログイン仕様書 §12.1: ヘッダーはロゴのみ、フッター無し）。
- * /login /signup /password-reset で使う。
+ * /login /signup /password-reset で使う。/stg-login（Cookieゲート）もFirebase認証とは無関係に
+ * このレイアウトのみを流用する。
  */
 import type { ReactNode } from 'react';
 import { Logo } from '@/components/ui/Logo';
