@@ -1,5 +1,12 @@
 # 操作ログ
 
+## [2026-09-23] ingest | session: 初回ログイン時にスピナーが止まらない不具合を修正
+Firebase Hosting修正後の実機確認で、ユーザーがPC・スマホ各1回「パスワード送信後、読み込みが
+回り続けたまま進まない。リロードして入力し直すと入れる」現象を再現。ログイン成功後の遷移に
+使っていた`router.replace()`（Next.jsクライアントサイドSPA遷移）が、直前にセットしたCookieを
+遷移先のクライアントルーターキャッシュが拾えないことがあるためと推測。`window.location.href`に
+よるフルページ遷移に置き換えて解消。lint/tsc確認済み。→ [[2026-09-23-stg-cookie-gate]]
+
 ## [2026-09-23] ingest | session: 本番デプロイ後、Firebase Hostingのcookie制限でログインが完了しない不具合を修正
 ユーザー依頼で[[2026-09-23-stg-cookie-gate]]をコミット・stg/本番両方にデプロイ（`.\deploy.ps1 stg`
 / `.\deploy.ps1 prod`とも成功。ユーザーの推測に反し今回は本番デプロイがauto modeにブロックされ

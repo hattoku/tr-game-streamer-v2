@@ -1,7 +1,7 @@
 'use client';
 
 import { Suspense, useState, type FormEvent } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { AuthLayout } from '@/components/layout/AuthLayout';
 import { Button } from '@/components/ui/Button';
 import { SectionHeading } from '@/components/ui/Card';
@@ -13,7 +13,6 @@ import { AlertIcon } from '@/components/ui/icons';
 // 未認証アクセスをここへリダイレクトする。Firebase Auth（/login）とは無関係の別物。
 
 function StgLoginBody() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   // オープンリダイレクト対策: サイト内の絶対パスのみ許可する（外部URL・プロトコル相対URLは拒否）
   const rawRedirect = searchParams.get('redirect');
@@ -45,7 +44,10 @@ function StgLoginBody() {
         setBusy(false);
         return;
       }
-      router.replace(redirectTo);
+      // Next.jsのクライアントサイド遷移（router.replace）だと、直前に発行したCookieを
+      // 遷移先のルーターキャッシュが拾えずスピナーが止まらないことがあるため、確実に
+      // 新しいCookieでリクエストし直すフルページ遷移にする
+      window.location.href = redirectTo;
     } catch {
       setFormError('通信エラーが発生しました。時間をおいて再試行してください');
       setBusy(false);

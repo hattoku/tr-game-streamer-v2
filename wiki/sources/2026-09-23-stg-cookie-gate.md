@@ -84,6 +84,16 @@ stg・本番とも実装をデプロイし、Cloud Run側で`STAGING_GATE_PASSWO
 `lib/stg-gate.ts`のCookie名を`stg_gate`から`__session`に変更して解消。stg・本番とも
 再デプロイして動作確認済み。
 
+## 追加の不具合修正: 初回ログイン時にスピナーが止まらない
+
+Firebase Hosting修正後の実機確認で、ユーザーがPC・スマホそれぞれ1回ずつ「パスワードを入力して
+送信すると読み込みが回り続けたまま進まない。ページを再読み込みして入力し直すと入れる」現象を
+再現。ログイン成功後の遷移に使っていた`router.replace()`（Next.jsのクライアントサイドSPA遷移）が、
+直前にセットしたCookieを遷移先のクライアントルーターキャッシュが拾えないことがあるためと推測
+（リロードすると通常のHTTPリクエストになりキャッシュの影響を受けないため必ず成功する、という
+再現条件と整合）。`app/stg-login/page.tsx`で`router.replace(redirectTo)`を
+`window.location.href = redirectTo`（フルページ遷移）に置き換えて解消。lint/tsc確認済み。
+
 ## デプロイ時の注意（手動作業）
 
 `STAGING_BASIC_AUTH_USER`/`STAGING_BASIC_AUTH_PASSWORD`はCloud Runの環境変数に直接設定されており
