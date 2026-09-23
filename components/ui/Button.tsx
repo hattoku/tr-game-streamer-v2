@@ -19,15 +19,20 @@ const VARIANT: Record<ButtonVariant, string> = {
   primary:
     'bg-gradient-primary text-white font-semibold border-0 shadow-primary inset-shadow-highlight-strong ' +
     'hover:brightness-[1.08] hover:-translate-y-px',
-  secondary:
-    'bg-gradient-secondary text-text-btn font-medium border border-border-control shadow-control inset-shadow-highlight ' +
-    'hover:bg-gradient-secondary-hover',
+  secondary: 'font-medium border shadow-control inset-shadow-highlight',
   ghost: 'bg-transparent text-text-muted font-normal border border-transparent hover:text-text-primary hover:bg-bg-hover',
   rakuten: 'bg-brand-rakuten text-white font-medium border-0 hover:brightness-110',
 };
 
-/** トグルON状態（§4.2）。secondary にのみ適用する */
-const ACTIVE = 'bg-none bg-bg-selected text-text-primary border-border-active hover:bg-none';
+/**
+ * secondary の OFF/ON状態別クラス（§4.2）。`cn()` は tailwind-merge を持たず後勝ちに賭けられない
+ * ため（Tabs.tsx・HeroSection.tsx と同じ方針）、border-border-control と border-border-active の
+ * ように同一プロパティを奪い合うクラスは同時に渡さず、状態に応じてどちらか一方だけを合成する。
+ */
+const SECONDARY_STATE = {
+  off: 'bg-gradient-secondary text-text-btn border-border-control hover:bg-gradient-secondary-hover',
+  on: 'bg-none bg-bg-selected text-text-primary border-border-active hover:bg-none',
+};
 
 const SIZE: Record<ButtonVariant, Record<ButtonSize, string>> = {
   primary: {
@@ -62,7 +67,9 @@ export function buttonClassName(
   className?: string,
   active = false,
 ) {
-  return cn(BASE, VARIANT[variant], SIZE[variant][size], active && variant === 'secondary' && ACTIVE, className);
+  const variantClass =
+    variant === 'secondary' ? cn(VARIANT.secondary, active ? SECONDARY_STATE.on : SECONDARY_STATE.off) : VARIANT[variant];
+  return cn(BASE, variantClass, SIZE[variant][size], className);
 }
 
 interface ButtonProps extends ComponentProps<'button'> {

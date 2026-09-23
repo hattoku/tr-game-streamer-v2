@@ -181,11 +181,11 @@ function Actions({
       {/* 性格の異なるボタンの間の縦線（トークン仕様書 §4.4） */}
       <span aria-hidden className="h-[18px] w-px bg-white/10" />
 
-      <Button variant="secondary" size={compact ? 'sm' : 'md'} active={entry.isReverseOrder} onClick={() => onReverseToggle(!entry.isReverseOrder)}>
+      <Button variant="secondary" size="sm" active={entry.isReverseOrder} onClick={() => onReverseToggle(!entry.isReverseOrder)}>
         <ReverseIcon size={13} />
-        {compact ? '逆順' : '逆順で再生'}
+        {entry.isReverseOrder ? (compact ? '逆順中' : '逆順再生中') : compact ? '逆順' : '逆順で再生'}
       </Button>
-      <Button variant="ghost" size={compact ? 'sm' : 'md'} onClick={onRemove} aria-label="マイリストから削除">
+      <Button variant="ghost" size="sm" onClick={onRemove} aria-label="マイリストから削除">
         <TrashIcon size={13} />
         削除
       </Button>
