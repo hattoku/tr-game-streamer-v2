@@ -106,6 +106,13 @@ export default function PlaylistDetailPage() {
   const currentVideoRef = useRef<VideoItem | null>(null);
   const continuousPlayRef = useRef(true);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // 直近の recordEpisodeOpened（fire-and-forget）の書き込み Promise。saveProgress 側がこれを
+  // 待ってから書き込むことで、ネットワーク遅延で recordEpisodeOpened が後から Firestore に
+  // 届いて進捗を 0 に巻き戻してしまう競合を防ぐ
+  const openWriteRef = useRef<Promise<void> | null>(null);
+  // 現在プレーヤーに cue（読み込み）済みの動画ID。再生開始前に再生対象が変わった場合の
+  // 再同期判定に使う
+  const cuedVideoIdRef = useRef<string | null>(null);
 
   const orderedVideos = reverseOrder ? [...videos].reverse() : videos;
   const currentVideo = orderedVideos[currentIndex] ?? null;
@@ -116,6 +123,46 @@ export default function PlaylistDetailPage() {
   useEffect(() => {
     continuousPlayRef.current = continuousPlay;
   }, [continuousPlay]);
+
+  // YouTube IFrame API をマウント時に先読みしておく。初回再生時（ボタン押下時）に
+  // 初めて読み込むと、ネットワーク待ちが発生してユーザー操作から生成までの間隔が開き、
+  // iOS Safari で自動再生が許可されないことがあるため
+  useEffect(() => {
+    loadYouTubeApi();
+  }, []);
+
+  // iOS Safari では、再生ボタン押下と同時に新規 iframe を生成して autoplay:1 を渡しても
+  // 自動再生されないことが多い（新規 iframe 内で YouTube 自身のスクリプトが読み込み完了後に
+  // 遅延して play() を呼ぶ形になり、ユーザー操作起点の呼び出しと見なされないため）。そのため
+  // 再生対象の動画が決まった時点で、プレーヤーを一時停止（cue）状態で先に生成しておき、
+  // ボタン押下時は既存プレーヤーに対して直接 playVideo()/loadVideoById() を呼ぶ
+  // （＝クリックハンドラ内で同期的に呼ばれる postMessage 経由のコマンドとして扱われるため、
+  // iOS でも再生が許可されやすい）。先に cue しておくだけなので、サムネイル＋再生ボタンの
+  // オーバーレイ（!playerStarted の間表示）の裏に隠れており、ユーザーには見えない
+  useEffect(() => {
+    if (loading || playerStarted || !currentVideo) return;
+    if (!playerRef.current) {
+      const create = () => {
+        if (playerRef.current) return;
+        createPlayer(currentVideo, resumeSeconds, false);
+      };
+      if (window.YT?.Player) {
+        create();
+      } else {
+        loadYouTubeApi().then(create);
+      }
+      return;
+    }
+    // 生成済みプレーヤーが cue している動画が、再生開始前に（逆順トグルなどで）変わった場合は
+    // 再同期する
+    if (playerReadyRef.current && cuedVideoIdRef.current !== currentVideo.youtubeVideoId) {
+      playerRef.current.cueVideoById({ videoId: currentVideo.youtubeVideoId, startSeconds: Math.floor(resumeSeconds) });
+      cuedVideoIdRef.current = currentVideo.youtubeVideoId;
+    }
+    // createPlayer は毎レンダーで再生成される関数だが、内部の状態チェック（playerRef.current・
+    // cuedVideoIdRef）で冪等になっているため deps に含めない
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, playerStarted, currentVideo, resumeSeconds]);
 
   // シアターモード: ヘッダーを非表示にしてプレーヤーを画面最上部に出す（動画プレーヤー仕様書「シアターモード」）。
   // ページを離れたらリセット（状態は保持しない仕様）
@@ -231,17 +278,21 @@ export default function PlaylistDetailPage() {
 
   async function recordEpisodeOpened(video: VideoItem, startSeconds: number) {
     if (!user || !playlistId) return;
-    await setDoc(doc(db, 'watch_progress', `${user.uid}_${playlistId}_${video.youtubeVideoId}`), {
+    const write = setDoc(doc(db, 'watch_progress', `${user.uid}_${playlistId}_${video.youtubeVideoId}`), {
       userId: user.uid,
       playlistId,
       youtubeVideoId: video.youtubeVideoId,
       lastPlayedSeconds: startSeconds,
       updatedAt: serverTimestamp(),
     });
+    openWriteRef.current = write;
+    await write;
   }
 
   async function saveProgress(video: VideoItem, seconds: number) {
     if (!user || !playlistId) return;
+    // recordEpisodeOpened の書き込みが先に Firestore に届くよう待ち合わせる（上記コメント参照）
+    await openWriteRef.current?.catch(() => {});
     await setDoc(doc(db, 'watch_progress', `${user.uid}_${playlistId}_${video.youtubeVideoId}`), {
       userId: user.uid,
       playlistId,
@@ -271,22 +322,28 @@ export default function PlaylistDetailPage() {
     }, 5000);
   }
 
-  async function initPlayer(video: VideoItem, startSeconds: number) {
-    await loadYouTubeApi();
+  // YT.Player を新規生成する。通常は再生対象が決まった時点で cue（autoplay: false）として
+  // 先読み用に呼ばれ、以後の再生操作は既存プレーヤーへのコマンド（playVideo/loadVideoById等）
+  // で行う。autoplay: true で呼ぶのは、その先読みが間に合わなかった場合のフォールバックのみ
+  // （この経路は iOS Safari では自動再生されないことがあるが、動画自体はロードされるので
+  // 手動で再生ボタンを押せば再生できる）
+  function createPlayer(video: VideoItem, startSeconds: number, autoplay: boolean) {
     playerRef.current = new window.YT.Player('yt-player-target', {
       // マウント先の div は iframe に置き換えられるため、親（aspect-video の箱）いっぱいのサイズを明示する
       width: '100%',
       height: '100%',
       videoId: video.youtubeVideoId,
-      playerVars: { autoplay: 1, start: Math.floor(startSeconds) },
+      playerVars: { autoplay: autoplay ? 1 : 0, start: Math.floor(startSeconds), playsinline: 1 },
       events: {
         onReady: () => {
           playerReadyRef.current = true;
-          startInterval();
         },
         onStateChange: (e: any) => {
           const YT = window.YT;
-          if (e.data === YT.PlayerState.PLAYING) setIsPlaying(true);
+          if (e.data === YT.PlayerState.PLAYING) {
+            setIsPlaying(true);
+            startInterval();
+          }
           if (e.data === YT.PlayerState.PAUSED) setIsPlaying(false);
           if (e.data === YT.PlayerState.ENDED) {
             const ended = currentVideoRef.current;
@@ -296,47 +353,62 @@ export default function PlaylistDetailPage() {
         },
       },
     });
+    cuedVideoIdRef.current = video.youtubeVideoId;
   }
 
-  async function handleStart() {
+  function handleStart() {
     setPlayerStarted(true);
     const video = orderedVideos[currentIndex];
     if (!video) return;
-    await recordEpisodeOpened(video, resumeSeconds);
-    if (playerReadyRef.current && playerRef.current) {
-      playerRef.current.loadVideoById({ videoId: video.youtubeVideoId, startSeconds: resumeSeconds });
+    // 進捗記録は待たない（Firestore への往復で iOS Safari の自動再生許可が失効するため）
+    recordEpisodeOpened(video, resumeSeconds).catch((err) => console.error(err));
+    const player = playerRef.current;
+    if (player && playerReadyRef.current) {
+      // 先読みで cue 済みのプレーヤーに対して直接コマンドを送る（クリックハンドラ内で同期的に
+      // 呼ぶことで、iOS Safari でもユーザー操作起点の再生として扱われる）
+      if (cuedVideoIdRef.current === video.youtubeVideoId) {
+        player.seekTo(resumeSeconds, true);
+        player.playVideo();
+      } else {
+        player.loadVideoById({ videoId: video.youtubeVideoId, startSeconds: resumeSeconds });
+        cuedVideoIdRef.current = video.youtubeVideoId;
+      }
     } else {
-      await initPlayer(video, resumeSeconds);
+      // 先読みがまだ間に合っていない場合のフォールバック
+      createPlayer(video, resumeSeconds, true);
     }
   }
 
-  async function goToRelative(delta: number, auto: boolean) {
+  function goToRelative(delta: number, auto: boolean) {
     const nextIndex = currentIndex + delta;
     const nextVideo = orderedVideos[nextIndex];
     if (!nextVideo) return;
     setCurrentIndex(nextIndex);
     setResumeSeconds(0);
-    await recordEpisodeOpened(nextVideo, 0);
-    if (playerRef.current) {
-      playerRef.current.loadVideoById({ videoId: nextVideo.youtubeVideoId, startSeconds: 0 });
+    recordEpisodeOpened(nextVideo, 0).catch((err) => console.error(err));
+    const player = playerRef.current;
+    if (player && playerReadyRef.current) {
+      player.loadVideoById({ videoId: nextVideo.youtubeVideoId, startSeconds: 0 });
+      cuedVideoIdRef.current = nextVideo.youtubeVideoId;
     } else if (auto) {
-      await initPlayer(nextVideo, 0);
+      createPlayer(nextVideo, 0, true);
     }
   }
 
-  async function jumpTo(index: number) {
+  function jumpTo(index: number) {
     const video = orderedVideos[index];
     if (!video) return;
     setCurrentIndex(index);
     setResumeSeconds(0);
-    if (!playerStarted) {
-      setPlayerStarted(true);
-      await recordEpisodeOpened(video, 0);
-      await initPlayer(video, 0);
-      return;
+    setPlayerStarted(true);
+    recordEpisodeOpened(video, 0).catch((err) => console.error(err));
+    const player = playerRef.current;
+    if (player && playerReadyRef.current) {
+      player.loadVideoById({ videoId: video.youtubeVideoId, startSeconds: 0 });
+      cuedVideoIdRef.current = video.youtubeVideoId;
+    } else {
+      createPlayer(video, 0, true);
     }
-    await recordEpisodeOpened(video, 0);
-    playerRef.current?.loadVideoById({ videoId: video.youtubeVideoId, startSeconds: 0 });
   }
 
   function togglePlayPause() {
