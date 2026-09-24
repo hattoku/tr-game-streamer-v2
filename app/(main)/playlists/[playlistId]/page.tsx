@@ -539,7 +539,6 @@ export default function PlaylistDetailPage() {
       mylistCount={playlist.mylistCount}
       reviewCount={playlist.reviewCount}
       tags={tags}
-      referenceUrl={playlist.referenceUrl}
       onEditTags={user ? () => setTagModalOpen(true) : undefined}
     />
   );
@@ -553,6 +552,7 @@ export default function PlaylistDetailPage() {
       reverseNote={user && !mylist ? 'マイリスト未登録のため、逆順の設定は保存されません' : undefined}
       onReverseToggle={handleReverseToggle}
       onSelect={jumpTo}
+      referenceUrl={playlist.referenceUrl}
     />
   );
 

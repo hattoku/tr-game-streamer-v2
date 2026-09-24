@@ -5,6 +5,7 @@
  * - 話数「N話」表示（更新中の再生リストがあるため「全N話」とはしない。動画プレーヤー仕様書 v1.5）と
  *   逆順トグル（動画プレーヤー仕様書「逆順トグル」）
  * - 初期スクロール: 最後に視聴した動画がリスト上端に来るよう、リスト内でスクロール
+ * - リスト最下部（スクロール領域外）に参照元URL「YouTubeの再生リストを見る」リンク
  */
 'use client';
 
@@ -13,7 +14,7 @@ import { PlayingBadge } from '@/components/ui/Badge';
 import { Card, CardTitle } from '@/components/ui/Card';
 import { Checkbox } from '@/components/ui/Input';
 import { ProgressBar } from '@/components/ui/ProgressBar';
-import { PlayIcon } from '@/components/ui/icons';
+import { PlayIcon, YouTubeIcon } from '@/components/ui/icons';
 import { cn } from '@/components/ui/cn';
 
 export interface VideoItem {
@@ -33,6 +34,8 @@ interface VideoListProps {
   reverseNote?: string;
   onReverseToggle: (value: boolean) => void;
   onSelect: (index: number) => void;
+  /** YouTubeの元の再生リストURL（リスト最下部のリンク） */
+  referenceUrl: string;
   className?: string;
 }
 
@@ -44,7 +47,7 @@ export function formatDuration(seconds: number | null): string {
   return h > 0 ? `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}` : `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-export function VideoList({ videos, currentIndex, progressByVideo, reverseOrder, reverseNote, onReverseToggle, onSelect, className }: VideoListProps) {
+export function VideoList({ videos, currentIndex, progressByVideo, reverseOrder, reverseNote, onReverseToggle, onSelect, referenceUrl, className }: VideoListProps) {
   const listRef = useRef<HTMLUListElement>(null);
   const itemRefs = useRef<Array<HTMLLIElement | null>>([]);
 
@@ -113,6 +116,17 @@ export function VideoList({ videos, currentIndex, progressByVideo, reverseOrder,
           );
         })}
       </ul>
+      <div className="border-t border-border-divider px-[18px] py-3">
+        <a
+          href={referenceUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-[5px] text-md text-text-btn hover:text-text-primary"
+        >
+          <YouTubeIcon />
+          YouTubeの再生リストを見る ↗
+        </a>
+      </div>
     </Card>
   );
 }
