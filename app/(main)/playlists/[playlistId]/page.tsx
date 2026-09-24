@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { notFound, useParams } from 'next/navigation';
+import { notFound, useParams, useRouter } from 'next/navigation';
 import {
   collection, doc, getDoc, getDocs, onSnapshot, query, where, orderBy, limit,
   setDoc, updateDoc, serverTimestamp,
@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/Button';
 import { Checkbox } from '@/components/ui/Input';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { Skeleton, SkeletonText } from '@/components/ui/Skeleton';
+import { Spinner } from '@/components/ui/Spinner';
 import { Card } from '@/components/ui/Card';
 import { ChevronLeftIcon, ChevronRightIcon, PauseIcon, PlayIcon } from '@/components/ui/icons';
 import { cn } from '@/components/ui/cn';
@@ -82,6 +83,7 @@ export default function PlaylistDetailPage() {
   const { playlistId } = useParams<{ playlistId: string }>();
   const { user, loading: authLoading } = useAuth();
   const { setHeaderHidden } = useLayout();
+  const router = useRouter();
 
   const [playlist, setPlaylist] = useState<PlaylistDoc | null>(null);
   const [videos, setVideos] = useState<VideoItem[]>([]);
@@ -100,6 +102,8 @@ export default function PlaylistDetailPage() {
   const [resumeSeconds, setResumeSeconds] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [watchHistory, setWatchHistory] = useState<Record<string, number>>({});
+  // `?autoplay=1` で開かれた際の自動再生の試行中（オーバーレイの▶をスピナーにする）
+  const [autoStartPending, setAutoStartPending] = useState(false);
 
   const playerRef = useRef<any>(null);
   const playerReadyRef = useRef(false);
@@ -113,6 +117,12 @@ export default function PlaylistDetailPage() {
   // 現在プレーヤーに cue（読み込み）済みの動画ID。再生開始前に再生対象が変わった場合の
   // 再同期判定に使う
   const cuedVideoIdRef = useRef<string | null>(null);
+  // `?autoplay=1`（マイリストの「続きから再生」ボタン経由）で開かれたか。先読みプレーヤーの
+  // onReady で自動再生を試みる
+  const autoStartRequestedRef = useRef(false);
+  // 自動再生を試行した後、まだ PLAYING を受けていない（＝ユーザー操作なしで開始する経路）
+  const autoStartingRef = useRef(false);
+  const autoStartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const orderedVideos = reverseOrder ? [...videos].reverse() : videos;
   const currentVideo = orderedVideos[currentIndex] ?? null;
@@ -130,6 +140,15 @@ export default function PlaylistDetailPage() {
   useEffect(() => {
     loadYouTubeApi();
   }, []);
+
+  // マイリストの「続きから再生」ボタンからは `?autoplay=1` 付きで遷移してくる（マイリスト機能仕様書 §5.3）。
+  // 読み取ったらすぐクエリを除去し、リロードや「戻る」で開き直したときに再び自動再生されないようにする。
+  // useSearchParams は Suspense 境界が必要になるため使わず、マウント時に一度だけ location から読む
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('autoplay') !== '1') return;
+    autoStartRequestedRef.current = true;
+    router.replace(window.location.pathname, { scroll: false });
+  }, [router]);
 
   // iOS Safari では、再生ボタン押下と同時に新規 iframe を生成して autoplay:1 を渡しても
   // 自動再生されないことが多い（新規 iframe 内で YouTube 自身のスクリプトが読み込み完了後に
@@ -335,14 +354,34 @@ export default function PlaylistDetailPage() {
       videoId: video.youtubeVideoId,
       playerVars: { autoplay: autoplay ? 1 : 0, start: Math.floor(startSeconds), playsinline: 1 },
       events: {
-        onReady: () => {
+        onReady: (e: any) => {
           playerReadyRef.current = true;
+          // `?autoplay=1` で開かれた場合は、cue 済みの先読みプレーヤーで再生開始を試みる。
+          // ページ内遷移の直後なら PC ブラウザでは概ね許可されるが、iOS Safari などでは
+          // ブロックされうる。一定時間 PLAYING にならなければ通常の待機表示に戻す（ミュート再生はしない）
+          if (!autoplay && autoStartRequestedRef.current) {
+            autoStartRequestedRef.current = false;
+            autoStartingRef.current = true;
+            setAutoStartPending(true);
+            autoStartTimerRef.current = setTimeout(() => setAutoStartPending(false), 4000);
+            e.target.seekTo(startSeconds, true);
+            e.target.playVideo();
+          }
         },
         onStateChange: (e: any) => {
           const YT = window.YT;
           if (e.data === YT.PlayerState.PLAYING) {
             setIsPlaying(true);
             startInterval();
+            if (autoStartingRef.current) {
+              // 自動再生が成功した: ボタン押下時（handleStart）と同じく開始済みとして扱う
+              autoStartingRef.current = false;
+              if (autoStartTimerRef.current) clearTimeout(autoStartTimerRef.current);
+              setAutoStartPending(false);
+              setPlayerStarted(true);
+              const video = currentVideoRef.current;
+              if (video) recordEpisodeOpened(video, Math.floor(e.target.getCurrentTime())).catch((err) => console.error(err));
+            }
           }
           if (e.data === YT.PlayerState.PAUSED) setIsPlaying(false);
           if (e.data === YT.PlayerState.ENDED) {
@@ -357,6 +396,11 @@ export default function PlaylistDetailPage() {
   }
 
   function handleStart() {
+    // 自動再生の試行中（または試行前）にユーザーが押した場合は、こちらの経路で開始済みとする
+    autoStartRequestedRef.current = false;
+    autoStartingRef.current = false;
+    if (autoStartTimerRef.current) clearTimeout(autoStartTimerRef.current);
+    setAutoStartPending(false);
     setPlayerStarted(true);
     const video = orderedVideos[currentIndex];
     if (!video) return;
@@ -436,6 +480,7 @@ export default function PlaylistDetailPage() {
   useEffect(() => {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
+      if (autoStartTimerRef.current) clearTimeout(autoStartTimerRef.current);
     };
   }, []);
 
@@ -476,7 +521,7 @@ export default function PlaylistDetailPage() {
           <button
             type="button"
             onClick={handleStart}
-            aria-label={resumeSeconds > 0 ? '続きから再生する' : '再生する'}
+            aria-label={autoStartPending ? '再生を準備中' : resumeSeconds > 0 ? '続きから再生する' : '再生する'}
             className="group absolute inset-0 flex items-center justify-center bg-bg-player"
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -484,7 +529,7 @@ export default function PlaylistDetailPage() {
             <span aria-hidden className="absolute inset-x-0 bottom-0 h-[46%] bg-thumb-overlay" />
             {/* 再生ボタン（トークン仕様書 v2.0 §6.5）。ヒーローは大きめの 64px */}
             <span className="relative inline-flex size-16 items-center justify-center rounded-full bg-gradient-primary text-white shadow-primary transition-transform duration-[120ms] group-hover:scale-105">
-              <PlayIcon size={30} />
+              {autoStartPending ? <Spinner size={24} label="再生を準備中" className="text-white" /> : <PlayIcon size={30} />}
             </span>
           </button>
         )}

@@ -3,6 +3,8 @@
  * - 親エリア: 再生リストのサムネイル（話数）・タイトル・配信者・ステータスチップ（クリックで変更ドロップダウン §5.8）・
  *   逆順トグル（§5.5、セカンダリボタンのトグルON）・削除（ゴーストボタン）
  * - 子エリア: 最後に再生した動画（§5.3）。サムネイル＋進捗バー 3px・タイトル・残り時間・「続きから再生」
+ *   （「続きから再生」は `?autoplay=1` 付きで遷移し、遷移先で自動再生を試みる。自動再生できない
+ *   iOS / Safari では「再生ページへ」として通常の遷移にする）
  * - 最終話を視聴済みなら子エリアは出さず、新着動画があれば「🔔 NEW 新着動画があります」行（§5.4）
  * - サムネイル・タイトルのクリックで動画プレーヤーページへ（§5.6）。カード全体はボタンを含むためリンクにしない
  */
@@ -22,7 +24,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/DropdownMenu';
 import { ProgressBar } from '@/components/ui/ProgressBar';
-import { ChevronDownIcon, PlayIcon, ReverseIcon, TrashIcon } from '@/components/ui/icons';
+import { ChevronDownIcon, ChevronRightIcon, PlayIcon, ReverseIcon, TrashIcon } from '@/components/ui/icons';
+import { useCanAutoplayAfterNavigation } from '@/lib/autoplay';
 
 export interface MylistCardData {
   mylistId: string;
@@ -64,6 +67,7 @@ function formatRemaining(seconds: number): string {
 export function MylistCard({ entry, onStatusChange, onReverseToggle, onRemove }: MylistCardProps) {
   const href = `/playlists/${entry.playlistId}`;
   const p = entry.playlist;
+  const canAutoplay = useCanAutoplayAfterNavigation();
 
   return (
     <Card flush className="flex flex-col">
@@ -131,9 +135,24 @@ export function MylistCard({ entry, onStatusChange, onReverseToggle, onRemove }:
               </span>
             </div>
           </div>
-          <LinkButton href={href} variant="primary" size="full" className="md:ml-auto md:w-auto md:shrink-0 md:px-[22px] md:py-[9px]">
-            <PlayIcon size={14} />
-            続きから再生
+          {/* 自動再生できない環境（iOS / Safari）では再生を約束する文言にせず、遷移のみのボタンにする（§5.3） */}
+          <LinkButton
+            href={canAutoplay ? `${href}?autoplay=1` : href}
+            variant="primary"
+            size="full"
+            className="md:ml-auto md:w-auto md:shrink-0 md:px-[22px] md:py-[9px]"
+          >
+            {canAutoplay ? (
+              <>
+                <PlayIcon size={14} />
+                続きから再生
+              </>
+            ) : (
+              <>
+                再生ページへ
+                <ChevronRightIcon size={14} />
+              </>
+            )}
           </LinkButton>
         </CardChildArea>
       ) : entry.hasNew ? (
