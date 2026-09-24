@@ -458,15 +458,16 @@ export default function PlaylistDetailPage() {
       {/* シアターモード: プレーヤーの表示面積を最優先し、高さが「ビューポート − 上余白16px(pt-4)」を
           超えない幅まで縮める（横持ちスマホでは高さいっぱい・左右に黒帯）。コントローラ行の高さは
           あえて差し引かず、画面に収まらなければ下スクロールで表示する。
-          dvh ではなく svh を使う: dvh は iOS Safari でツールバーの出入りに追従して値が変わり、スクロールの
-          たびにプレーヤーが伸縮して下のブロックががくつくため。
+          dvh ではなく lvh（ツールバー縮小時の高さで固定）を使う: dvh は iOS Safari でツールバーの出入りに
+          追従して値が変わり、スクロールのたびにプレーヤーが伸縮して下のブロックががくつくため。
+          svh（ツールバー表示時の高さ）は横持ちでツールバーが高く、プレーヤーが小さくなりすぎるため不採用。
           16px は下の w-[...] と max-h-[...] の2箇所に直書き。Tailwind の任意値クラスは静的にソースを
           読んでCSSを生成するため、JSの変数やテンプレートリテラルで値を差し込むとクラスが生成されなくなる。
           値を変える際はこの2箇所を手動で合わせること */}
       <div
         className={cn(
           'relative aspect-video overflow-hidden bg-bg-player',
-          theaterMode ? 'mx-auto w-[min(100%,calc((100svh-16px)*16/9))] max-h-[calc(100svh-16px)]' : 'w-full rounded-[12px] shadow-card',
+          theaterMode ? 'mx-auto w-[min(100%,calc((100lvh-16px)*16/9))] max-h-[calc(100lvh-16px)]' : 'w-full rounded-[12px] shadow-card',
         )}
       >
         {/* プレーヤーのマウント先は常に置いておき、開始前はサムネイルを重ねる */}
