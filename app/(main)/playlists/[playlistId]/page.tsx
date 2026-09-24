@@ -455,16 +455,16 @@ export default function PlaylistDetailPage() {
   // クラスだけを切り替える（親要素が変わると React が再マウントし、再生中の動画が止まる）
   const hero = (
     <div className={cn(theaterMode && '-mx-4 -mt-6 bg-bg-player px-4 pt-4 md:-mx-6 md:-mt-8 md:px-6')}>
-      {/* シアターモード: 横持ちスマホ・低い画面高さのウィンドウでもプレーヤー＋コントローラが画面内に収まるよう、
-          幅いっぱいにせず「高さがビューポートから128px（コントローラ行＋余白の概算）を引いた値を超えない幅」
-          まで縮め、左右を bg-bg-player の黒で埋める（YouTube のシアターモードと同じ考え方）。
-          128px は下の w-[...] と max-h-[...] の2箇所に直書き。Tailwind の任意値クラスは静的にソースを
+      {/* シアターモード: プレーヤーの表示面積を最優先し、高さが「ビューポート − 上余白16px(pt-4)」を
+          超えない幅まで縮める（横持ちスマホでは高さいっぱい・左右に黒帯）。コントローラ行の高さは
+          あえて差し引かず、画面に収まらなければ下スクロールで表示する。
+          16px は下の w-[...] と max-h-[...] の2箇所に直書き。Tailwind の任意値クラスは静的にソースを
           読んでCSSを生成するため、JSの変数やテンプレートリテラルで値を差し込むとクラスが生成されなくなる。
           値を変える際はこの2箇所を手動で合わせること */}
       <div
         className={cn(
           'relative aspect-video overflow-hidden bg-bg-player',
-          theaterMode ? 'mx-auto w-[min(100%,calc((100dvh-128px)*16/9))] max-h-[calc(100dvh-128px)]' : 'w-full rounded-[12px] shadow-card',
+          theaterMode ? 'mx-auto w-[min(100%,calc((100dvh-16px)*16/9))] max-h-[calc(100dvh-16px)]' : 'w-full rounded-[12px] shadow-card',
         )}
       >
         {/* プレーヤーのマウント先は常に置いておき、開始前はサムネイルを重ねる */}
