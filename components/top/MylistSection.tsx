@@ -10,11 +10,13 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { fetchMylistEntries, type MylistEntry } from '@/lib/mylist-entries';
 import { Carousel, CarouselItem } from '@/components/ui/Carousel';
 import { Skeleton } from '@/components/ui/Skeleton';
+import { Card } from '@/components/ui/Card';
+import { LinkButton } from '@/components/ui/Button';
+import { FavoriteIcon } from '@/components/ui/icons';
 import { TopMylistCard } from '@/components/top/TopMylistCard';
 import { SectionHeaderRow } from '@/components/top/SectionHeaderRow';
 import { useCarouselNav } from '@/components/top/useCarouselNav';
@@ -66,13 +68,25 @@ export function MylistSection() {
           ))}
         </div>
       ) : sorted.length === 0 ? (
-        // 空状態（§5.6）
-        <p className="text-base text-text-muted">
-          マイリストに再生リストを追加すると、ここに表示されます{' '}
-          <Link href="/playlists" className="text-text-secondary hover:text-text-primary">
-            再生リストを探す →
-          </Link>
-        </p>
+        // 空状態（§5.6）。共通EmptyStateはページ全体向けで大きいため、セクション用のコンパクトなパネルにする
+        // （モバイルは縦積み・中央揃え、md以上は アイコン｜テキスト｜ボタン の横並び）
+        <Card flush className="flex flex-col items-center gap-4 px-6 py-8 text-center md:flex-row md:gap-5 md:text-left">
+          <div
+            aria-hidden
+            className="flex size-12 shrink-0 items-center justify-center rounded-full bg-bg-btn text-text-muted [&>svg]:size-6"
+          >
+            <FavoriteIcon />
+          </div>
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <p className="text-xl font-medium text-text-primary">マイリストはまだ空です</p>
+            <p className="text-base text-text-muted">
+              気になる再生リストをマイリストに追加すると、ここから続きをすぐに再生できます
+            </p>
+          </div>
+          <LinkButton href="/playlists" variant="primary" className="shrink-0">
+            再生リストを探す
+          </LinkButton>
+        </Card>
       ) : (
         <Carousel ref={scrollRef} ariaLabel="マイリスト" onScroll={updateEdges}>
           {sorted.map((entry) => (
