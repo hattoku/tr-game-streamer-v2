@@ -1,10 +1,9 @@
 /**
- * TOPページの各セクション共通のヘッダー行（見出し＋PCのみの送りボタン‹ ›＋「すべて見る →」、
- * 共通 デザイントークン仕様書 v2.1 §6.7）。`TopSection`・`MylistSection`で共用する。
+ * TOPページの各セクション共通のヘッダー行（見出し＋PCのみの送りボタン‹ ›＋一覧リンク「すべて見る ›」、
+ * 共通 デザイントークン仕様書 v2.6 §6.7）。`TopSection`・`MylistSection`で共用する。
  * `nav`を渡さない（カルーセルが空・読み込み中等）場合は送りボタンを出さない。
  */
-import Link from 'next/link';
-import { Button } from '@/components/ui/Button';
+import { Button, LinkButton } from '@/components/ui/Button';
 import { SectionHeading } from '@/components/ui/Card';
 import { ChevronLeftIcon, ChevronRightIcon } from '@/components/ui/icons';
 
@@ -27,11 +26,14 @@ export function SectionHeaderRow({ title, viewAllHref, nav }: SectionHeaderRowPr
             <Button variant="ghost" size="sm" aria-label="次へ" disabled={nav.atEnd} onClick={nav.onNext}>
               <ChevronRightIcon size={16} />
             </Button>
+            {/* 性格の異なるボタン（送り／一覧リンク）の間の縦線セパレーター（§4.4） */}
+            <span aria-hidden className="ml-1 h-[18px] w-px bg-white/10" />
           </div>
         )}
-        <Link href={viewAllHref} className="whitespace-nowrap text-md text-text-tertiary hover:text-text-primary">
-          すべて見る →
-        </Link>
+        <LinkButton href={viewAllHref} variant="ghost" size="sm">
+          すべて見る
+          <ChevronRightIcon size={14} />
+        </LinkButton>
       </div>
     </div>
   );
