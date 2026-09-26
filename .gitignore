@@ -8,3 +8,6 @@ node_modules
 # サービスアカウント鍵（万一ダウンロードした場合の誤コミット防止。通常はADCを使うため不要）
 *service-account*.json
 *-adminsdk-*.json
+
+# Firebase Hosting のデプロイキャッシュ
+.firebase/

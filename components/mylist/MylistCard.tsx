@@ -47,6 +47,8 @@ export interface MylistCardData {
     percent: number;
     /** 残り秒数。尺が取れない場合は null */
     remainingSeconds: number | null;
+    /** 何話目か（1始まり、逆順を考慮）。position が取れない場合は null。TOPのマイリストカードで使用 */
+    episodeNumber: number | null;
   } | null;
   /** マイリスト登録後に新着動画がある（未読の新着通知がある） */
   hasNew: boolean;

@@ -15,18 +15,34 @@ import type { MylistEntry } from '@/lib/mylist-entries';
 export function TopMylistCard({ entry, className }: { entry: MylistEntry; className?: string }) {
   const href = `/playlists/${entry.playlistId}`;
   const p = entry.playlist;
+  const lp = entry.lastPlayed;
+  // 視聴中は「続きの話」のサムネを大きく出す（再生リストのアイキャッチは序盤の話のことが多く、
+  // どこまで見たか分かりにくいため。§5.4）。取れなければ再生リストのサムネにフォールバック
+  const thumbnailUrl = lp?.thumbnailUrl || p?.thumbnailUrl;
 
   return (
     <Link href={href} className={className}>
       <Card interactive flush className="flex h-full flex-col">
         <div className="relative aspect-video w-full bg-bg-player">
-          {p?.thumbnailUrl && (
+          {thumbnailUrl && (
             // absolute化: 通常フローの子だと画像自身の縦横比がaspect-videoコンテナの高さに影響してしまうため
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={p.thumbnailUrl} alt="" className="absolute inset-0 size-full object-cover" loading="lazy" />
+            <img src={thumbnailUrl} alt="" className="absolute inset-0 size-full object-cover" loading="lazy" />
           )}
           <div aria-hidden className="absolute inset-x-0 bottom-0 h-[46%] bg-thumb-overlay" />
-          {p && <CountLabel className="absolute bottom-2 right-2">{p.videoCount}話</CountLabel>}
+          {p && (
+            <CountLabel className="absolute bottom-2 right-2">
+              {lp?.episodeNumber != null ? `${lp.episodeNumber} / ${p.videoCount}話` : `${p.videoCount}話`}
+            </CountLabel>
+          )}
+          {lp && (
+            <ProgressBar
+              value={lp.percent}
+              size="md"
+              className="absolute inset-x-0 bottom-0 rounded-none"
+              label="前回の再生位置"
+            />
+          )}
         </div>
         <div className="flex flex-1 flex-col gap-2 px-[14px] pb-[14px] pt-3">
           <p className="line-clamp-2 text-lg font-medium leading-snug text-text-primary">
@@ -38,19 +54,12 @@ export function TopMylistCard({ entry, className }: { entry: MylistEntry; classN
           </div>
         </div>
 
-        {entry.lastPlayed ? (
-          <CardChildArea className="flex items-center gap-[10px] px-[14px]">
-            <div className="flex w-[64px] shrink-0 flex-col">
-              <span className="relative block aspect-video overflow-hidden rounded-t-[6px] bg-bg-player">
-                {entry.lastPlayed.thumbnailUrl && (
-                  // absolute化: 通常フローの子だと画像自身の縦横比がaspect-videoコンテナの高さに影響してしまうため
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={entry.lastPlayed.thumbnailUrl} alt="" className="absolute inset-0 size-full object-cover" loading="lazy" />
-                )}
-              </span>
-              <ProgressBar value={entry.lastPlayed.percent} size="md" className="rounded-t-none rounded-b-[6px]" label="前回の再生位置" />
-            </div>
-            <p className="line-clamp-2 min-w-0 flex-1 text-sm text-text-secondary">{entry.lastPlayed.title}</p>
+        {lp ? (
+          <CardChildArea className="px-[14px]">
+            <p className="line-clamp-2 text-sm text-text-secondary">
+              <span className="mr-2 font-medium text-text-muted">続きから</span>
+              {lp.title}
+            </p>
           </CardChildArea>
         ) : entry.hasNew ? (
           <CardChildArea className="flex items-center gap-2 px-[14px]">
