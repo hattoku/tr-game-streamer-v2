@@ -11,3 +11,6 @@ node_modules
 
 # Firebase Hosting のデプロイキャッシュ
 .firebase/
+
+# Next.js が dev/build のたびに自動生成・書き換えするため追跡しない
+next-env.d.ts
