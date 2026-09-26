@@ -18,6 +18,7 @@ import { Card } from '@/components/ui/Card';
 import { ChevronLeftIcon, ChevronRightIcon, PauseIcon, PlayIcon } from '@/components/ui/icons';
 import { cn } from '@/components/ui/cn';
 import { ChannelCard } from '@/components/playlists/ChannelCard';
+import { GameInfoCard } from '@/components/playlists/GameInfoCard';
 import { PlaylistInfoCard } from '@/components/playlists/PlaylistInfoCard';
 import { VideoList, type VideoItem } from '@/components/playlists/VideoList';
 import { ReviewSection } from '@/components/reviews/ReviewSection';
@@ -34,8 +35,9 @@ import { normalizeWatchStatus } from '@/components/ui/Chip';
 // レビュー投稿セクション（フェーズ3ステップ1）: PC版は左カラム（ヒーロー直下）、モバイル版は
 // 動画リスト直後という配置差があるため、PlaylistInfoCardと同じ「2箇所にレンダリングし
 // 片方をCSSで隠す」パターンで配置する（下記 reviewSection 変数参照）。
+// ゲーム情報セクション（2026-09-26）: 右カラムの配信者情報の下（モバイルもページ最後）に
+// GameInfoCard を置く。再生リストに gameId が無い（ゲーム未紐づけ）場合は表示しない。
 // 引き続きスコープ外:
-// - ゲーム情報セクション（別仕様書、フェーズ3のゲームタイトル詳細ページ実装後）
 // - 未ログインユーザーの視聴進捗LocalStorage保存（ゲストは進捗が保存されない）
 // - 逆順トグルはマイリスト登録済みの場合のみFirestoreに永続化（mylist.isReverseOrderを共有）。
 //   未登録の場合はこのページ内のローカル状態のみ（セッション限り）
@@ -60,6 +62,39 @@ interface PlaylistDoc {
   score: number | null;
   reviewCount: number;
   mylistCount: number;
+}
+
+interface GameInfo {
+  gameId: string;
+  title: string;
+  packageImageUrl: string | null;
+  rakutenUrl: string | null;
+  genreName: string;
+  themeNames: string[];
+  tags: ResolvedTag[];
+}
+
+// ゲーム情報セクション（ページ 再生リスト詳細 仕様書「ゲーム情報セクション」）用に
+// games ドキュメントとテーマ名・タグを解決する。
+// games/themes は誰でも読めるため未ログインでも取得できる。ゲームが存在しなければ null
+async function fetchGameInfo(gameId: string): Promise<GameInfo | null> {
+  const [gameSnap, themesSnap, tagsMap] = await Promise.all([
+    getDoc(doc(db, 'games', gameId)),
+    getDocs(collection(db, 'themes')),
+    fetchTagsMap(),
+  ]);
+  if (!gameSnap.exists()) return null;
+  const g = gameSnap.data();
+  const themeNameById = new Map(themesSnap.docs.map((d) => [d.id, (d.data().name as string) ?? '']));
+  return {
+    gameId,
+    title: g.title ?? '',
+    packageImageUrl: g.packageImageUrl ?? null,
+    rakutenUrl: g.rakutenUrl ?? null,
+    genreName: g.genreName ?? '',
+    themeNames: ((g.themeIds ?? []) as string[]).map((id) => themeNameById.get(id)).filter((n): n is string => !!n),
+    tags: resolveTags(g.gameTagIds ?? [], g.gameTagsFixed ?? [], tagsMap),
+  };
 }
 
 function formatRemaining(remainingSeconds: number): string {
@@ -91,6 +126,7 @@ export default function PlaylistDetailPage() {
   const [missing, setMissing] = useState(false);
   const [tags, setTags] = useState<ResolvedTag[]>([]);
   const [tagModalOpen, setTagModalOpen] = useState(false);
+  const [game, setGame] = useState<GameInfo | null>(null);
 
   const [reverseOrder, setReverseOrder] = useState(false);
   const [mylist, setMylist] = useState<MylistState | null>(null);
@@ -216,6 +252,11 @@ export default function PlaylistDetailPage() {
         mylistCount: p.mylistCount ?? 0,
       });
       fetchTagsMap().then((tagsMap) => setTags(resolveTags(p.playlistTagIds ?? [], p.playlistTagsFixed ?? [], tagsMap)));
+      // ゲーム情報はページ下部のため、初期表示を待たせず後から反映する
+      setGame(null);
+      if (p.gameId) {
+        fetchGameInfo(p.gameId).then(setGame).catch((err) => console.error(err));
+      }
 
       const videosSnap = await getDocs(
         query(collection(db, 'videos'), where('playlistId', '==', playlistId), orderBy('position', 'asc')),
@@ -604,12 +645,12 @@ export default function PlaylistDetailPage() {
   const channelCard = <ChannelCard channelId={playlist.channelId} name={playlist.channelName} iconUrl={playlist.channelIconUrl} />;
   const reviewSection = <ReviewSection playlistId={playlistId} user={user} mylist={mylist} onMylistChange={setMylist} />;
 
-  // 通常モード: PC 2カラム（左 62% / 右 38%: ヒーロー・レビュー | 基本情報・動画リスト・配信者）、
-  //             モバイルは ヒーロー→基本情報→動画リスト→レビュー→配信者 の縦積み
+  // 通常モード: PC 2カラム（左 62% / 右 38%: ヒーロー・レビュー | 基本情報・動画リスト・配信者・ゲーム）、
+  //             モバイルは ヒーロー→基本情報→動画リスト→レビュー→配信者→ゲーム の縦積み
   // （ページ 再生リスト詳細 仕様書「レビュー投稿セクション」節: PC版は左カラム、モバイル版は
   //   動画リスト直後という配置差があるため、reviewSection は下記の2箇所に描画し
   //   CSSで片方を隠す。PlaylistInfoCardと同じパターン）
-  // シアターモード: ヒーローを全幅・黒背景で最上部に、その下に 基本情報 | 動画リスト・配信者 の2カラム
+  // シアターモード: ヒーローを全幅・黒背景で最上部に、その下に 基本情報 | 動画リスト・配信者・ゲーム の2カラム
   // （いずれも DOM 順は同じで、クラスの切替のみ）
   return (
     <div className="grid grid-cols-1 gap-6 md:grid-cols-[62fr_38fr]">
@@ -629,6 +670,7 @@ export default function PlaylistDetailPage() {
           {videoList}
           <div className="md:hidden">{reviewSection}</div>
           {channelCard}
+          {game && <GameInfoCard {...game} />}
         </div>
       </div>
 

@@ -1,10 +1,12 @@
 /**
  * 配信者情報セクション（ページ 再生リスト詳細 仕様書「配信者情報セクション」）。
- * チャンネルアイコン（円形）／チャンネル名／「他の再生リストを見る →」。いずれもチャンネル詳細
+ * チャンネルアイコン（円形）／チャンネル名／「他の再生リストを見る ›」（カード幅いっぱいのセカンダリボタン）。いずれもチャンネル詳細
  * （/channels/[channelId]、app/(main)/channels/[channelId]/page.tsx）へ遷移する。
  */
 import Link from 'next/link';
+import { LinkButton } from '@/components/ui/Button';
 import { Card, CardTitle } from '@/components/ui/Card';
+import { ChevronRightIcon } from '@/components/ui/icons';
 
 interface ChannelCardProps {
   channelId: string;
@@ -31,9 +33,10 @@ export function ChannelCard({ channelId, name, iconUrl }: ChannelCardProps) {
           <span className="line-clamp-2">{name}</span>
         </Link>
       </div>
-      <Link href={href} className="text-md text-text-tertiary hover:text-text-primary">
-        他の再生リストを見る →
-      </Link>
+      <LinkButton href={href} variant="secondary" size="full">
+        他の再生リストを見る
+        <ChevronRightIcon size={14} />
+      </LinkButton>
     </Card>
   );
 }
