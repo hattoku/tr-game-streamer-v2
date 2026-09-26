@@ -22,6 +22,8 @@ interface TabsListProps extends ComponentProps<typeof RadixTabs.List> {
    * true の場合、タブ列を折り返さず横スクロールにする（TOPページ 注目セクションのジャンルタブ等）。
    * `cn` は tailwind-merge を持たないため、`flex-wrap`/`flex-nowrap` を両方渡して後勝ちに賭けるのではなく
    * どちらか一方だけを出し分ける。
+   * 縦方向は `overflow-y-hidden` で固定する（TabsTrigger の `-mb-px` のはみ出しで縦に1pxスクロール可能になり、
+   * スマホでページを縦スクロールする際にタブ列に指が引っかかるのを防ぐ）。
    */
   scrollable?: boolean;
 }
@@ -35,7 +37,7 @@ export function TabsList({ className, trailing, scrollable = false, children, ..
         className={cn(
           'flex items-end gap-[2px] border-b border-border-tabs md:border-0',
           scrollable
-            ? 'flex-nowrap overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'
+            ? 'flex-nowrap overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'
             : 'flex-wrap',
         )}
         {...rest}

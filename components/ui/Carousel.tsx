@@ -22,7 +22,7 @@ export const Carousel = forwardRef<HTMLDivElement, CarouselProps>(function Carou
       role="group"
       aria-label={ariaLabel}
       className={cn(
-        '-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:mx-0 md:px-0',
+        '-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto overflow-y-hidden px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:mx-0 md:px-0',
         className,
       )}
       {...rest}
