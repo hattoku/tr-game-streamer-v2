@@ -1,6 +1,6 @@
 # プレミテ FCMプッシュ通知基盤仕様書
 
-**バージョン**: v1.2
+**バージョン**: v1.3
 **作成日**: 2026年3月16日
 **関連ドキュメント**:
 - /document/specification/page/ページ マイリスト機能仕様書.md
@@ -25,7 +25,7 @@
 
 本仕様書は、プレミテにおけるPWAプッシュ通知の基盤仕様を定義する。
 
-通知基盤にはFirebase Cloud Messaging（FCM）を採用する。フロントエンド（Next.js + next-pwa）でFCMトークンを取得・管理し、Cloud FunctionsからFCM Admin SDK経由で通知を送信する構成をとる。
+通知基盤にはFirebase Cloud Messaging（FCM）を採用する。フロントエンド（Next.js。PWA構成は技術スタック仕様書 §2.10 参照）でFCMトークンを取得・管理し、Cloud FunctionsからFCM Admin SDK経由で通知を送信する構成をとる。
 
 **対象ユーザー**: ログイン済みユーザーのみ。未ログインユーザーはプッシュ通知の対象外とする。
 
@@ -153,7 +153,7 @@ Cloud FunctionsからFCM送信を行った際に `messaging/registration-token-n
 
 ### 4.4 Service Workerとの連携
 
-FCMのバックグラウンド通知受信にはService Workerが必要である。next-pwaが管理するService Workerに加え、FCM専用のService Workerファイル（`firebase-messaging-sw.js`）を `/public` 配下に配置する。
+FCMのバックグラウンド通知受信にはService Workerが必要である。next-pwa は採用しないため、FCM専用のService Workerファイル（`firebase-messaging-sw.js`）を `/public` 配下に自前で配置する（プレミテで唯一のService Workerとなる。技術スタック仕様書 §2.10）。
 
 `firebase-messaging-sw.js` はFCMのバックグラウンドメッセージハンドラを実装し、アプリが非表示・ブラウザが閉じた状態でも通知を受信・表示できるようにする。
 
@@ -277,3 +277,4 @@ Service Worker（`firebase-messaging-sw.js`）がバックグラウンドで通�
 | v1.0 | 2026年3月16日 | 初版作成 |
 | v1.1 | 2026-03-17 | 関連ドキュメント参照の整備、内部リンク形式の統一 |
 | v1.2 | 2026-03-24 | プロジェクト全体のバッチ名称統一に伴い、Function A の表記を正式名称（動画更新バッチ）に更新。 |
+| v1.3 | 2026-09-25 | next-pwa を採用しない方針への変更に合わせ、§1・§4.4 の Service Worker 構成の記述を修正。 |

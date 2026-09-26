@@ -21,6 +21,8 @@ export async function proxy(request: NextRequest) {
 // staticファイルや画像、APIルート、ゲート自体のログインページを除外
 // APIルートはFirebase IDトークン（Authorization: Bearer）で別途保護されているため対象外とする。
 // /api/stg-gate（ログインフォームの送信先）もapi配下のため自動的に対象外。
+// PWAのmanifest・アイコン（manifest.webmanifest / icons/ / apple-icon）も除外する。ゲート未通過の
+// ブラウザ・iOSがこれらを取得するとログイン画面へのリダイレクトが返り、インストールやアイコン表示が失敗するため。
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|api|stg-login).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|icons/|apple-icon|api|stg-login).*)'],
 };

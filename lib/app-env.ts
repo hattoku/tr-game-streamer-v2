@@ -13,6 +13,10 @@
 export const APP_ENV: 'prod' | 'stg' = process.env.NEXT_PUBLIC_APP_ENV === 'prod' ? 'prod' : 'stg';
 export const IS_PROD = APP_ENV === 'prod';
 
+// PWAとしてホーム画面に追加したときのアプリ名（app/manifest.ts・app/layout.tsx の appleWebApp で共用）。
+// 同じ端末に本番とstgを並べてインストールしても区別できるよう、stgでは接尾辞を付ける。
+export const APP_DISPLAY_NAME = IS_PROD ? 'プレミテ' : 'プレミテ(stg)';
+
 // テストモードウィジェット・/api/test/sign-in（UI仕様書 §7）の有効化フラグ。
 // `NEXT_PUBLIC_TEST_MODE=true` かつ本番以外でのみ有効。本番では変数が渡されていても無視し、
 // 使い捨てテスト会員が本番Authに作られることを防ぐ。
