@@ -67,7 +67,7 @@ export function TestModeWidget() {
   return (
     <aside
       aria-label="テストモード"
-      className="fixed right-3 z-[70] w-[200px] rounded-[10px] border border-brand-primary bg-gradient-elevated p-3 text-md shadow-elevated bottom-[calc(var(--spacing-bottom-tabs)+env(safe-area-inset-bottom)+12px)] md:bottom-4"
+      className="fixed right-[calc(0.75rem+env(safe-area-inset-right))] z-[70] w-[200px] rounded-[10px] border border-brand-primary bg-gradient-elevated p-3 text-md shadow-elevated bottom-[calc(var(--spacing-bottom-tabs)+env(safe-area-inset-bottom)+12px)] md:bottom-4"
     >
       <p className="mb-2 font-medium text-text-primary">🧪 テストモード</p>
       <p className="mb-2 text-text-muted">

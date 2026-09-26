@@ -19,13 +19,16 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
   // iOSでホーム画面に追加したときの設定（技術スタック仕様書 §2.10。manifest は app/manifest.ts）。
   // statusBarStyle を black-translucent にするとヘッダーがステータスバーの裏に潜り、
-  // safe-area 対応が別途必要になるため black にしている。
+  // 上端の safe-area 対応が別途必要になるため black にしている。
   appleWebApp: { capable: true, title: APP_DISPLAY_NAME, statusBarStyle: 'black' },
 };
 
-// ブラウザUI・PWAのタイトルバー色。デザイントークン --color-bg-base と揃える
 export const viewport: Viewport = {
+  // ブラウザUI・PWAのタイトルバー色。デザイントークン --color-bg-base と揃える
   themeColor: '#0f0f0f',
+  // iOS は viewport-fit=cover が無いと env(safe-area-inset-*) が常に 0 になり、PWA で
+  // ボトムタブバーがホームインジケーターに被る。下端・左右の余白は各要素と body で確保している。
+  viewportFit: 'cover',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
