@@ -64,7 +64,7 @@ service cloud.firestore {
               'displayName', 'profileImageUrl', 'bio', 'fcmTokens',
               'isMylistPublic', 'isReviewHistoryPublic',
               'showNewArrivalNotification', 'isContinuousPlayEnabled', 'lastLoginAt',
-              'hideSpoilerReviews'
+              'hideSpoilerReviews', 'hideUpcomingThumbnails'
             ]));
 
       allow delete: if isSelf(userId) || isAdmin();

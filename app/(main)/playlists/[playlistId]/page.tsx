@@ -35,8 +35,11 @@ import { normalizeWatchStatus } from '@/components/ui/Chip';
 // レビュー投稿セクション（フェーズ3ステップ1）: PC版は左カラム（ヒーロー直下）、モバイル版は
 // 動画リスト直後という配置差があるため、PlaylistInfoCardと同じ「2箇所にレンダリングし
 // 片方をCSSで隠す」パターンで配置する（下記 reviewSection 変数参照）。
-// ゲーム情報セクション（2026-09-26）: 右カラムの配信者情報の下（モバイルもページ最後）に
+// ゲーム情報セクション（2026-09-26）: 右カラムの最後（モバイルもページ最後）に
 // GameInfoCard を置く。再生リストに gameId が無い（ゲーム未紐づけ）場合は表示しない。
+// ネタバレ対策（2026-09-26）: 配信者情報を動画リストの上へ移動し（スマホのファーストビューで
+// 動画リストを下げるため）、動画リストは約3話分の高さに抑える（VideoList 参照）。設定
+// 「先の話のサムネイルを隠す」（users.hideUpcomingThumbnails）がONなら到達済みより先の話を隠す。
 // 引き続きスコープ外:
 // - 未ログインユーザーの視聴進捗LocalStorage保存（ゲストは進捗が保存されない）
 // - 逆順トグルはマイリスト登録済みの場合のみFirestoreに永続化（mylist.isReverseOrderを共有）。
@@ -97,6 +100,16 @@ async function fetchGameInfo(gameId: string): Promise<GameInfo | null> {
   };
 }
 
+// 設定「先の話のサムネイルを隠す」の対象（動画プレーヤー仕様書「先の話のサムネイルを隠す（ユーザー設定）」）。話の順番（videos は position 昇順）で判定するため逆順表示でも変わらない。
+// 到達済みライン＝現在の話と、視聴履歴がある話のうち最も先の位置。それより後の話を隠す
+function upcomingVideoIds(videos: VideoItem[], current: VideoItem | null, watchHistory: Record<string, number>): Set<string> {
+  let frontier = current ? videos.findIndex((v) => v.id === current.id) : -1;
+  videos.forEach((v, i) => {
+    if (watchHistory[v.youtubeVideoId] != null && i > frontier) frontier = i;
+  });
+  return new Set(videos.slice(frontier + 1).map((v) => v.id));
+}
+
 function formatRemaining(remainingSeconds: number): string {
   return `残り${Math.floor(remainingSeconds / 60)}分`;
 }
@@ -131,6 +144,7 @@ export default function PlaylistDetailPage() {
   const [reverseOrder, setReverseOrder] = useState(false);
   const [mylist, setMylist] = useState<MylistState | null>(null);
   const [continuousPlay, setContinuousPlay] = useState(true);
+  const [hideUpcomingThumbnails, setHideUpcomingThumbnails] = useState(false);
   const [theaterMode, setTheaterMode] = useState(false);
 
   const [playerStarted, setPlayerStarted] = useState(false);
@@ -287,6 +301,7 @@ export default function PlaylistDetailPage() {
 
         const userSnap = await getDoc(doc(db, 'users', user.uid));
         setContinuousPlay(userSnap.data()?.isContinuousPlayEnabled ?? true);
+        setHideUpcomingThumbnails(userSnap.data()?.hideUpcomingThumbnails === true);
 
         const historySnap = await getDocs(
           query(collection(db, 'watch_history'), where('userId', '==', user.uid), where('playlistId', '==', playlistId)),
@@ -639,18 +654,19 @@ export default function PlaylistDetailPage() {
       onReverseToggle={handleReverseToggle}
       onSelect={jumpTo}
       referenceUrl={playlist.referenceUrl}
+      hiddenThumbnailIds={user && hideUpcomingThumbnails ? upcomingVideoIds(videos, currentVideo, watchHistory) : undefined}
     />
   );
 
   const channelCard = <ChannelCard channelId={playlist.channelId} name={playlist.channelName} iconUrl={playlist.channelIconUrl} />;
   const reviewSection = <ReviewSection playlistId={playlistId} user={user} mylist={mylist} onMylistChange={setMylist} />;
 
-  // 通常モード: PC 2カラム（左 62% / 右 38%: ヒーロー・レビュー | 基本情報・動画リスト・配信者・ゲーム）、
-  //             モバイルは ヒーロー→基本情報→動画リスト→レビュー→配信者→ゲーム の縦積み
+  // 通常モード: PC 2カラム（左 62% / 右 38%: ヒーロー・レビュー | 基本情報・配信者・動画リスト・ゲーム）、
+  //             モバイルは ヒーロー→基本情報→配信者→動画リスト→レビュー→ゲーム の縦積み
   // （ページ 再生リスト詳細 仕様書「レビュー投稿セクション」節: PC版は左カラム、モバイル版は
   //   動画リスト直後という配置差があるため、reviewSection は下記の2箇所に描画し
   //   CSSで片方を隠す。PlaylistInfoCardと同じパターン）
-  // シアターモード: ヒーローを全幅・黒背景で最上部に、その下に 基本情報 | 動画リスト・配信者・ゲーム の2カラム
+  // シアターモード: ヒーローを全幅・黒背景で最上部に、その下に 基本情報 | 配信者・動画リスト・ゲーム の2カラム
   // （いずれも DOM 順は同じで、クラスの切替のみ）
   return (
     <div className="grid grid-cols-1 gap-6 md:grid-cols-[62fr_38fr]">
@@ -667,9 +683,9 @@ export default function PlaylistDetailPage() {
       >
         <div className="hidden min-w-0 md:block">{infoCard}</div>
         <div className="flex min-w-0 flex-col gap-4">
+          {channelCard}
           {videoList}
           <div className="md:hidden">{reviewSection}</div>
-          {channelCard}
           {game && <GameInfoCard {...game} />}
         </div>
       </div>
@@ -692,7 +708,7 @@ function DetailSkeleton() {
         </Card>
         <Card flush className="p-3">
           <div className="flex flex-col gap-3">
-            {Array.from({ length: 5 }).map((_, i) => (
+            {Array.from({ length: 3 }).map((_, i) => (
               <div key={i} className="flex gap-3">
                 <Skeleton className="h-[68px] w-[120px] shrink-0" />
                 <SkeletonText lines={2} className="flex-1" />

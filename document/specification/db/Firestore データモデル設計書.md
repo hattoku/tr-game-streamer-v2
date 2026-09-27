@@ -1,6 +1,6 @@
 # プレミテ Firestore データモデル設計書
 
-**バージョン**: v1.13  
+**バージョン**: v1.14  
 **作成日**: 2026年3月30日（更新）  
 **対象**: 開発チーム  
 **関連ドキュメント**: プレミテ企画書 / プレミテ_技術スタック仕様書 / 各機能仕様書
@@ -153,6 +153,7 @@ Firestoreはテーブル結合（JOIN）ができないため、一覧表示や�
 | `isReviewHistoryPublic` | boolean | ✅ | レビュー履歴の公開設定（デフォルト：アカウント作成時にユーザーが選択） |
 | `showNewArrivalNotification` | boolean | ✅ | マイリストの新着通知表示設定（デフォルト：`true`） |
 | `isContinuousPlayEnabled` | boolean | ✅ | 連続再生設定（ユーザー全体共通、デフォルト：`true`）。動画プレーヤー仕様書「連続再生機能」参照 |
+| `hideUpcomingThumbnails` | boolean | — | 再生リスト詳細の動画リストで、到達済みより先の話のサムネイルを隠す設定（未設定は `false` 扱い）。動画プレーヤー仕様書「先の話のサムネイルを隠す（ユーザー設定）」参照 |
 | `hideSpoilerReviews` | boolean | ✅ | レビュー一覧のネタバレ非表示フィルター設定（デフォルト：`true`）。レビュー投稿機能仕様書「ネタバレフィルター」節（ログイン済みユーザーの端末をまたいだ保存先。未ログイン時はLocalStorage） |
 | `reviewCount` | number | ✅ | レビュー投稿数（集計キャッシュ、デフォルト：0） |
 | `helpfulReceivedCount` | number | ✅ | 「参考になった」被獲得数合計（集計キャッシュ、デフォルト：0） |
@@ -875,3 +876,4 @@ ai_operators ──── (1) users
 | v1.12 | 2026-09-21 | 7.3節「マスタ編集時の非正規化フィールド同期」を追加（`games` 編集時の `playlists.gameName`/`gameGenreIds`、`genres`/`themes.gameTitleCount` の同期ポリシー） |
 | v1.11 | 2026-09-13 | フェーズ3ステップ1（レビュー・スコアリング機能）実装に伴うスキーマギャップ解消。`reviews` に投稿者表示用の非正規化コピー `userDisplayName`/`userProfileImageUrl` を追加（HANDOFF.md未解決事項1の対応）。`reviews.commentScore` の説明を実装（共通 信頼度スコアリングシステム仕様書 §3.3準拠、あり:1.0/なし:0.5の2値）に合わせて修正（旧記載の「0.2/0.5/1.0」は誤記）。`reviews` ドキュメントIDが `{userId}_{playlistId}` 形式であることを明記。`users` に `hideSpoilerReviews` を追加（レビュー投稿機能仕様書のネタバレフィルター設定の永続化用）。 |
 | v1.13 | 2026-09-23 | `reviews.watchStatus` から `"reviewing"` を削除し、`mylist.watchStatus` と同じ5値に統一（視聴ステータス記録UI・レビュー投稿UI統合）。3.11節の設計注記を「`mylist.watchStatus` が正、`reviews.watchStatus` はその非正規化コピー」に更新 |
+| v1.14 | 2026-09-26 | `users` に `hideUpcomingThumbnails` を追加（動画リストのネタバレ対策。設定ページから変更、既定 `false`） |

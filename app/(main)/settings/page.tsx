@@ -4,7 +4,8 @@
  * （HANDOFF.mdフェーズ4.5ステップ6参照。仕様書側にも2026-09-20実装の注記を追加済み）。
  *
  * 入れたもの: 表示名変更（プロフィール仕様書§9.2・§9.4の前倒し）／連続再生
- * （isContinuousPlayEnabled、動画プレーヤーの同項目と同じフィールドを共有）／ネタバレレビュー非表示
+ * （isContinuousPlayEnabled、動画プレーヤーの同項目と同じフィールドを共有）／先の話のサムネイルを隠す
+ * （hideUpcomingThumbnails、2026-09-26追加。再生リスト詳細の動画リストで使う）／ネタバレレビュー非表示
  * （hideSpoilerReviews、レビュー一覧の同項目と同じフィールドを共有）／マイリスト新着通知
  * （showNewArrivalNotification）／ログアウト。
  *
@@ -26,6 +27,7 @@ import { Button, Card, CardTitle, Checkbox, Field, Input, SectionHeading, Skelet
 interface SettingsFields {
   displayName: string;
   isContinuousPlayEnabled: boolean;
+  hideUpcomingThumbnails: boolean;
   hideSpoilerReviews: boolean;
   showNewArrivalNotification: boolean;
 }
@@ -53,6 +55,7 @@ export default function SettingsPage() {
       setFields({
         displayName: (data?.displayName as string | undefined) ?? '',
         isContinuousPlayEnabled: typeof data?.isContinuousPlayEnabled === 'boolean' ? data.isContinuousPlayEnabled : true,
+        hideUpcomingThumbnails: data?.hideUpcomingThumbnails === true,
         hideSpoilerReviews: typeof data?.hideSpoilerReviews === 'boolean' ? data.hideSpoilerReviews : true,
         showNewArrivalNotification: typeof data?.showNewArrivalNotification === 'boolean' ? data.showNewArrivalNotification : true,
       });
@@ -145,6 +148,13 @@ export default function SettingsPage() {
             onChange={(e) => toggleField('isContinuousPlayEnabled', e.target.checked)}
           />
           <p className="mt-1 text-md text-text-muted">再生リストの動画を最後まで見ると、自動で次の動画を再生します</p>
+          <Checkbox
+            label="まだ見ていない先の話のサムネイルを隠す"
+            checked={fields.hideUpcomingThumbnails}
+            onChange={(e) => toggleField('hideUpcomingThumbnails', e.target.checked)}
+            className="mt-4"
+          />
+          <p className="mt-1 text-md text-text-muted">再生リストの動画リストで、視聴済みより先の話のサムネイルを表示しません（ネタバレ防止）</p>
         </Card>
 
         <Card>
