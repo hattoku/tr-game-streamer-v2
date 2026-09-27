@@ -4,7 +4,9 @@
  * ログイン済み: マイリスト（§5）→ 注目の再生リスト（§6）→ 新着の再生リスト（§7）→ タグピックアップ（§8）
  * 公開再生リスト全件（`fetchPublicPlaylists`）＋タグマスタ＋ジャンルマスタを1回だけ取得し、
  * 各セクション（`components/top/`）へ配列で渡して表示専用にする。マイリストセクションのみ
- * ログイン後に別途取得する（`fetchMylistEntries`、`components/top/MylistSection.tsx`内部）。
+ * ログイン後に別途取得する（`useMylistEntries`、`components/top/MylistSection.tsx`内部）。
+ * マイリストの取得は公開再生リスト等の取得完了を待たず、認証確定時点で並行して開始する
+ * （読み込み中の時間が長いほどタブ切替等で通信が止まる事象に巻き込まれやすいため）。
  */
 'use client';
 
@@ -42,17 +44,26 @@ export default function HomePage() {
     );
   }, []);
 
-  if (authLoading || playlists === null || tags === null || genres === null) {
+  const dataReady = playlists !== null && tags !== null && genres !== null;
+  if (authLoading || (!user && !dataReady)) {
     return <TopSkeleton />;
   }
 
+  // ログイン済みはマイリストセクションを先に出し、公開再生リスト等の取得を待つ間は残りをスケルトンにする
+  // （MylistSectionが同じ位置にマウントされ続け、取得完了時に再取得が走らないよう子の並びを固定している）
   return (
     <div className="flex flex-col gap-10">
       {!user && <HeroSection />}
       {user && <MylistSection />}
-      <FeaturedSection playlists={playlists} genres={genres} />
-      {user && <NewArrivalsSection playlists={playlists} />}
-      <TagPickupSections playlists={playlists} tags={tags} />
+      {dataReady ? (
+        <>
+          <FeaturedSection playlists={playlists} genres={genres} />
+          {user && <NewArrivalsSection playlists={playlists} />}
+          <TagPickupSections playlists={playlists} tags={tags} />
+        </>
+      ) : (
+        <SectionSkeleton />
+      )}
     </div>
   );
 }
@@ -61,13 +72,19 @@ function TopSkeleton() {
   return (
     <div className="flex flex-col gap-10" aria-busy="true" aria-label="読み込み中">
       <Skeleton className="h-[140px] w-full rounded-[12px]" />
-      <div className="flex flex-col gap-4">
-        <Skeleton className="h-6 w-[180px]" />
-        <div className="flex gap-4 overflow-hidden">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="aspect-video w-[240px] shrink-0 rounded-[12px] md:w-[280px]" />
-          ))}
-        </div>
+      <SectionSkeleton />
+    </div>
+  );
+}
+
+function SectionSkeleton() {
+  return (
+    <div className="flex flex-col gap-4" aria-busy="true">
+      <Skeleton className="h-6 w-[180px]" />
+      <div className="flex gap-4 overflow-hidden">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="aspect-video w-[240px] shrink-0 rounded-[12px] md:w-[280px]" />
+        ))}
       </div>
     </div>
   );

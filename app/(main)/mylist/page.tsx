@@ -6,7 +6,8 @@ import { doc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { fetchMylistEntries, type MylistEntry } from '@/lib/mylist-entries';
-import { LinkButton } from '@/components/ui/Button';
+import { useMylistEntries } from '@/components/mylist/useMylistEntries';
+import { Button, LinkButton } from '@/components/ui/Button';
 import { Card, CardChildArea, SectionHeading } from '@/components/ui/Card';
 import { CountBadge } from '@/components/ui/Badge';
 import { WATCH_STATUS_LABEL, WATCH_STATUS_OTHER, type WatchStatus } from '@/components/ui/Chip';
@@ -22,7 +23,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Skeleton, SkeletonText } from '@/components/ui/Skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { useToast } from '@/components/ui/Toast';
-import { ChevronDownIcon, FavoriteIcon } from '@/components/ui/icons';
+import { AlertIcon, ChevronDownIcon, FavoriteIcon } from '@/components/ui/icons';
 import { cn } from '@/components/ui/cn';
 import { MylistCard } from '@/components/mylist/MylistCard';
 
@@ -36,6 +37,7 @@ import { MylistCard } from '@/components/mylist/MylistCard';
 // データ取得（「最後に再生した動画」「最終話視聴済み」「新着動画あり」の判定を含む）は
 // lib/mylist-entries.ts の fetchMylistEntries に切り出し、TOPページのマイリストセクション
 // （components/top/MylistSection.tsx、フェーズ6ステップ2）と共用している。判定の詳細は同ファイル参照。
+// 初回取得は components/mylist/useMylistEntries.ts（タイムアウト・リトライ・画面復帰時の再取得、失敗時はエラー表示）。
 // スコープ外（据え置き）:
 // - 新着通知の ON/OFF トグル（§5.4）: フェーズ4.5ステップ6で/settingsに実装したが、
 //   showNewArrivalNotificationはFCMプッシュ通知の送信可否を絞るためのフィールド（FCMプッシュ通知
@@ -56,7 +58,8 @@ export default function MylistPage() {
   const router = useRouter();
   const { toast } = useToast();
 
-  const [entries, setEntries] = useState<MylistEntry[] | null>(null);
+  // タイムアウト・自動リトライ・画面復帰時の再取得はフック側（components/mylist/useMylistEntries.ts）
+  const { entries, error: loadError, setEntries } = useMylistEntries(user?.uid ?? null);
   const [filter, setFilter] = useState<FilterValue>('all');
   const [sort, setSort] = useState<SortValue>('lastPlayed');
 
@@ -64,22 +67,6 @@ export default function MylistPage() {
   useEffect(() => {
     if (!loading && !user) router.replace('/login');
   }, [loading, user, router]);
-
-  useEffect(() => {
-    if (!user) return;
-    const uid = user.uid;
-    // 非同期 IIFE にして、effect 本体で同期的に setState しない形にする（react-hooks/set-state-in-effect）
-    (async () => {
-      try {
-        setEntries(await fetchMylistEntries(uid));
-      } catch (e) {
-        console.error('マイリストの読み込みに失敗しました', e);
-        setEntries([]);
-        toast({ type: 'error', message: 'マイリストの読み込みに失敗しました' });
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
 
   const counts = useMemo(() => {
     const c: Record<FilterValue, number> = { all: 0, watching: 0, want_to_watch: 0, completed: 0, on_hold: 0, dropped: 0 };
@@ -140,6 +127,25 @@ export default function MylistPage() {
     } catch {
       toast({ type: 'error', message: '通信エラーが発生しました。時間をおいて再試行してください' });
     }
+  }
+
+  if (user && loadError) {
+    // 読み込み失敗。空状態と区別する（止まったFirestore接続上での再試行では直らないことがあるためページごと再読み込み）
+    return (
+      <div className="flex flex-col gap-4">
+        <SectionHeading>マイリスト</SectionHeading>
+        <EmptyState
+          icon={<AlertIcon />}
+          title="マイリストを読み込めませんでした"
+          description="通信状況をご確認のうえ、再読み込みしてください"
+          action={
+            <Button variant="secondary" onClick={() => window.location.reload()}>
+              再読み込み
+            </Button>
+          }
+        />
+      </div>
+    );
   }
 
   if (loading || !user || entries === null) {

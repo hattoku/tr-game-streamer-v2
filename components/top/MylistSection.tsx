@@ -9,34 +9,22 @@
  */
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { fetchMylistEntries, type MylistEntry } from '@/lib/mylist-entries';
+import { useMylistEntries } from '@/components/mylist/useMylistEntries';
 import { Carousel, CarouselItem } from '@/components/ui/Carousel';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { Card } from '@/components/ui/Card';
-import { LinkButton } from '@/components/ui/Button';
-import { FavoriteIcon } from '@/components/ui/icons';
+import { Button, LinkButton } from '@/components/ui/Button';
+import { AlertIcon, FavoriteIcon } from '@/components/ui/icons';
 import { TopMylistCard } from '@/components/top/TopMylistCard';
 import { SectionHeaderRow } from '@/components/top/SectionHeaderRow';
 import { useCarouselNav } from '@/components/top/useCarouselNav';
 
 export function MylistSection() {
   const { user } = useAuth();
-  const [entries, setEntries] = useState<MylistEntry[] | null>(null);
-
-  useEffect(() => {
-    if (!user) return;
-    const uid = user.uid;
-    (async () => {
-      try {
-        setEntries(await fetchMylistEntries(uid));
-      } catch (e) {
-        console.error('マイリストの読み込みに失敗しました', e);
-        setEntries([]);
-      }
-    })();
-  }, [user]);
+  // タイムアウト・自動リトライ・画面復帰時の再取得はフック側（useMylistEntries 冒頭コメント参照）
+  const { entries, error } = useMylistEntries(user?.uid ?? null);
 
   // 完走済みかつ新着なしはカルーセルに表示しない（§5.4）
   const visible = useMemo(
@@ -61,7 +49,25 @@ export function MylistSection() {
         nav={sorted.length > 0 ? { atStart, atEnd, onPrev: () => scrollByPage(-1), onNext: () => scrollByPage(1) } : null}
       />
 
-      {entries === null ? (
+      {error ? (
+        // 読み込み失敗（§5.7）。空状態と区別する。止まったFirestore接続上での再試行では直らないことがあるため
+        // ページごと再読み込みする
+        <Card flush className="flex flex-col items-center gap-4 px-6 py-8 text-center md:flex-row md:gap-5 md:text-left">
+          <div
+            aria-hidden
+            className="flex size-12 shrink-0 items-center justify-center rounded-full bg-bg-btn text-text-muted [&>svg]:size-6"
+          >
+            <AlertIcon />
+          </div>
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <p className="text-xl font-medium text-text-primary">マイリストを読み込めませんでした</p>
+            <p className="text-base text-text-muted">通信状況をご確認のうえ、再読み込みしてください</p>
+          </div>
+          <Button variant="secondary" className="shrink-0" onClick={() => window.location.reload()}>
+            再読み込み
+          </Button>
+        </Card>
+      ) : entries === null ? (
         <div className="flex gap-4 overflow-hidden" aria-busy="true">
           {Array.from({ length: 3 }).map((_, i) => (
             <Skeleton key={i} className="aspect-video w-[240px] shrink-0 rounded-[12px] md:w-[280px]" />
