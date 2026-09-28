@@ -5,7 +5,7 @@
  * （app/(main)/playlists/[playlistId]/page.tsx）が既に行っているため、本ステップは一覧・検索・削除のみ実装する。
  *
  * - 左カラム: 日付グルーピング一覧（今日／昨日／それ以外は「YYYY年M月D日（曜）」）＋カード
- *   （サムネイル＋進捗バー・タイトル・配信者・⋮メニューからの個別削除）
+ *   （サムネイル＋進捗バー・タイトル・配信者・再生時間・⋮メニューからの個別削除）
  * - 右カラム: キーワード検索（動画タイトル・配信者名）・日付フィルター（この日付以前）・全件削除
  *   （モバイルは`/playlists`と同じアコーディオンパネルに収める）
  * - `watch_history`にはタイトル・サムネイル・配信者名が無いため、`videos`（{playlistId}_{youtubeVideoId}）・
@@ -97,7 +97,13 @@ async function loadHistory(uid: string): Promise<HistoryItem[]> {
       playlistId: r.playlistId,
       progressPercent: r.progressPercent,
       watchedAt: r.watchedAt,
-      video: videoSnap.exists() ? { title: videoSnap.data().title, thumbnailUrl: videoSnap.data().thumbnailUrl } : null,
+      video: videoSnap.exists()
+        ? {
+            title: videoSnap.data().title,
+            thumbnailUrl: videoSnap.data().thumbnailUrl,
+            durationSeconds: videoSnap.data().durationSeconds ?? null,
+          }
+        : null,
       playlist: playlistMap.get(r.playlistId) ?? null,
     };
   });

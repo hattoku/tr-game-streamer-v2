@@ -1,6 +1,7 @@
 /**
  * 視聴履歴カード（ページ 視聴履歴 仕様書 §4.2・§4.3）。
- * サムネイル＋進捗バー・動画タイトル・配信者・三点リーダー（この動画の履歴を削除）。
+ * サムネイル＋進捗バー・動画タイトル・配信者・再生時間・三点リーダー（この動画の履歴を削除）。
+ * 再生時間は動画リスト（VideoList）と同じ表記。尺が取れない動画は行ごと出さない。
  * サムネイル・タイトルのクリックで該当再生リストの動画プレーヤーページへ遷移する（§4.2）。
  * 実際の再開位置は遷移先が watch_progress の最新値から決めるため、ここでは playlistId のみ渡す。
  */
@@ -11,12 +12,13 @@ import { Card } from '@/components/ui/Card';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/DropdownMenu';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { MoreIcon } from '@/components/ui/icons';
+import { formatDuration } from '@/components/playlists/VideoList';
 
 export interface HistoryCardData {
   id: string;
   playlistId: string;
   progressPercent: number;
-  video: { title: string; thumbnailUrl: string } | null;
+  video: { title: string; thumbnailUrl: string; durationSeconds: number | null } | null;
   playlist: { channelName: string; channelIconUrl: string } | null;
 }
 
@@ -30,7 +32,7 @@ export function HistoryCard({ entry, onDelete }: HistoryCardProps) {
 
   return (
     <Card flush className="relative">
-      <Link href={href} className="flex gap-3 p-3 pr-10 md:gap-4 md:p-4">
+      <Link href={href} className="flex gap-3 p-3 pr-10 md:gap-4 md:py-4 md:pl-4">
         <div className="flex w-[128px] shrink-0 flex-col md:w-[224px]">
           <span className="relative block aspect-video overflow-hidden rounded-t-[8px] bg-bg-player">
             {entry.video?.thumbnailUrl && (
@@ -57,6 +59,9 @@ export function HistoryCard({ entry, onDelete }: HistoryCardProps) {
               )}
               <span className="truncate text-sm text-text-tertiary">{entry.playlist.channelName}</span>
             </div>
+          )}
+          {entry.video?.durationSeconds != null && (
+            <span className="text-sm text-text-faint">{formatDuration(entry.video.durationSeconds)}</span>
           )}
         </div>
       </Link>
