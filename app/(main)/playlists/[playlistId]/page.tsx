@@ -592,6 +592,13 @@ export default function PlaylistDetailPage() {
       </div>
 
       <div className={cn('mt-3 flex flex-col gap-3', theaterMode && 'pb-4')}>
+        {/* 再生中の動画タイトル（動画プレーヤー仕様書「再生中の動画タイトル」）。再生リスト名は基本情報カードに
+            あるため、ここでは動画タイトルだけを最大2行で出す（タイトルに無い文字列を足さない） */}
+        {currentVideo && (
+          <p className="line-clamp-2 text-md leading-snug text-text-primary" title={currentVideo.title}>
+            {currentVideo.title}
+          </p>
+        )}
         {!playerStarted ? (
           <div className="flex flex-col gap-2 sm:max-w-[320px]">
             <Button variant="primary" size="full" onClick={handleStart}>

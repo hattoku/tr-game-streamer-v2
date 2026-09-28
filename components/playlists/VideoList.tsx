@@ -113,6 +113,8 @@ export function VideoList({
         >
           {videos.map((video, index) => {
             const isCurrent = index === currentIndex;
+            // 話数は逆順表示でも元の並び（1話目＝最初の動画）での番号にする
+            const episode = reverseOrder ? videos.length - index : index + 1;
             const percent = progressByVideo[video.youtubeVideoId];
             const thumbnailHidden = !isCurrent && !!hiddenThumbnailIds?.has(video.id);
             return (
@@ -131,11 +133,11 @@ export function VideoList({
                     isCurrent && 'bg-bg-list-active',
                   )}
                 >
-                  <span className="w-7 shrink-0 pt-[2px] text-right text-xs text-text-faint">{index + 1}</span>
+                  <span className="w-7 shrink-0 pt-[2px] text-right text-xs text-text-faint">{episode}</span>
                   <span className="relative w-[120px] shrink-0">
                     <span className="relative block aspect-video overflow-hidden rounded-[4px] bg-bg-player">
                       {thumbnailHidden ? (
-                        <span className="absolute inset-0 flex items-center justify-center text-md text-text-faint">#{index + 1}</span>
+                        <span className="absolute inset-0 flex items-center justify-center text-md text-text-faint">#{episode}</span>
                       ) : (
                         video.thumbnailUrl && (
                           // absolute化: 通常フローの子だと画像自身の縦横比がaspect-videoコンテナの高さに影響してしまうため
