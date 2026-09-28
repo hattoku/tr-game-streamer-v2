@@ -30,6 +30,11 @@ export async function POST(request: NextRequest) {
   const voteRef = adminDb.collection('helpful_votes').doc(`${uid}_${reviewId}`);
   const voteSnap = await voteRef.get();
   const willVote = !voteSnap.exists;
+  // コメントの無いレビューへの新規投票は不可（押下済みの取り消しは許可）
+  const hasComment = typeof review.comment === 'string' && review.comment.trim() !== '';
+  if (willVote && !hasComment) {
+    return NextResponse.json({ error: 'no_comment' }, { status: 400 });
+  }
 
   if (willVote) {
     await voteRef.set({ userId: uid, reviewId, votedAt: new Date() });

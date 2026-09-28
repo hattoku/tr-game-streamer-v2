@@ -208,6 +208,9 @@ export function ReviewList({
           {filtered.map((review, i) => {
             const isSelf = user?.uid === review.userId;
             const voted = votedIds.has(review.id);
+            // コメントの無いレビューにはボタンを表示しない。押下済みの場合のみ取り消し用に表示する
+            // （仕様書「参考になったボタン」節）
+            const showHelpful = !isSelf && (!!review.comment?.trim() || voted);
             const spoilerHidden = review.hasSpoiler && hideSpoilers && !revealedSpoilers.has(review.id);
             return (
               <div key={review.id}>
@@ -265,7 +268,7 @@ export function ReviewList({
                       <p className="whitespace-pre-wrap text-base text-text-secondary">{review.comment}</p>
                     ))}
 
-                  {!isSelf && (
+                  {showHelpful && (
                     <div>
                       <Button
                         variant="secondary"
