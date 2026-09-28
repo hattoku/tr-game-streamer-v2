@@ -110,7 +110,7 @@ interface SelectMenuProps<T extends string> {
 // セレクト表示部（入力要素と同じ面にシェブロン）。SelectMenu / MultiSelectMenu で共用
 const SELECT_TRIGGER_CLASS =
   'inline-flex items-center gap-2 rounded-[7px] border border-input-border bg-input-bg py-[6px] pl-3 pr-[10px] text-md text-text-secondary ' +
-  'transition-[border-color,box-shadow] duration-[120ms] hover:border-border-control data-[state=open]:border-border-active data-[state=open]:shadow-focus-ring';
+  'transition-[border-color,box-shadow] duration-[120ms] not-disabled:hover:border-border-control data-[state=open]:border-border-active data-[state=open]:shadow-focus-ring';
 
 /**
  * セレクト（§10「セレクトはブラウザ標準のドロップダウンを使わない」）。

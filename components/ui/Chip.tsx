@@ -3,6 +3,7 @@
  * - 非アクティブ: グレー（1px の半透明白の枠）
  * - アクティブ（視聴中）: シアングリーン＋左端ドット 6px。刺し色はこの状態のみ
  * - アクティブ（それ以外）: 白系（選択面 `bg-bg-selected`＋白枠）、ドット無し
+ * - 表示専用（readOnly）: 押せないのでホバーで見た目を変えない
  * ステータス値とラベルは ページ マイリスト機能仕様書 §5.2 に準ずる。
  * `mylist.watchStatus` / `reviews.watchStatus` の共通語彙（Firestore データモデル設計書
  * 3.9・3.11節）。`mylist.watchStatus` を正とし、レビュー側は表示用の非正規化コピー
@@ -41,13 +42,22 @@ export function normalizeWatchStatus(value: unknown): WatchStatus | null {
   return null;
 }
 
-/** チップの見た目のクラスだけを返す（Radix asChild のトリガー等、生の要素に直接当てたい場合用） */
-export function chipClassName(active = false, tone: 'neutral' | 'watching' = 'neutral', className?: string) {
+/**
+ * チップの見た目のクラスだけを返す（Radix asChild のトリガー等、生の要素に直接当てたい場合用）。
+ * `interactive` が false（表示専用）のときはホバーで見た目を変えない（デザイントークン仕様書 §11.1）。
+ */
+export function chipClassName(
+  active = false,
+  tone: 'neutral' | 'watching' = 'neutral',
+  className?: string,
+  interactive = true,
+) {
   const isWatching = active && tone === 'watching';
   return cn(
     'inline-flex items-center gap-[6px] rounded-[20px] border px-3 py-[5px] text-md leading-none',
     'transition-[background-color,color,border-color] duration-[120ms]',
-    !active && 'border-border-chip bg-bg-input text-text-tertiary hover:text-text-primary hover:border-border-control',
+    !active && 'border-border-chip bg-bg-input text-text-tertiary',
+    !active && interactive && 'not-disabled:hover:text-text-primary not-disabled:hover:border-border-control',
     active && !isWatching && 'border-border-active bg-bg-selected font-semibold text-text-primary',
     isWatching && 'border-brand-watching bg-brand-watching-bg font-semibold text-brand-watching',
     className,
@@ -66,7 +76,7 @@ interface ChipProps extends ComponentProps<'button'> {
 /** ステータスチップの見た目の土台。個別の状態値を持たない汎用チップ（「その他▼」トリガー等）にも使う */
 export function Chip({ active = false, tone = 'neutral', readOnly = false, className, children, ...rest }: ChipProps) {
   const isWatching = active && tone === 'watching';
-  const classes = chipClassName(active, tone, className);
+  const classes = chipClassName(active, tone, className, !readOnly);
   const content = (
     <>
       {isWatching && <span aria-hidden className="inline-block size-[6px] rounded-full bg-brand-watching" />}

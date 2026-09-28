@@ -85,7 +85,7 @@ export function TestModeWidget() {
               aria-pressed={isCurrent}
               className={cn(
                 'inline-flex w-full items-center justify-center gap-2 rounded-[6px] px-3 py-[6px] text-base font-medium transition-[filter] duration-[120ms]',
-                isCurrent ? 'bg-bg-btn text-text-tertiary' : 'bg-gradient-primary text-white hover:brightness-110',
+                isCurrent ? 'bg-bg-btn text-text-tertiary' : 'bg-gradient-primary text-white not-disabled:hover:brightness-110',
               )}
             >
               {busy === kind && <Spinner size={14} className="text-white" />}
@@ -98,7 +98,7 @@ export function TestModeWidget() {
             type="button"
             onClick={handleSignOut}
             disabled={disabled}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-[6px] border border-border-control bg-gradient-secondary px-3 py-[6px] text-base font-medium text-text-btn hover:bg-gradient-secondary-hover"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-[6px] border border-border-control bg-gradient-secondary px-3 py-[6px] text-base font-medium text-text-btn not-disabled:hover:bg-gradient-secondary-hover"
           >
             {busy === 'signout' && <Spinner size={14} />}
             ログアウト

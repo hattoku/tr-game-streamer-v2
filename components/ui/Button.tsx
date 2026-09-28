@@ -15,13 +15,15 @@ import { Spinner } from './Spinner';
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'rakuten';
 export type ButtonSize = 'md' | 'sm' | 'full';
 
+// hover は `not-disabled:` 付きで指定する。Tailwind の hover: は disabled 中も効くため（§11.3）。
+// `enabled:` は <a>（LinkButton）に当たらないので使わない
 const VARIANT: Record<ButtonVariant, string> = {
   primary:
     'bg-gradient-primary text-white font-semibold border-0 shadow-primary inset-shadow-highlight-strong ' +
-    'hover:brightness-[1.08] hover:-translate-y-px',
+    'not-disabled:hover:brightness-[1.08] not-disabled:hover:-translate-y-px',
   secondary: 'font-medium border shadow-control inset-shadow-highlight',
-  ghost: 'bg-transparent text-text-muted font-normal border border-transparent hover:text-text-primary hover:bg-bg-hover',
-  rakuten: 'bg-brand-rakuten text-white font-medium border-0 hover:brightness-110',
+  ghost: 'bg-transparent text-text-muted font-normal border border-transparent not-disabled:hover:text-text-primary not-disabled:hover:bg-bg-hover',
+  rakuten: 'bg-brand-rakuten text-white font-medium border-0 not-disabled:hover:brightness-110',
 };
 
 /**
@@ -30,7 +32,7 @@ const VARIANT: Record<ButtonVariant, string> = {
  * ように同一プロパティを奪い合うクラスは同時に渡さず、状態に応じてどちらか一方だけを合成する。
  */
 const SECONDARY_STATE = {
-  off: 'bg-gradient-secondary text-text-btn border-border-control hover:bg-gradient-secondary-hover',
+  off: 'bg-gradient-secondary text-text-btn border-border-control not-disabled:hover:bg-gradient-secondary-hover',
   on: 'bg-none bg-bg-selected text-text-primary border-border-active hover:bg-none',
 };
 

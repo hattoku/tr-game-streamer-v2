@@ -22,6 +22,7 @@ model: sonnet
 4. CSS Gridを使ったレイアウトで、グリッドアイテム直下の子要素に `min-w-0` が必要なのに無い箇所がないか確認する。
 5. `useEffect` 内での不要な `setState`(導出可能な値をstate化している、purely-derived stateをeffectで同期しているなど)が無いか確認する。
 6. 共通部品(SelectMenu等)を使うべき箇所で個別実装されていないか確認する。
+7. 押しても何も起きない表示専用の要素(`span`・`readOnly` 等)に、ホバーでの見た目変化(`hover:*`)や `cursor-pointer` が付いていないか確認する(デザイントークン仕様書 §11.1)。また、`disabled` になりうるボタン等のホバーが `not-disabled:hover:` で指定されているか確認する(Tailwind の `hover:` は disabled 中も効くため。§11.3)。`enabled:hover:` は `<a>` に当たらずリンクのホバーが消えるので誤り。共通部品を表示専用で呼び出している箇所は、呼び出し側の差分だけで判断せず、共通部品の実装を開いて、その props の組み合わせでも hover クラスが付かないかまで確認する(レビュー一覧の `StatusChip readOnly` で、非アクティブ時の hover が残っていた経緯がある)。
 
 ## 報告形式
 
