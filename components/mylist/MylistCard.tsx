@@ -2,7 +2,8 @@
  * マイリストのカード（ページ マイリスト機能仕様書 §5、共通 デザイントークン仕様書 v2.0 §6.1・§6.5・§6.6）。
  * - 親エリア: 再生リストのサムネイル（話数）・タイトル・配信者・ステータスチップ（クリックで変更ドロップダウン §5.8）・
  *   逆順トグル（§5.5、セカンダリボタンのトグルON）・削除（ゴーストボタン）
- * - 子エリア: 最後に再生した動画（§5.3）。サムネイル＋進捗バー 3px・タイトル・残り時間・「続きから再生」
+ * - 子エリア: 最後に再生した動画（§5.3）。サムネイル（右下に再生時間）＋進捗バー 3px・タイトル（省略せず折り返し）・
+ *   残り時間・「続きから再生」
  *   （「続きから再生」は `?autoplay=1` 付きで遷移し、遷移先で自動再生を試みる。自動再生できない
  *   iOS / Safari では「再生ページへ」として通常の遷移にする）
  * - 最終話を視聴済みなら子エリアは出さず、新着動画があれば「🔔 NEW 新着動画があります」行（§5.4）
@@ -24,6 +25,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/DropdownMenu';
 import { ProgressBar } from '@/components/ui/ProgressBar';
+import { formatDuration } from '@/components/playlists/VideoList';
 import { ChevronDownIcon, ChevronRightIcon, PlayIcon, ReverseIcon, TrashIcon } from '@/components/ui/icons';
 import { useCanAutoplayAfterNavigation } from '@/lib/autoplay';
 
@@ -45,6 +47,8 @@ export interface MylistCardData {
     thumbnailUrl: string;
     /** 0〜100 */
     percent: number;
+    /** 動画の尺（秒）。取れない場合は null */
+    durationSeconds: number | null;
     /** 残り秒数。尺が取れない場合は null */
     remainingSeconds: number | null;
     /** 何話目か（1始まり、逆順を考慮）。position が取れない場合は null。TOPのマイリストカードで使用 */
@@ -125,12 +129,17 @@ export function MylistCard({ entry, onStatusChange, onReverseToggle, onRemove }:
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={entry.lastPlayed.thumbnailUrl} alt="" className="absolute inset-0 size-full object-cover" loading="lazy" />
                 )}
+                {entry.lastPlayed.durationSeconds != null && (
+                  <CountLabel className="absolute bottom-1 right-1 px-[5px] py-0 text-xs">
+                    {formatDuration(entry.lastPlayed.durationSeconds)}
+                  </CountLabel>
+                )}
               </span>
               <ProgressBar value={entry.lastPlayed.percent} size="md" className="rounded-t-none rounded-b-[6px]" label="前回の再生位置" />
             </div>
             <div className="flex min-w-0 flex-col gap-[2px] md:gap-1">
               <span className="text-xs text-text-muted md:hidden">最後に再生</span>
-              <p className="line-clamp-2 text-md text-text-secondary md:truncate md:text-base">{entry.lastPlayed.title}</p>
+              <p className="break-words text-md text-text-secondary md:text-base">{entry.lastPlayed.title}</p>
               <span className="flex items-center gap-2 text-xs text-text-muted md:text-sm">
                 {entry.lastPlayed.remainingSeconds != null && formatRemaining(entry.lastPlayed.remainingSeconds)}
                 {entry.hasNew && <NewBadge />}

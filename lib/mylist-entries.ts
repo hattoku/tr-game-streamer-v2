@@ -94,6 +94,7 @@ export async function fetchMylistEntries(uid: string): Promise<MylistEntry[]> {
           title: v.title,
           thumbnailUrl: v.thumbnailUrl,
           percent,
+          durationSeconds: duration,
           remainingSeconds: duration != null ? Math.max(0, duration - progress.lastPlayedSeconds) : null,
           // TOPカードの話数表示用（ページ top 仕様書 §5.4）。最終話判定と同じ前提（逆順なら position 0 が最終話）で換算
           episodeNumber:
