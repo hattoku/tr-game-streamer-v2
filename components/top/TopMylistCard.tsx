@@ -65,19 +65,28 @@ export function TopMylistCard({ entry, className }: { entry: MylistEntry; classN
           </div>
         </div>
 
-        {lp ? (
-          <CardChildArea className="px-[14px]">
-            <p className="line-clamp-2 text-sm text-text-secondary">
-              <span className="mr-2 font-medium text-text-muted">続きから</span>
-              {lp.title}
-            </p>
-          </CardChildArea>
-        ) : entry.hasNew ? (
-          <CardChildArea className="flex items-center gap-2 px-[14px]">
-            <NewBadge />
-            <span className="text-sm text-text-secondary">新着動画があります</span>
-          </CardChildArea>
-        ) : null}
+        {/* 下段は状態によらず必ず出し、高さを「続きから」の最大2行分にそろえる。下段の有無・行数で本文の高さが
+            変わると、mt-autoのステータスチップの位置がカードごとにずれるため（§5.4） */}
+        <CardChildArea className="px-[14px]">
+          <div className="flex min-h-[2lh] items-center gap-2 text-sm text-text-secondary">
+            {lp ? (
+              <p className="line-clamp-2">
+                <span className="mr-2 font-medium text-text-muted">続きから</span>
+                {lp.title}
+              </p>
+            ) : entry.hasNew ? (
+              <>
+                <NewBadge />
+                <span>新着動画があります</span>
+              </>
+            ) : (
+              <p>
+                <span className="mr-2 font-medium text-text-muted">未再生</span>
+                1話から見る
+              </p>
+            )}
+          </div>
+        </CardChildArea>
       </Card>
     </Link>
   );
