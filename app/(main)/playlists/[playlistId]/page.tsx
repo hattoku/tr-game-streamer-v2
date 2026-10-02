@@ -26,6 +26,7 @@ import { type MylistState } from '@/components/reviews/ReviewForm';
 import { TagEditModal } from '@/components/tags/TagEditModal';
 import { fetchTagsMap, resolveTags, type ResolvedTag } from '@/lib/tags';
 import { normalizeWatchStatus } from '@/components/ui/Chip';
+import { IS_PROD } from '@/lib/app-env';
 
 // 再生リスト詳細ページ。
 // document/specification/page/ページ 再生リスト詳細 仕様書.md（レイアウト・基本情報・配信者情報）と
@@ -159,6 +160,9 @@ export default function PlaylistDetailPage() {
   const playerReadyRef = useRef(false);
   const currentVideoRef = useRef<VideoItem | null>(null);
   const continuousPlayRef = useRef(true);
+  // 最新レンダーの goToRelative。YT.Player のイベントハンドラは生成時に一度だけ登録されるため、
+  // 直接 goToRelative を呼ぶと生成時点の currentIndex・orderedVideos を参照してしまう
+  const goToRelativeRef = useRef<(delta: number, auto: boolean) => void>(() => {});
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // 直近の recordEpisodeOpened（fire-and-forget）の書き込み Promise。saveProgress 側がこれを
   // 待ってから書き込むことで、ネットワーク遅延で recordEpisodeOpened が後から Firestore に
@@ -173,6 +177,18 @@ export default function PlaylistDetailPage() {
   // 自動再生を試行した後、まだ PLAYING を受けていない（＝ユーザー操作なしで開始する経路）
   const autoStartingRef = useRef(false);
   const autoStartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 連続再生の自動遷移（ENDED 起点の loadVideoById）直後の再生リトライ状態。
+  // iOS Safari ではユーザー操作を伴わない loadVideoById が未開始/cue 状態で止まることがあり、
+  // さらに YouTube プレーヤーの全画面表示中は読み込み直後に 0:00 で一時停止されることがある。
+  // 遷移から一定時間内にそれらの状態を受けたら、回数を限って playVideo() で再生を促す。
+  // 一時停止は 0:00 付近のものだけを対象にし、ユーザーが意図して止めた場合と区別する
+  // （動画プレーヤー仕様書「連続再生機能」）
+  const autoAdvanceRef = useRef<{ deadline: number; retries: number } | null>(null);
+  const autoAdvanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 【一時的なデバッグ表示】stg で `?debug=1` を付けて開いたときだけ、プレーヤーの状態遷移を
+  // 画面に出す（iOS 全画面再生時の挙動調査用。調査が済んだら削除する）
+  const [debugLines, setDebugLines] = useState<string[]>([]);
+  const debugRef = useRef(false);
 
   const orderedVideos = reverseOrder ? [...videos].reverse() : videos;
   const currentVideo = orderedVideos[currentIndex] ?? null;
@@ -190,6 +206,20 @@ export default function PlaylistDetailPage() {
   useEffect(() => {
     loadYouTubeApi();
   }, []);
+
+  useEffect(() => {
+    if (IS_PROD || new URLSearchParams(window.location.search).get('debug') !== '1') return;
+    debugRef.current = true;
+  }, []);
+
+  function debugLog(message: string) {
+    if (!debugRef.current) return;
+    const p = playerRef.current;
+    const t = typeof p?.getCurrentTime === 'function' ? p.getCurrentTime().toFixed(1) : '-';
+    const d = typeof p?.getDuration === 'function' ? p.getDuration().toFixed(1) : '-';
+    const now = new Date().toLocaleTimeString('ja-JP', { hour12: false });
+    setDebugLines((prev) => [...prev.slice(-29), `${now} ${message} t=${t} d=${d}`]);
+  }
 
   // マイリストの「続きから再生」ボタンからは `?autoplay=1` 付きで遷移してくる（マイリスト機能仕様書 §5.3）。
   // 読み取ったらすぐクエリを除去し、リロードや「戻る」で開き直したときに再び自動再生されないようにする。
@@ -426,6 +456,27 @@ export default function PlaylistDetailPage() {
         },
         onStateChange: (e: any) => {
           const YT = window.YT;
+          debugLog(`state=${e.data}`);
+          const autoAdvance = autoAdvanceRef.current;
+          if (autoAdvance) {
+            if (Date.now() > autoAdvance.deadline || autoAdvance.retries <= 0) {
+              autoAdvanceRef.current = null;
+            } else if (
+              e.data === YT.PlayerState.UNSTARTED ||
+              e.data === YT.PlayerState.CUED ||
+              (e.data === YT.PlayerState.PAUSED && e.target.getCurrentTime() < 1)
+            ) {
+              autoAdvance.retries -= 1;
+              debugLog(`retry play (残り${autoAdvance.retries})`);
+              // 全画面の切り替え処理などと重なって再び止められないよう、少し間を置いて再生する。
+              // 待つ間にユーザーが別の動画へ移った（autoAdvanceRef が差し替わった）場合は何もしない
+              const target = e.target;
+              if (autoAdvanceTimerRef.current) clearTimeout(autoAdvanceTimerRef.current);
+              autoAdvanceTimerRef.current = setTimeout(() => {
+                if (autoAdvanceRef.current === autoAdvance) target.playVideo();
+              }, 300);
+            }
+          }
           if (e.data === YT.PlayerState.PLAYING) {
             setIsPlaying(true);
             startInterval();
@@ -443,7 +494,9 @@ export default function PlaylistDetailPage() {
           if (e.data === YT.PlayerState.ENDED) {
             const ended = currentVideoRef.current;
             if (ended?.durationSeconds) saveProgress(ended, ended.durationSeconds);
-            if (continuousPlayRef.current) goToRelative(1, true);
+            debugLog(`ENDED continuous=${continuousPlayRef.current}`);
+            // 生成時点の古い goToRelative ではなく最新のものを呼ぶ（goToRelativeRef 参照）
+            if (continuousPlayRef.current) goToRelativeRef.current(1, true);
           }
         },
       },
@@ -487,6 +540,7 @@ export default function PlaylistDetailPage() {
     setResumeSeconds(0);
     recordEpisodeOpened(nextVideo, 0).catch((err) => console.error(err));
     const player = playerRef.current;
+    autoAdvanceRef.current = auto ? { deadline: Date.now() + 8000, retries: 3 } : null;
     if (player && playerReadyRef.current) {
       player.loadVideoById({ videoId: nextVideo.youtubeVideoId, startSeconds: 0 });
       cuedVideoIdRef.current = nextVideo.youtubeVideoId;
@@ -494,6 +548,9 @@ export default function PlaylistDetailPage() {
       createPlayer(nextVideo, 0, true);
     }
   }
+  useEffect(() => {
+    goToRelativeRef.current = goToRelative;
+  });
 
   function jumpTo(index: number) {
     const video = orderedVideos[index];
@@ -502,6 +559,7 @@ export default function PlaylistDetailPage() {
     setResumeSeconds(0);
     setPlayerStarted(true);
     recordEpisodeOpened(video, 0).catch((err) => console.error(err));
+    autoAdvanceRef.current = null;
     const player = playerRef.current;
     if (player && playerReadyRef.current) {
       player.loadVideoById({ videoId: video.youtubeVideoId, startSeconds: 0 });
@@ -537,6 +595,7 @@ export default function PlaylistDetailPage() {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
       if (autoStartTimerRef.current) clearTimeout(autoStartTimerRef.current);
+      if (autoAdvanceTimerRef.current) clearTimeout(autoAdvanceTimerRef.current);
     };
   }, []);
 
@@ -635,6 +694,11 @@ export default function PlaylistDetailPage() {
             </Button>
             <Checkbox label="連続再生" checked={continuousPlay} onChange={(e) => handleContinuousPlayToggle(e.target.checked)} className="ml-1" />
           </div>
+        )}
+        {debugLines.length > 0 && (
+          <pre className="max-h-60 overflow-auto whitespace-pre-wrap rounded bg-black p-2 text-xs text-green-400">
+            {'state: -1=未開始 0=終了 1=再生中 2=一時停止 3=バッファ中 5=cue\n' + debugLines.join('\n')}
+          </pre>
         )}
       </div>
     </div>
