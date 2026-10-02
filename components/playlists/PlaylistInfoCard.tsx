@@ -24,7 +24,7 @@ interface PlaylistInfoCardProps {
 export function PlaylistInfoCard({ title, score, mylistCount, reviewCount, tags, onEditTags }: PlaylistInfoCardProps) {
   return (
     <Card className="flex flex-col gap-3">
-      <h1 className="truncate text-2xl font-medium text-text-primary" title={title}>
+      <h1 className="break-words text-2xl font-medium text-text-primary">
         {title}
       </h1>
 
