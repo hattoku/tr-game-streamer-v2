@@ -10,7 +10,11 @@
 //   - maskable用: 元画像そのまま → 三角が約48%で、Android の円形マスク（中央80%のセーフゾーン）に収まる
 //   - favicon用: 1320px四方 → 16〜48pxでも形が潰れないよう三角を大きめにする
 // sharp は ICO を書き出せないため、favicon.ico は PNG を埋め込む形式の ICO をここで組み立てる。
-import { mkdirSync, writeFileSync } from 'node:fs';
+//
+// iOS の PWA 起動スプラッシュ（apple-touch-startup-image）も書き出す。iOS は manifest からスプラッシュを
+// 作らず、画面サイズに完全一致する画像が無いと白画面になるため、lib/apple-splash-screens.json の端末ごとに
+// 「元画像の背景色のキャンバス中央に通常用アイコン」を置いた縦向き画像を作る（指定は app/layout.tsx）。
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import sharp from 'sharp';
@@ -21,6 +25,13 @@ const SOURCE_SIZE = 2048;
 
 const CROP_ANY = 1600;
 const CROP_FAVICON = 1320;
+
+// スプラッシュの背景色はアプリ本体（デザイントークン --color-bg-base）と揃え、起動後の切り替わりで明度が変わらないようにする。
+// 元画像の背景（#121212）との差はアイコンの縁のぼかしで馴染ませる
+const SPLASH_BACKGROUND = '#0f0f0f';
+// スプラッシュ上のアイコン（通常用切り出し）の一辺。画面短辺に対する比率
+const SPLASH_ICON_RATIO = 0.35;
+const SPLASH_SCREENS = JSON.parse(readFileSync(join(root, 'lib/apple-splash-screens.json'), 'utf8'));
 
 // 元画像の中心から cropSize 四方を切り出して outSize px に縮小した PNG バッファを返す。
 // ICO に埋め込む PNG は RGBA でないとデコーダ（Next.js の画像処理等）が読めないため、rgba 指定でアルファを付ける
@@ -75,3 +86,25 @@ const faviconImages = await Promise.all(
   faviconSizes.map(async (size) => ({ size, data: await render(CROP_FAVICON, size, { rgba: true }) })),
 );
 write('app/favicon.ico', buildIco(faviconImages));
+
+for (const { width, height, ratio } of SPLASH_SCREENS) {
+  const w = width * ratio;
+  const h = height * ratio;
+  const iconSize = Math.round(w * SPLASH_ICON_RATIO);
+  // 元画像の背景はわずかにムラ（周辺減光・三角の光彩）があり、そのまま貼ると切り抜きの四角い縁が見えるため、
+  // 円形グラデーションのアルファで縁をぼかしてから背景に重ねる
+  const fade = Buffer.from(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${iconSize}" height="${iconSize}">` +
+      '<defs><radialGradient id="g"><stop offset="0.75" stop-color="#fff"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient></defs>' +
+      '<rect width="100%" height="100%" fill="url(#g)"/></svg>',
+  );
+  const icon = await sharp(await render(CROP_ANY, iconSize, { rgba: true }))
+    .composite([{ input: fade, blend: 'dest-in' }])
+    .png()
+    .toBuffer();
+  const splash = await sharp({ create: { width: w, height: h, channels: 3, background: SPLASH_BACKGROUND } })
+    .composite([{ input: icon, left: Math.round((w - iconSize) / 2), top: Math.round((h - iconSize) / 2) }])
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+  write(`public/icons/splash/apple-splash-${w}x${h}.png`, splash);
+}
