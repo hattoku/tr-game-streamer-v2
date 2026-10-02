@@ -20,7 +20,7 @@ import { MoreIcon, CommentIcon, FavoriteIcon } from '@/components/ui/icons';
 import { UserAvatar } from '@/components/layout/UserDropdown';
 import { LoginRequiredModal } from '@/components/layout/LoginRequiredModal';
 import { ReportModal } from './ReportModal';
-import { StatusChip, normalizeWatchStatus, type WatchStatus } from '@/components/ui/Chip';
+import { StatusChip, normalizeWatchStatus, WATCH_STATUS_LABEL, WATCH_STATUS_ORDER, type WatchStatus } from '@/components/ui/Chip';
 
 const SPOILER_PREF_STORAGE_KEY = 'puremite:hideSpoilerReviews';
 
@@ -169,19 +169,25 @@ export function ReviewList({
 
   if (reviews == null) return null;
 
-  const totalCount = reviews.length;
-  const commentCount = reviews.filter((r) => !!r.comment).length;
+  // 一覧に並べるのはコメント付きの投稿のみ。星評価・視聴ステータスのみの投稿は投稿者名を出さず、
+  // 視聴ステータスは下の集計サマリー、星評価は再生リストスコアにのみ反映する。
+  // 自分の投稿は編集導線のためコメントが無くても一覧に残す
+  const listed = reviews.filter((r) => !!r.comment?.trim() || user?.uid === r.userId);
+  const commentCount = reviews.filter((r) => !!r.comment?.trim()).length;
+
+  const statusCounts = WATCH_STATUS_ORDER.map((s) => ({
+    status: s,
+    count: reviews.filter((r) => r.watchStatus === s).length,
+  })).filter((c) => c.count > 0);
+
   // ★4 は 4.0〜4.5 のレビューを含める（0.5刻みの評価を1刻みの区分に丸める）
   const filtered =
-    starFilter === 'all' ? reviews : reviews.filter((r) => r.starRating != null && Math.floor(r.starRating) === Number(starFilter));
+    starFilter === 'all' ? listed : listed.filter((r) => r.starRating != null && Math.floor(r.starRating) === Number(starFilter));
 
   return (
     <Card className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-xl font-medium text-text-primary">
-          {totalCount}件のレビュー
-          {commentCount > 0 && <span className="ml-2 text-md font-normal text-text-muted">うちコメントあり {commentCount}件</span>}
-        </h2>
+        <h2 className="text-xl font-medium text-text-primary">{commentCount}件のレビュー</h2>
         <div className="flex flex-wrap items-center gap-3">
           <Checkbox label="ネタバレを含むコメントを隠す" checked={hideSpoilers} onChange={(e) => toggleHideSpoilers(e.target.checked)} />
           <SelectMenu
@@ -201,8 +207,18 @@ export function ReviewList({
         </div>
       </div>
 
+      {statusCounts.length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-[8px] bg-bg-input px-4 py-3 text-md text-text-muted">
+          {statusCounts.map((c) => (
+            <span key={c.status}>
+              {WATCH_STATUS_LABEL[c.status]} <span className="font-medium text-text-primary">{c.count}</span>人
+            </span>
+          ))}
+        </div>
+      )}
+
       {filtered.length === 0 ? (
-        <EmptyState icon={<CommentIcon />} title="レビューがまだありません" description="最初のレビューを投稿してみませんか？" />
+        <EmptyState icon={<CommentIcon />} title="コメント付きのレビューはまだありません" description="最初のレビューを投稿してみませんか？" />
       ) : (
         <div className="flex flex-col gap-3">
           {filtered.map((review, i) => {
