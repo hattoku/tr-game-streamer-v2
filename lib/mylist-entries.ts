@@ -18,42 +18,20 @@ export interface MylistEntry extends MylistCardData {
   lastPlayedAt: number;
 }
 
-/**
- * 取得の段階別所要時間（開始からのms。複数エントリにまたがる段階は最も遅く終わったもの）。
- * Mac Safari でのみ表示が遅れる事象の切り分け用（`components/mylist/useMylistEntries.ts` がログに出す）
- */
-export interface MylistFetchTimings {
-  /** mylist＋notifications */
-  stage1?: number;
-  /** 各再生リストの playlists doc＋watch_progress */
-  stage2?: number;
-  /** 最後に再生した動画・最終話の videos */
-  stage3?: number;
-  /** watch_history まで含めた全体完了 */
-  stage4?: number;
-  count?: number;
-}
-
-export async function fetchMylistEntries(uid: string, timings?: MylistFetchTimings): Promise<MylistEntry[]> {
-  const t0 = performance.now();
-  const mark = (stage: 'stage1' | 'stage2' | 'stage3' | 'stage4') => {
-    if (timings) timings[stage] = Math.max(timings[stage] ?? 0, Math.round(performance.now() - t0));
-  };
+export async function fetchMylistEntries(uid: string): Promise<MylistEntry[]> {
   // watch_progress / watch_history はユーザーの全件を引くと視聴するほど肥大化するため（TOPで読み込みが
   // 長引く一因だった）、マイリストの各再生リストについて必要な分だけを引く
   const [mylistSnap, newSnap] = await Promise.all([
     getDocs(query(collection(db, 'mylist'), where('userId', '==', uid))),
     getDocs(query(collection(db, 'notifications'), where('userId', '==', uid), where('isRead', '==', false))),
   ]);
-  mark('stage1');
-  if (timings) timings.count = mylistSnap.size;
 
   const newPlaylistIds = new Set<string>();
   newSnap.docs.forEach((d) => {
     if (d.data().type === 'series_new_episode' && d.data().playlistId) newPlaylistIds.add(d.data().playlistId);
   });
 
-  const entries = await Promise.all(
+  return Promise.all(
     mylistSnap.docs.map(async (d): Promise<MylistEntry> => {
       const data = d.data();
       const playlistId: string = data.playlistId;
@@ -72,7 +50,6 @@ export async function fetchMylistEntries(uid: string, timings?: MylistFetchTimin
           ),
         ),
       ]);
-      mark('stage2');
       const progressData = progressSnap.docs[0]?.data();
       const progress = progressData
         ? {
@@ -92,7 +69,6 @@ export async function fetchMylistEntries(uid: string, timings?: MylistFetchTimin
           ? getDocs(query(collection(db, 'videos'), where('playlistId', '==', playlistId), where('position', '==', lastPosition), limit(1)))
           : Promise.resolve(null),
       ]);
-      mark('stage3');
       const lastVideoId: string | undefined = lastVideoSnap?.docs[0]?.data().youtubeVideoId;
 
       // 視聴率は動画単位（watch_history のIDは `${uid}_${youtubeVideoId}`）。playlistId で絞ると別の再生リストで
@@ -147,6 +123,4 @@ export async function fetchMylistEntries(uid: string, timings?: MylistFetchTimin
       };
     }),
   );
-  mark('stage4');
-  return entries;
 }

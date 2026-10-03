@@ -1,5 +1,5 @@
 import { initializeApp, getApps } from 'firebase/app';
-import { getFirestore, initializeFirestore, setLogLevel, type Firestore } from 'firebase/firestore';
+import { getFirestore, initializeFirestore, type Firestore } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import { IS_PROD } from './app-env';
 
@@ -66,18 +66,3 @@ function createFirestore(): Firestore {
 
 export const db = createFirestore();
 export const auth = getAuth(app);
-
-/**
- * 通信の調査用デバッグフラグ（ブラウザのコンソールで `localStorage.fsdebug = '1'` を設定して再読み込み）。
- * Mac Safari でのみTOPのマイリスト表示が遅れる事象の切り分け用で、ON の間は Firestore SDK の debug ログ
- * （通信方式・Watchストリームの接続状況）と、マイリスト・公開データ・認証確定の所要時間を毎回コンソールに出す。
- * 調査完了後は、このフラグと各所の `[fsdebug]` ログを削除し、useMylistEntries の SLOW_LOG_MS も見直すこと。
- */
-export function isFsDebug(): boolean {
-  return readLocalStorage('fsdebug') === '1';
-}
-
-if (isFsDebug()) {
-  setLogLevel('debug');
-  console.info('[fsdebug] Firestore通信方式', shouldForceLongPolling() ? 'longpoll' : 'stream');
-}

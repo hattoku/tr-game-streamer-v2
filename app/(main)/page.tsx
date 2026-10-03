@@ -12,7 +12,7 @@
 
 import { useEffect, useState } from 'react';
 import { collection, getDocs } from 'firebase/firestore';
-import { db, isFsDebug } from '@/lib/firebase';
+import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { fetchPublicPlaylists, type PlaylistSummary } from '@/components/playlists/PlaylistGrid';
 import { fetchTagsMap, type TagInfo } from '@/lib/tags';
@@ -37,8 +37,6 @@ export default function HomePage() {
   useEffect(() => {
     Promise.all([fetchPublicPlaylists(), fetchTagsMap(), getDocs(collection(db, 'genres'))]).then(
       ([playlistList, tagsMap, genresSnap]) => {
-        // マイリスト表示遅延の調査用（lib/firebase.ts の isFsDebug 参照）
-        if (isFsDebug()) console.info('[fsdebug] 公開データ取得完了', JSON.stringify({ pageMs: Math.round(performance.now()) }));
         setPlaylists(playlistList);
         setTags(tagsMap);
         setGenres(genresSnap.docs.map((d) => ({ id: d.id, name: (d.data().name as string) ?? '' })));
