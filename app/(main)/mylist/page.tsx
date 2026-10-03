@@ -177,6 +177,7 @@ export default function MylistPage() {
           <Tabs value={filter} onValueChange={(v) => setFilter(v as FilterValue)}>
             <TabsList
               aria-label="視聴ステータスで絞り込み"
+              scrollable
               trailing={
                 <SelectMenu
                   value={sort}
@@ -202,6 +203,7 @@ export default function MylistPage() {
               <DropdownMenu>
                 <DropdownMenuTrigger
                   aria-label="その他のステータスで絞り込み"
+                  data-active={otherActive}
                   className={cn(
                     '-mb-px inline-flex items-center gap-1 whitespace-nowrap border-b-2 px-3 py-[10px] text-base transition-[color,border-color] duration-[120ms] hover:text-text-primary md:px-[14px]',
                     otherActive ? 'border-border-active font-semibold text-text-primary' : 'border-transparent text-text-tertiary',
