@@ -1,5 +1,5 @@
 import { initializeApp, getApps } from 'firebase/app';
-import { getFirestore, setLogLevel } from 'firebase/firestore';
+import { getFirestore, initializeFirestore, setLogLevel, type Firestore } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import { IS_PROD } from './app-env';
 
@@ -27,7 +27,44 @@ const firebaseConfig = !IS_PROD ? {
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 
-export const db = getFirestore(app);
+function readLocalStorage(key: string): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Safari（WebKit。iOS は全ブラウザが該当）では Firestore を常にロングポーリングで通信させる。
+ * 既定の WebChannel ストリーミングだと、サーバーが即座に返した応答が Safari 側の受信バッファに溜まり、
+ * 次にクライアントから何か送るまで JS に届かないことがあった（stg の Mac Safari で再現。TOPマイリストの
+ * 取得が途中で十数秒止まり、タイムアウト後の再送信で押し出される形で届いていた）。
+ * Chromium 系は問題がないため従来どおり（技術スタック仕様書 §2.2）。比較検証用に `localStorage.fsTransport` に
+ * 'stream' / 'longpoll' を設定すると強制できる。
+ */
+function shouldForceLongPolling(): boolean {
+  const override = readLocalStorage('fsTransport');
+  if (override === 'stream') return false;
+  if (override === 'longpoll') return true;
+  if (typeof navigator === 'undefined') return false;
+  // iPadOS はデスクトップ表示時に Mac の UA を名乗るため、タッチ対応の MacIntel も WebKit として扱う
+  if (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) return true;
+  const ua = navigator.userAgent;
+  return /AppleWebKit/.test(ua) && !/Chrome\/|Chromium\/|Edg\//.test(ua);
+}
+
+function createFirestore(): Firestore {
+  try {
+    return initializeFirestore(app, { experimentalForceLongPolling: shouldForceLongPolling() });
+  } catch {
+    // HMR 等で既に初期化済みの場合
+    return getFirestore(app);
+  }
+}
+
+export const db = createFirestore();
 export const auth = getAuth(app);
 
 /**
@@ -37,12 +74,10 @@ export const auth = getAuth(app);
  * 調査完了後は、このフラグと各所の `[fsdebug]` ログを削除し、useMylistEntries の SLOW_LOG_MS も見直すこと。
  */
 export function isFsDebug(): boolean {
-  if (typeof window === 'undefined') return false;
-  try {
-    return window.localStorage.getItem('fsdebug') === '1';
-  } catch {
-    return false;
-  }
+  return readLocalStorage('fsdebug') === '1';
 }
 
-if (isFsDebug()) setLogLevel('debug');
+if (isFsDebug()) {
+  setLogLevel('debug');
+  console.info('[fsdebug] Firestore通信方式', shouldForceLongPolling() ? 'longpoll' : 'stream');
+}
