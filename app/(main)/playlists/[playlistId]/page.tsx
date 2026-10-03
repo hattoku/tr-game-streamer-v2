@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { notFound, useParams, useRouter } from 'next/navigation';
 import {
   collection, doc, getDoc, getDocs, onSnapshot, query, where, orderBy, limit,
@@ -21,6 +21,9 @@ import { ChannelCard } from '@/components/playlists/ChannelCard';
 import { GameInfoCard } from '@/components/playlists/GameInfoCard';
 import { PlaylistInfoCard } from '@/components/playlists/PlaylistInfoCard';
 import { VideoList, type VideoItem } from '@/components/playlists/VideoList';
+import { PlayerOsd, OSD_DURATION_MS } from '@/components/playlists/PlayerOsd';
+import { PlayerShortcutsModal } from '@/components/playlists/PlayerShortcutsModal';
+import { usePlayerShortcuts, type ShortcutAction } from '@/components/playlists/usePlayerShortcuts';
 import { ReviewSection } from '@/components/reviews/ReviewSection';
 import { type MylistState } from '@/components/reviews/ReviewForm';
 import { TagEditModal } from '@/components/tags/TagEditModal';
@@ -41,6 +44,8 @@ import { IS_PROD } from '@/lib/app-env';
 // ネタバレ対策（2026-09-26）: 配信者情報を動画リストの上へ移動し（スマホのファーストビューで
 // 動画リストを下げるため）、動画リストは約3話分の高さに抑える（VideoList 参照）。設定
 // 「先の話のサムネイルを隠す」（users.hideUpcomingThumbnails）がONなら到達済みより先の話を隠す。
+// キーボードショートカット（2026-10-03）: YouTube の動画ページに合わせたキー操作（動画プレーヤー仕様書
+// 「キーボード操作」）。キー判定は usePlayerShortcuts、操作表示は PlayerOsd、一覧は PlayerShortcutsModal。
 // 引き続きスコープ外:
 // - 未ログインユーザーの視聴進捗LocalStorage保存（ゲストは進捗が保存されない）
 // - 逆順トグルはマイリスト登録済みの場合のみFirestoreに永続化（mylist.isReverseOrderを共有）。
@@ -155,6 +160,14 @@ export default function PlaylistDetailPage() {
   const [watchHistory, setWatchHistory] = useState<Record<string, number>>({});
   // `?autoplay=1` で開かれた際の自動再生の試行中（オーバーレイの▶をスピナーにする）
   const [autoStartPending, setAutoStartPending] = useState(false);
+  const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
+  // キーボード操作時の操作表示（PlayerOsd）。id を変えて再マウントし、フェードを毎回やり直す
+  const [osd, setOsd] = useState<{ id: number; label: string; icon?: ReactNode } | null>(null);
+  const osdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 直近にキーボードで設定した音量・再生位置。setVolume/seekTo 直後の getVolume/getCurrentTime は
+  // iframe との往復が済むまで古い値を返すため、押しっぱなし（キーリピート）や連打の間はこちらを基準にする
+  const lastVolumeRef = useRef<{ value: number; at: number } | null>(null);
+  const lastSeekRef = useRef<{ value: number; at: number } | null>(null);
 
   const playerRef = useRef<any>(null);
   const playerReadyRef = useRef(false);
@@ -591,11 +604,104 @@ export default function PlaylistDetailPage() {
     }
   }
 
+  function showOsd(label: string, icon?: ReactNode) {
+    if (osdTimerRef.current) clearTimeout(osdTimerRef.current);
+    setOsd((prev) => ({ id: (prev?.id ?? 0) + 1, label, icon }));
+    osdTimerRef.current = setTimeout(() => setOsd(null), OSD_DURATION_MS);
+  }
+
+  // キーボードショートカットの実行（動画プレーヤー仕様書「キーボード操作」）。
+  // true を返すと既定動作（ボタンの起動・ページスクロール）を止める。再生開始前は Space/K（開始）と ? だけを扱い、
+  // それ以外は false を返して矢印キーのスクロール等をそのまま通す
+  function handleShortcut(action: ShortcutAction): boolean {
+    if (action.type === 'help') {
+      setShortcutHelpOpen(true);
+      return true;
+    }
+    if (!playerStarted) {
+      if (action.type !== 'togglePlay') return false;
+      handleStart();
+      return true;
+    }
+    if (action.type === 'theater') {
+      setTheaterMode((v) => !v);
+      return true;
+    }
+    if (action.type === 'next' || action.type === 'prev') {
+      const delta = action.type === 'next' ? 1 : -1;
+      if (!orderedVideos[currentIndex + delta]) return true;
+      goToRelative(delta, false);
+      lastSeekRef.current = null;
+      showOsd(action.type === 'next' ? '次の動画' : '前の動画');
+      return true;
+    }
+    const player = playerRef.current;
+    if (!player || !playerReadyRef.current) return true;
+    switch (action.type) {
+      case 'togglePlay':
+        togglePlayPause();
+        showOsd(isPlaying ? '一時停止' : '再生', isPlaying ? <PauseIcon size={28} /> : <PlayIcon size={28} />);
+        break;
+      case 'seekBy': {
+        const duration = player.getDuration();
+        const last = lastSeekRef.current;
+        const current = last && Date.now() - last.at < 1000 ? last.value : player.getCurrentTime();
+        const raw = Math.max(0, current + action.seconds);
+        const target = duration ? Math.min(duration, raw) : raw;
+        player.seekTo(target, true);
+        lastSeekRef.current = { value: target, at: Date.now() };
+        showOsd(`${action.seconds > 0 ? '+' : '−'}${Math.abs(action.seconds)}秒`);
+        break;
+      }
+      case 'seekToFraction': {
+        const duration = player.getDuration();
+        if (!duration) break;
+        player.seekTo(duration * action.fraction, true);
+        lastSeekRef.current = { value: duration * action.fraction, at: Date.now() };
+        showOsd(action.fraction === 0 ? '先頭' : action.fraction === 1 ? '末尾' : `${Math.round(action.fraction * 100)}%`);
+        break;
+      }
+      case 'volumeBy': {
+        const last = lastVolumeRef.current;
+        const current = last && Date.now() - last.at < 1000 ? last.value : player.getVolume();
+        const volume = Math.min(100, Math.max(0, current + action.delta));
+        player.setVolume(volume);
+        lastVolumeRef.current = { value: volume, at: Date.now() };
+        // YouTube と同じく、ミュート中に音量を変えたらミュートを解除する
+        if (player.isMuted()) player.unMute();
+        showOsd(`音量 ${volume}%`);
+        break;
+      }
+      case 'toggleMute':
+        if (player.isMuted()) {
+          player.unMute();
+          showOsd(`音量 ${player.getVolume()}%`);
+        } else {
+          player.mute();
+          showOsd('ミュート');
+        }
+        break;
+      case 'fullscreen': {
+        // keydown はユーザー操作として扱われるため、ここから全画面を要求できる（iOS Safari 等で未対応なら何もしない）
+        if (document.fullscreenElement) {
+          document.exitFullscreen().catch(() => {});
+        } else {
+          const iframe: HTMLIFrameElement | undefined = player.getIframe?.();
+          iframe?.requestFullscreen?.().catch(() => {});
+        }
+        break;
+      }
+    }
+    return true;
+  }
+  usePlayerShortcuts({ enabled: !loading, onKey: handleShortcut });
+
   useEffect(() => {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
       if (autoStartTimerRef.current) clearTimeout(autoStartTimerRef.current);
       if (autoAdvanceTimerRef.current) clearTimeout(autoAdvanceTimerRef.current);
+      if (osdTimerRef.current) clearTimeout(osdTimerRef.current);
     };
   }, []);
 
@@ -648,6 +754,10 @@ export default function PlaylistDetailPage() {
             </span>
           </button>
         )}
+        {osd && <PlayerOsd key={osd.id} icon={osd.icon} text={osd.icon ? undefined : osd.label} />}
+        <span className="sr-only" aria-live="polite">
+          {osd?.label}
+        </span>
       </div>
 
       <div className={cn('mt-3 flex flex-col gap-3', theaterMode && 'pb-4')}>
@@ -762,6 +872,7 @@ export default function PlaylistDetailPage() {
       </div>
 
       <TagEditModal open={tagModalOpen} onOpenChange={setTagModalOpen} targetType="playlist" targetId={playlistId} tags={tags} />
+      <PlayerShortcutsModal open={shortcutHelpOpen} onOpenChange={setShortcutHelpOpen} />
     </div>
   );
 }
