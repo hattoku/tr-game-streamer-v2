@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { FieldValue } from 'firebase-admin/firestore';
 import { requireUser } from '@/lib/api-auth';
 import { adminDb } from '@/lib/firebase-admin';
-import { recalculatePlaylistScore } from '@/lib/review-score';
+import { computeWatchDepth, recalculatePlaylistScore } from '@/lib/review-score';
 import { WATCH_STATUS_ORDER, normalizeWatchStatus, type WatchStatus } from '@/components/ui/Chip';
 
 // レビューの投稿・上書き更新（ページ 再生リスト レビュー投稿機能 仕様書）。
@@ -22,8 +22,6 @@ import { WATCH_STATUS_ORDER, normalizeWatchStatus, type WatchStatus } from '@/co
 // リアルタイムチェックは app/api/reviews/validate-comment/route.ts（デバウンス呼び出し）。
 
 const MAX_COMMENT_LENGTH = 2000;
-// 視聴深度Dの最低保証値。共通 信頼度スコアリングシステム仕様書 v1.2 §3.1「D=0の下限」参照
-const MIN_WATCH_DEPTH = 0.01;
 
 const WATCH_STATUS_VALUES = new Set<string>(WATCH_STATUS_ORDER);
 
@@ -122,33 +120,14 @@ export async function POST(request: NextRequest) {
   const userSnap = await adminDb.collection('users').doc(uid).get();
   const userData = userSnap.data();
 
-  // 視聴深度 D（信頼度スコアリングシステム仕様書 §3.1）
-  let lastOpenedEpisode: number | null = existing?.lastOpenedEpisode ?? null;
-  let watchDepth = 0;
-  if (watchStatus === 'completed') {
-    watchDepth = 1;
-  } else {
-    const progressSnap = await adminDb
-      .collection('watch_progress')
-      .where('userId', '==', uid)
-      .where('playlistId', '==', playlistId)
-      .orderBy('updatedAt', 'desc')
-      .limit(1)
-      .get();
-    const lastProgress = progressSnap.docs[0]?.data();
-    if (lastProgress) {
-      const videoSnap = await adminDb.collection('videos').doc(`${playlistId}_${lastProgress.youtubeVideoId}`).get();
-      const position = videoSnap.data()?.position;
-      if (typeof position === 'number' && playlist.videoCount > 0) {
-        lastOpenedEpisode = position + 1;
-        watchDepth = Math.min(1, lastOpenedEpisode / playlist.videoCount);
-      }
-    }
-    // D=0（プレーヤーで一切視聴していない）のときのみ最低値を保証する。
-    // H・G も同時に0だと W=(D+H+G)×C が0になり、加重平均の計算上そのレビューが
-    // 存在しないのと同じになってしまう（2026-09-13 ユーザー確認の上、D側にのみ下限を設ける方針）
-    if (watchDepth === 0) watchDepth = MIN_WATCH_DEPTH;
-  }
+  // 視聴深度 D（信頼度スコアリングシステム仕様書 §3.1）。算出ロジックは lib/review-score.ts
+  const { watchDepth, lastOpenedEpisode } = await computeWatchDepth(
+    uid,
+    playlistId,
+    playlist.videoCount ?? 0,
+    watchStatus,
+    existing?.lastOpenedEpisode ?? null,
+  );
 
   // 参考になった数 H（§3.2）: helpfulCount 自体は helpful/route.ts でのみ増減する
   const helpfulCount: number = existing?.helpfulCount ?? 0;

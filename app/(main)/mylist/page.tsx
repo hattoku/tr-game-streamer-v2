@@ -20,6 +20,7 @@ import {
   SelectMenu,
 } from '@/components/ui/DropdownMenu';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { Modal } from '@/components/ui/Modal';
 import { Skeleton, SkeletonText } from '@/components/ui/Skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { useToast } from '@/components/ui/Toast';
@@ -62,6 +63,10 @@ export default function MylistPage() {
   const { entries, error: loadError, setEntries } = useMylistEntries(user?.uid ?? null);
   const [filter, setFilter] = useState<FilterValue>('all');
   const [sort, setSort] = useState<SortValue>('lastPlayed');
+  // 削除確認ダイアログ（§5.9）。閉じるアニメーション中も本文を出し続けるため、対象は閉じても null に戻さない
+  const [removeTarget, setRemoveTarget] = useState<MylistEntry | null>(null);
+  const [removeOpen, setRemoveOpen] = useState(false);
+  const [removing, setRemoving] = useState(false);
 
   // 未ログインはログインページへ（§1.2）
   useEffect(() => {
@@ -114,6 +119,7 @@ export default function MylistPage() {
 
   async function handleRemove(entry: MylistEntry) {
     if (!user) return;
+    setRemoving(true);
     try {
       const idToken = await user.getIdToken();
       const res = await fetch('/api/mylist', {
@@ -126,6 +132,9 @@ export default function MylistPage() {
       toast({ type: 'success', message: 'マイリストから削除しました' });
     } catch {
       toast({ type: 'error', message: '通信エラーが発生しました。時間をおいて再試行してください' });
+    } finally {
+      setRemoving(false);
+      setRemoveOpen(false);
     }
   }
 
@@ -239,7 +248,10 @@ export default function MylistPage() {
                     entry={entry}
                     onStatusChange={(s) => handleStatusChange(entry, s)}
                     onReverseToggle={(v) => handleReverseToggle(entry, v)}
-                    onRemove={() => handleRemove(entry)}
+                    onRemove={() => {
+                      setRemoveTarget(entry);
+                      setRemoveOpen(true);
+                    }}
                   />
                 </li>
               ))}
@@ -247,6 +259,42 @@ export default function MylistPage() {
           )}
         </>
       )}
+
+      {/* 削除確認ダイアログ（§5.9）。何が消えて何が残るかをここで説明する */}
+      <Modal
+        open={removeOpen}
+        onOpenChange={(open) => !open && !removing && setRemoveOpen(false)}
+        title="マイリストから削除しますか？"
+        description={removeTarget ? `「${removeTarget.playlist?.title ?? 'この再生リスト'}」をマイリストから削除します。` : undefined}
+      >
+        {removeTarget && (
+          <div className="flex flex-col gap-4 text-base text-text-secondary">
+            <div>
+              <p className="text-md text-text-tertiary">削除されるもの</p>
+              <ul className="mt-1 list-disc pl-5">
+                <li>視聴ステータス（{WATCH_STATUS_LABEL[removeTarget.watchStatus]}）</li>
+                <li>逆順再生の設定</li>
+                <li>この再生リストの今後の新着動画のお知らせ</li>
+              </ul>
+            </div>
+            <div>
+              <p className="text-md text-text-tertiary">削除されないもの</p>
+              <ul className="mt-1 list-disc pl-5">
+                <li>視聴履歴・再生位置（再度登録すると続きから再生できます）</li>
+                <li>投稿した星評価・レビューコメント</li>
+              </ul>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" disabled={removing} onClick={() => setRemoveOpen(false)}>
+                キャンセル
+              </Button>
+              <Button variant="primary" loading={removing} onClick={() => handleRemove(removeTarget)}>
+                削除する
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }
