@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
-import { auth, db } from '../lib/firebase';
+import { auth, db, isFsDebug } from '../lib/firebase';
 
 // role: "user" | "operator" | "owner" | "ai_operator"（firestore.rules参照）。
 // Firebase Auth Custom Claimsを正とする。未設定（サインアップ直後、init-user API呼び出し前）
@@ -35,6 +35,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     return onAuthStateChanged(auth, async (firebaseUser) => {
+      // マイリスト表示遅延の調査用（lib/firebase.ts の isFsDebug 参照）
+      if (isFsDebug()) {
+        console.info('[fsdebug] 認証状態確定', JSON.stringify({ pageMs: Math.round(performance.now()), signedIn: !!firebaseUser }));
+      }
       setUser(firebaseUser);
       if (firebaseUser) {
         const tokenResult = await firebaseUser.getIdTokenResult();

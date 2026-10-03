@@ -7,16 +7,19 @@
  * - getDocs は中止できないため、タイムアウトした古いリクエストが後から成功した場合もその結果を採用する
  *   （より新しいリクエストの結果が既に反映済みなら破棄）
  * - 画面復帰（visibilitychange / bfcache の pageshow）時に、未取得のまま STALE_MS 以上経過 or エラーなら再取得する
- * 次回再現時に原因を切り分けられるよう、遅延・タイムアウト時は console.warn で所要時間と可視状態を残す。
+ * 次回再現時に原因を切り分けられるよう、遅延・タイムアウト時は console.warn で所要時間（段階別内訳）と可視状態を残す。
+ * Mac Safari の再読み込みでのみ表示が約10秒遅れることがある事象の調査中のため、遅延判定は「1秒以内に表示開始」に
+ * 合わせて SLOW_LOG_MS=1秒 とし、`isFsDebug()`（lib/firebase.ts）が ON なら速い回も含め毎回ログを出す。
  */
 'use client';
 
 import { useCallback, useEffect, useRef, useState, type SetStateAction } from 'react';
-import { fetchMylistEntries, type MylistEntry } from '@/lib/mylist-entries';
+import { isFsDebug } from '@/lib/firebase';
+import { fetchMylistEntries, type MylistEntry, type MylistFetchTimings } from '@/lib/mylist-entries';
 
 const TIMEOUT_MS = 15_000;
 const STALE_MS = 15_000;
-const SLOW_LOG_MS = 5_000;
+const SLOW_LOG_MS = 1_000;
 const MAX_ATTEMPTS = 2;
 
 interface State {
@@ -44,17 +47,23 @@ export function useMylistEntries(uid: string | null) {
 
     const attempt = (n: number) => {
       let settled = false;
+      const timings: MylistFetchTimings = {};
+      // Safari のコンソールでもそのままコピーできるよう、オブジェクトではなく1行のJSON文字列で出す
+      const describe = () =>
+        JSON.stringify({
+          reason,
+          attempt: n,
+          elapsedMs: Date.now() - startedAt,
+          // ページ読み込み開始からの経過（認証確定・取得開始までの待ちも含めて把握するため）
+          pageMs: Math.round(performance.now()),
+          visibility: document.visibilityState,
+          ...timings,
+        });
       const fail = (cause: unknown) => {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
-        console.warn('マイリストの読み込みに失敗しました', {
-          reason,
-          attempt: n,
-          elapsedMs: Date.now() - startedAt,
-          visibility: document.visibilityState,
-          cause,
-        });
+        console.warn('マイリストの読み込みに失敗しました', describe(), cause);
         if (n < MAX_ATTEMPTS) {
           attempt(n + 1);
         } else if (uidRef.current === targetUid && appliedSeqRef.current < seq) {
@@ -62,14 +71,16 @@ export function useMylistEntries(uid: string | null) {
         }
       };
       const timer = setTimeout(() => fail('timeout'), TIMEOUT_MS);
+      if (isFsDebug()) console.info('[fsdebug] マイリスト読み込み開始', describe());
 
-      fetchMylistEntries(targetUid).then(
+      fetchMylistEntries(targetUid, timings).then(
         (entries) => {
           settled = true;
           clearTimeout(timer);
-          const elapsedMs = Date.now() - startedAt;
-          if (elapsedMs > SLOW_LOG_MS) {
-            console.warn('マイリストの読み込みに時間がかかりました', { reason, attempt: n, elapsedMs, visibility: document.visibilityState });
+          if (Date.now() - startedAt > SLOW_LOG_MS) {
+            console.warn('マイリストの読み込みに時間がかかりました', describe());
+          } else if (isFsDebug()) {
+            console.info('[fsdebug] マイリスト読み込み完了', describe());
           }
           // タイムアウト後に遅れて成功した場合も採用する（より新しい結果が反映済みなら破棄）
           if (uidRef.current !== targetUid || appliedSeqRef.current >= seq) return;
