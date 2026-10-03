@@ -265,33 +265,20 @@ export default function MylistPage() {
         open={removeOpen}
         onOpenChange={(open) => !open && !removing && setRemoveOpen(false)}
         title="マイリストから削除しますか？"
-        description={removeTarget ? `「${removeTarget.playlist?.title ?? 'この再生リスト'}」をマイリストから削除します。` : undefined}
+        description={
+          removeTarget
+            ? `「${removeTarget.playlist?.title ?? 'この再生リスト'}」の視聴ステータスと新着動画のお知らせが解除されます。視聴履歴やレビューは残るので、もう一度追加すれば続きから見られます。`
+            : undefined
+        }
       >
         {removeTarget && (
-          <div className="flex flex-col gap-4 text-base text-text-secondary">
-            <div>
-              <p className="text-md text-text-tertiary">削除されるもの</p>
-              <ul className="mt-1 list-disc pl-5">
-                <li>視聴ステータス（{WATCH_STATUS_LABEL[removeTarget.watchStatus]}）</li>
-                <li>逆順再生の設定</li>
-                <li>この再生リストの今後の新着動画のお知らせ</li>
-              </ul>
-            </div>
-            <div>
-              <p className="text-md text-text-tertiary">削除されないもの</p>
-              <ul className="mt-1 list-disc pl-5">
-                <li>視聴履歴・再生位置（再度登録すると続きから再生できます）</li>
-                <li>投稿した星評価・レビューコメント</li>
-              </ul>
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button variant="ghost" disabled={removing} onClick={() => setRemoveOpen(false)}>
-                キャンセル
-              </Button>
-              <Button variant="primary" loading={removing} onClick={() => handleRemove(removeTarget)}>
-                削除する
-              </Button>
-            </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" disabled={removing} onClick={() => setRemoveOpen(false)}>
+              キャンセル
+            </Button>
+            <Button variant="primary" loading={removing} onClick={() => handleRemove(removeTarget)}>
+              削除する
+            </Button>
           </div>
         )}
       </Modal>
