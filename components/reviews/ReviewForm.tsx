@@ -15,9 +15,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { doc, onSnapshot } from 'firebase/firestore';
 import type { User } from 'firebase/auth';
-import { db, auth } from '@/lib/firebase';
 import { Button } from '@/components/ui/Button';
 import { Card, CardDivider } from '@/components/ui/Card';
 import { Modal } from '@/components/ui/Modal';
@@ -31,7 +29,6 @@ import {
   WATCH_STATUS_LABEL,
   WATCH_STATUS_PRIMARY,
   WATCH_STATUS_OTHER,
-  normalizeWatchStatus,
   type WatchStatus,
 } from '@/components/ui/Chip';
 import {
@@ -42,47 +39,29 @@ import {
   DropdownMenuRadioItem,
 } from '@/components/ui/DropdownMenu';
 import { LoginRequiredModal } from '@/components/layout/LoginRequiredModal';
+import { MAX_COMMENT_LENGTH, getIdToken, upsertReview, useOwnReview, type MylistState } from './useOwnReview';
 
-const MAX_COMMENT_LENGTH = 2000;
+export type { MylistState } from './useOwnReview';
+
 const NG_WORD_CHECK_DELAY_MS = 500;
-
-/** 再生リスト詳細ページが保持するマイリスト登録状態（呼び出し側と共有する） */
-export interface MylistState {
-  docId: string;
-  status: WatchStatus;
-}
-
-interface ReviewDoc {
-  starRating: number | null;
-  /** レビュー一覧表示用の非正規化コピー。視聴ステータスの正は mylist（props の `mylist`） */
-  watchStatus: WatchStatus | null;
-  comment: string | null;
-  hasSpoiler: boolean;
-}
-
-const EMPTY_REVIEW: ReviewDoc = { starRating: null, watchStatus: null, comment: null, hasSpoiler: false };
-
-const UPSERT_ERROR_MESSAGE: Record<string, string> = {
-  url_in_comment: 'URLの入力はできません',
-  ng_word: '不適切な表現が含まれています',
-  comment_too_long: `コメントは${MAX_COMMENT_LENGTH}文字以内で入力してください`,
-};
-
-async function getIdToken(): Promise<string> {
-  if (!auth.currentUser) throw new Error('not signed in');
-  return auth.currentUser.getIdToken();
-}
 
 interface ReviewFormProps {
   playlistId: string;
   user: User | null;
   mylist: MylistState | null;
   onMylistChange: (next: MylistState | null) => void;
+  /**
+   * 外部（最終話の再生終了時ダイアログの「レビューを書く」）からコメント入力欄を開く要求。
+   * 値が変わるたびに入力欄を開いてフォーカスする（0 は要求なし）
+   */
+  writeRequest?: number;
 }
 
-export function ReviewForm({ playlistId, user, mylist, onMylistChange }: ReviewFormProps) {
+export function ReviewForm({ playlistId, user, mylist, onMylistChange, writeRequest = 0 }: ReviewFormProps) {
   const { toast } = useToast();
-  const [saved, setSaved] = useState<ReviewDoc>(EMPTY_REVIEW);
+  // 自分の投稿済みレビュー。更新されたらフォームへ反映する（編集モード）
+  const saved = useOwnReview(user, playlistId);
+  const [syncedSaved, setSyncedSaved] = useState(saved);
   const [starRating, setStarRating] = useState<number | null>(null);
   const [commentOpen, setCommentOpen] = useState(false);
   const [comment, setComment] = useState('');
@@ -91,38 +70,32 @@ export function ReviewForm({ playlistId, user, mylist, onMylistChange }: ReviewF
   const [busy, setBusy] = useState(false);
   const [loginOpen, setLoginOpen] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [handledWriteRequest, setHandledWriteRequest] = useState(writeRequest);
 
   const ngCheckTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ngCheckSeq = useRef(0);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // 自分の投稿済みレビューを購読し、フォームへ反映する（編集モード）。
-  // ユーザー切替・アンマウント時はクリーンアップ側で戻す（effect本体では setState しない:
-  // react-hooks/set-state-in-effect。components/layout/NotificationBell.tsx と同じ対応）
+  // props（購読結果・外部要求）の変化に合わせた state の調整はレンダー中に行う
+  // （effect 内で setState しない: react-hooks/set-state-in-effect）
+  if (syncedSaved !== saved) {
+    setSyncedSaved(saved);
+    setStarRating(saved.starRating);
+    setComment(saved.comment ?? '');
+    setHasSpoiler(saved.hasSpoiler);
+  }
+  if (handledWriteRequest !== writeRequest) {
+    setHandledWriteRequest(writeRequest);
+    if (user) setCommentOpen(true);
+  }
+
+  // 外部要求で入力欄を開いたらフォーカスする。PC/モバイルの2箇所に描画しているため、
+  // CSS で隠れている側（offsetParent が null）はフォーカスしない
   useEffect(() => {
-    if (!user) return;
-    const ref = doc(db, 'reviews', `${user.uid}_${playlistId}`);
-    const unsubscribe = onSnapshot(ref, (snap) => {
-      const data = snap.exists()
-        ? {
-            starRating: (snap.data().starRating as number | null) ?? null,
-            watchStatus: normalizeWatchStatus(snap.data().watchStatus),
-            comment: (snap.data().comment as string | null) ?? null,
-            hasSpoiler: (snap.data().hasSpoiler as boolean) ?? false,
-          }
-        : EMPTY_REVIEW;
-      setSaved(data);
-      setStarRating(data.starRating);
-      setComment(data.comment ?? '');
-      setHasSpoiler(data.hasSpoiler);
-    });
-    return () => {
-      unsubscribe();
-      setSaved(EMPTY_REVIEW);
-      setStarRating(null);
-      setComment('');
-      setHasSpoiler(false);
-    };
-  }, [user, playlistId]);
+    if (!writeRequest) return;
+    const el = textareaRef.current;
+    if (el && el.offsetParent !== null) el.focus({ preventScroll: true });
+  }, [writeRequest]);
 
   // URLチェックは入力から直接導出できるため state ではなく描画時に計算する
   const urlError = comment.includes('http://') || comment.includes('https://') ? 'URLの入力はできません' : null;
@@ -155,11 +128,6 @@ export function ReviewForm({ playlistId, user, mylist, onMylistChange }: ReviewF
     };
   }, [comment, user]);
 
-  /**
-   * `reviews.watchStatus` はサーバー側で mylist にも反映され、結果の mylist 状態が
-   * レスポンスで返る（app/api/reviews/upsert/route.ts）。呼び出し側はそれで mylist state を
-   * 同期するため、成否と併せてレスポンスを返す。
-   */
   async function persist(next: {
     starRating?: number | null;
     watchStatus?: WatchStatus | null;
@@ -169,27 +137,18 @@ export function ReviewForm({ playlistId, user, mylist, onMylistChange }: ReviewF
     if (!user) return null;
     setBusy(true);
     try {
-      const idToken = await getIdToken();
-      const res = await fetch('/api/reviews/upsert', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-        body: JSON.stringify({
-          playlistId,
-          starRating: next.starRating !== undefined ? next.starRating : starRating,
-          watchStatus: next.watchStatus !== undefined ? next.watchStatus : (mylist?.status ?? null),
-          comment: next.comment !== undefined ? next.comment : (saved.comment ?? ''),
-          hasSpoiler: next.hasSpoiler !== undefined ? next.hasSpoiler : hasSpoiler,
-        }),
+      const result = await upsertReview({
+        playlistId,
+        starRating: next.starRating !== undefined ? next.starRating : starRating,
+        watchStatus: next.watchStatus !== undefined ? next.watchStatus : (mylist?.status ?? null),
+        comment: next.comment !== undefined ? next.comment : (saved.comment ?? ''),
+        hasSpoiler: next.hasSpoiler !== undefined ? next.hasSpoiler : hasSpoiler,
       });
-      const body = await res.json();
-      if (!res.ok) {
-        toast({ type: 'error', message: UPSERT_ERROR_MESSAGE[body.error] ?? '送信に失敗しました。時間をおいて再試行してください' });
+      if (!result.ok) {
+        toast({ type: 'error', message: result.message });
         return null;
       }
-      return { mylist: body.mylist ?? null };
-    } catch {
-      toast({ type: 'error', message: '通信エラーが発生しました。時間をおいて再試行してください' });
-      return null;
+      return { mylist: result.mylist };
     } finally {
       setBusy(false);
     }
@@ -362,6 +321,7 @@ export function ReviewForm({ playlistId, user, mylist, onMylistChange }: ReviewF
         {(commentOpen || saved.comment) && (
           <div className="flex flex-col gap-2 border-t border-border-divider pt-4">
             <Textarea
+              ref={textareaRef}
               value={comment}
               onChange={(e) => setComment(e.target.value.slice(0, MAX_COMMENT_LENGTH))}
               placeholder="この再生リストのレビューを書く（任意）"

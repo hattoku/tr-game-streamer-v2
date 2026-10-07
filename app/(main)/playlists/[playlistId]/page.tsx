@@ -25,7 +25,9 @@ import { PlayerOsd, OSD_DURATION_MS } from '@/components/playlists/PlayerOsd';
 import { PlayerShortcutsModal } from '@/components/playlists/PlayerShortcutsModal';
 import { usePlayerShortcuts, type ShortcutAction } from '@/components/playlists/usePlayerShortcuts';
 import { ReviewSection } from '@/components/reviews/ReviewSection';
-import { type MylistState } from '@/components/reviews/ReviewForm';
+import { useOwnReview, type MylistState } from '@/components/reviews/useOwnReview';
+import { PlaylistFinishedModal, type FinishedPromptSections } from '@/components/reviews/PlaylistFinishedModal';
+import { LoginRequiredModal } from '@/components/layout/LoginRequiredModal';
 import { TagEditModal } from '@/components/tags/TagEditModal';
 import { fetchTagsMap, resolveTags, type ResolvedTag } from '@/lib/tags';
 import { normalizeWatchStatus } from '@/components/ui/Chip';
@@ -46,6 +48,8 @@ import { IS_PROD } from '@/lib/app-env';
 // 「先の話のサムネイルを隠す」（users.hideUpcomingThumbnails）がONなら到達済みより先の話を隠す。
 // キーボードショートカット（2026-10-03）: YouTube の動画ページに合わせたキー操作（動画プレーヤー仕様書
 // 「キーボード操作」）。キー判定は usePlayerShortcuts、操作表示は PlayerOsd、一覧は PlayerShortcutsModal。
+// 最終話の再生終了時（2026-10-07）: 表示順で最後の動画を見終えたら全画面を解除し、完走の確認と
+// レビューを促すダイアログ（PlaylistFinishedModal）を出す（動画プレーヤー仕様書「最終話の再生終了時」）。
 // 引き続きスコープ外:
 // - 未ログインユーザーの視聴進捗LocalStorage保存（ゲストは進捗が保存されない）
 // - 逆順トグルはマイリスト登録済みの場合のみFirestoreに永続化（mylist.isReverseOrderを共有）。
@@ -161,6 +165,14 @@ export default function PlaylistDetailPage() {
   // `?autoplay=1` で開かれた際の自動再生の試行中（オーバーレイの▶をスピナーにする）
   const [autoStartPending, setAutoStartPending] = useState(false);
   const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
+  // 最終話の再生終了時ダイアログ（動画プレーヤー仕様書「最終話の再生終了時」）。null は非表示
+  const [finishedPrompt, setFinishedPrompt] = useState<FinishedPromptSections | null>(null);
+  const [finishedLoginOpen, setFinishedLoginOpen] = useState(false);
+  // ページを開いている間に一度出したら再び出さない
+  const finishedPromptShownRef = useRef(false);
+  // ダイアログの「レビューを書く」→ レビューフォームでコメント欄を開く要求（値を変えるたびに発火）
+  const [reviewWriteRequest, setReviewWriteRequest] = useState(0);
+  const ownReview = useOwnReview(user, playlistId);
   // キーボード操作時の操作表示（PlayerOsd）。id を変えて再マウントし、フェードを毎回やり直す
   const [osd, setOsd] = useState<{ id: number; label: string; icon?: ReactNode } | null>(null);
   const osdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -176,6 +188,8 @@ export default function PlaylistDetailPage() {
   // 最新レンダーの goToRelative。YT.Player のイベントハンドラは生成時に一度だけ登録されるため、
   // 直接 goToRelative を呼ぶと生成時点の currentIndex・orderedVideos を参照してしまう
   const goToRelativeRef = useRef<(delta: number, auto: boolean) => void>(() => {});
+  // 最新レンダーの handleEnded（goToRelativeRef と同じ理由）
+  const handleEndedRef = useRef<() => void>(() => {});
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // 直近の recordEpisodeOpened（fire-and-forget）の書き込み Promise。saveProgress 側がこれを
   // 待ってから書き込むことで、ネットワーク遅延で recordEpisodeOpened が後から Firestore に
@@ -508,8 +522,8 @@ export default function PlaylistDetailPage() {
             const ended = currentVideoRef.current;
             if (ended?.durationSeconds) saveProgress(ended, ended.durationSeconds);
             debugLog(`ENDED continuous=${continuousPlayRef.current}`);
-            // 生成時点の古い goToRelative ではなく最新のものを呼ぶ（goToRelativeRef 参照）
-            if (continuousPlayRef.current) goToRelativeRef.current(1, true);
+            // 生成時点の古い関数ではなく最新のものを呼ぶ（handleEndedRef 参照）
+            handleEndedRef.current();
           }
         },
       },
@@ -564,6 +578,40 @@ export default function PlaylistDetailPage() {
   useEffect(() => {
     goToRelativeRef.current = goToRelative;
   });
+
+  // 動画の再生終了（ENDED）。表示順で最後の動画なら最終話の再生終了時の処理、
+  // それ以外は連続再生がONなら次の動画へ進む（動画プレーヤー仕様書「連続再生機能」「最終話の再生終了時」）
+  function handleEnded() {
+    if (currentIndex === orderedVideos.length - 1) {
+      handlePlaylistFinished();
+    } else if (continuousPlay) {
+      goToRelative(1, true);
+    }
+  }
+  useEffect(() => {
+    handleEndedRef.current = handleEnded;
+  });
+
+  // 最終話の再生終了時: 全画面を解除し、この再生リストの完走確認・レビューを促すダイアログを出す。
+  // 完走済みかつレビュー（星かコメント）済みなら促すことが無いので出さない
+  function handlePlaylistFinished() {
+    // YouTube の全画面は iframe が全画面要素になっているため、ページ側から解除できる
+    // （iOS Safari の動画ネイティブ全画面はページから解除できない。抜けた時点でダイアログが見える）
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    if (finishedPromptShownRef.current) return;
+    if (!user) {
+      finishedPromptShownRef.current = true;
+      setFinishedLoginOpen(true);
+      return;
+    }
+    const sections: FinishedPromptSections = {
+      status: mylist?.status !== 'completed',
+      review: ownReview.starRating == null && !ownReview.comment,
+    };
+    if (!sections.status && !sections.review) return;
+    finishedPromptShownRef.current = true;
+    setFinishedPrompt(sections);
+  }
 
   function jumpTo(index: number) {
     const video = orderedVideos[index];
@@ -840,7 +888,9 @@ export default function PlaylistDetailPage() {
   );
 
   const channelCard = <ChannelCard channelId={playlist.channelId} name={playlist.channelName} iconUrl={playlist.channelIconUrl} />;
-  const reviewSection = <ReviewSection playlistId={playlistId} user={user} mylist={mylist} onMylistChange={setMylist} />;
+  const reviewSection = (
+    <ReviewSection playlistId={playlistId} user={user} mylist={mylist} onMylistChange={setMylist} writeRequest={reviewWriteRequest} />
+  );
 
   // 通常モード: PC 2カラム（左 62% / 右 38%: ヒーロー・レビュー | 基本情報・配信者・動画リスト・ゲーム）、
   //             モバイルは ヒーロー→基本情報→配信者→動画リスト→レビュー→ゲーム の縦積み
@@ -873,6 +923,21 @@ export default function PlaylistDetailPage() {
 
       <TagEditModal open={tagModalOpen} onOpenChange={setTagModalOpen} targetType="playlist" targetId={playlistId} tags={tags} />
       <PlayerShortcutsModal open={shortcutHelpOpen} onOpenChange={setShortcutHelpOpen} />
+      <PlaylistFinishedModal
+        sections={finishedPrompt}
+        onClose={() => setFinishedPrompt(null)}
+        playlistId={playlistId}
+        user={user}
+        mylist={mylist}
+        onMylistChange={setMylist}
+        review={ownReview}
+        onRequestWriteReview={() => setReviewWriteRequest((n) => n + 1)}
+      />
+      <LoginRequiredModal
+        open={finishedLoginOpen}
+        onOpenChange={setFinishedLoginOpen}
+        title="ログインすると、完走の記録やレビューができます"
+      />
     </div>
   );
 }

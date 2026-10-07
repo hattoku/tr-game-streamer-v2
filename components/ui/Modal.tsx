@@ -21,15 +21,27 @@ interface ModalProps {
   /** 幅を広げたい場合（既定 480px） */
   maxWidthClassName?: string;
   className?: string;
+  /** 閉じ終わった時点（フォーカスを開く前の要素へ戻す直前）。preventDefault で戻さないようにできる */
+  onCloseAutoFocus?: (event: Event) => void;
 }
 
-export function Modal({ open, onOpenChange, title, description, children, maxWidthClassName = 'max-w-[480px]', className }: ModalProps) {
+export function Modal({
+  open,
+  onOpenChange,
+  title,
+  description,
+  children,
+  maxWidthClassName = 'max-w-[480px]',
+  className,
+  onCloseAutoFocus,
+}: ModalProps) {
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-overlay data-[state=open]:animate-fade-in data-[state=closed]:animate-fade-out" />
         <Dialog.Content
           aria-modal="true"
+          onCloseAutoFocus={onCloseAutoFocus}
           className={cn(
             'fixed left-1/2 top-1/2 z-50 w-[calc(100%-32px)] -translate-x-1/2 -translate-y-1/2',
             'rounded-[12px] border border-surface-border bg-gradient-elevated p-6 shadow-elevated',
