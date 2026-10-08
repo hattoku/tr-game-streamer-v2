@@ -2,7 +2,7 @@
 title: Wiki索引
 type: meta
 date: 2026-09-08
-updated: 2026-09-22
+updated: 2026-10-08
 ---
 
 
@@ -40,6 +40,7 @@ tr-game-streamer-v2 の**コーディング支援用**Wiki（実装の変更履�
 - [[2026-09-22-phase6-step3-admin-minimal]] — フェーズ6 ステップ3（管理画面の最小版）。ユーザー決定で範囲を「ダッシュボード集約＋審査ワークフローのうち通報のみ」に縮小、権限はoperator/owner共通。`/admin`（通報未処理件数＋新着動画再取得の移設）・`/admin/workflows`・`/admin/workflows/[workflowId]`（単一ステップの承認/却下、承認時は対象レビューを物理削除しスコア再計算）を新規実装。dev-orchestrator経由のレビューで、仕様書側への実装注記追記漏れ（2仕様書にv1.5・v8.0として追加）、`text-3xl`のトークンスケール逸脱、モバイル幅でのヘッダーナビ折り返し対策漏れを修正
 - [[2026-09-20-env-default-stg]] — stg/本番のDB分離を調査（分離済みと確認）。「共通」の正体だった「`NEXT_PUBLIC_APP_ENV`未指定時の接続先が本番」を`lib/app-env.ts`新設で「明示しない限りstg」に反転。`dev:prod`/`build:prod`追加、テストモードを本番で無効化。併せて`deploy.ps1`にFirestoreルール/インデックスデプロイを組み込み、Firebase Webアプリ設定を`lib/firebase.ts`直書き一本化（`.env.local`に旧appIdが残っていた）
 - [[2026-09-23-stg-cookie-gate]] — HTTP Basic認証→Cookieベースの共有パスワードゲート（30日間・パスワードのみ）へ移行。`lib/stg-gate.ts`新設、`/stg-login`ページ・`app/api/stg-gate/route.ts`追加
+- [[2026-10-08-plan-review-phase6.5]] — 全体計画（HANDOFF.md）の見直し。9/23〜10/7の45コミットをフェーズ6.5（自己テスト）の前倒しとして記録し区切り、次はフェーズ6ステップ4（まとめ機能）。未実装機能の棚卸し表・Basic認証の記述を実態に更新
 
 ## Entities
 - [[proxy]] — proxy.ts（旧middleware.ts、Next.js 16のproxy規約対応）
