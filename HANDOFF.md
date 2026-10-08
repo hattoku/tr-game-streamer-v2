@@ -129,7 +129,7 @@
       Cloud Runデプロイは`cloudbuild.yaml`の`_APP_ENV`でstg/prodを明示しているため影響なし。
       `.agent/rules/setup.md`を書き換え済み。
     - **シークレットがstg/本番で同一**（備忘録、当面は対応不要とユーザー判断）。`YOUTUBE_API_KEY`・
-      `CRON_SECRET`・Basic認証の資格情報がいずれも同じ値で、`deploy.ps1`が同じ`.env.local`から
+      `CRON_SECRET`・Basic認証の資格情報（2026-09-23以降はCookieゲートの`STAGING_GATE_PASSWORD`）がいずれも同じ値で、`deploy.ps1`が同じ`.env.local`から
       両環境に注入している。特に`YOUTUBE_API_KEY`はYouTube Data APIのクォータ（1日10,000ユニット）を
       両環境で共有するため、stgで新着取得を試すと本番cronの枠を食う。将来分離するなら、
       (a) stg側GCPプロジェクトで別キーを発行し、`.env.local`を`YOUTUBE_API_KEY_STG`/`_PROD`の
@@ -1265,7 +1265,7 @@ Firebase Hostingの設定のみの反映。**正式公開でnoindex/Basic認証�
 - `/terms`・`/privacy`（**アカウント作成画面の同意リンクが404のままでは他人に使わせられない**）
 - `/about`・`/site-info`・`/contact`・`/password-reset`（未解決事項8）
 - 一般ユーザーの再生リスト登録または提案フロー（現状は管理者専用のため、友人は追加ができない）
-- 通報の受け皿（審査ワークフロー最小版）
+- ~~通報の受け皿（審査ワークフロー最小版）~~ → フェーズ6ステップ3（2026-09-22）で通報の一覧・承認/却下を実装済み
 
 ### フェーズ8: 販促・正式公開判断
 
