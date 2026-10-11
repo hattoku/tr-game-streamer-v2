@@ -39,6 +39,7 @@ import {
   DropdownMenuRadioItem,
 } from '@/components/ui/DropdownMenu';
 import { LoginRequiredModal } from '@/components/layout/LoginRequiredModal';
+import { AddToCollectionButton } from '@/components/collections/AddToCollectionButton';
 import { MAX_COMMENT_LENGTH, getIdToken, upsertReview, useOwnReview, type MylistState } from './useOwnReview';
 
 export type { MylistState } from './useOwnReview';
@@ -288,6 +289,8 @@ export function ReviewForm({ playlistId, user, mylist, onMylistChange, writeRequ
             'いずれかを選ぶとマイリストに追加されます'
           )}
         </p>
+        {/* まとめ機能仕様書 §4.1「再生リスト詳細ページの視聴記録セクション」の作成導線 */}
+        <AddToCollectionButton playlistId={playlistId} className="mt-1 self-start" />
       </div>
 
       <CardDivider />

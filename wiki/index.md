@@ -41,6 +41,7 @@ tr-game-streamer-v2 の**コーディング支援用**Wiki（実装の変更履�
 - [[2026-09-20-env-default-stg]] — stg/本番のDB分離を調査（分離済みと確認）。「共通」の正体だった「`NEXT_PUBLIC_APP_ENV`未指定時の接続先が本番」を`lib/app-env.ts`新設で「明示しない限りstg」に反転。`dev:prod`/`build:prod`追加、テストモードを本番で無効化。併せて`deploy.ps1`にFirestoreルール/インデックスデプロイを組み込み、Firebase Webアプリ設定を`lib/firebase.ts`直書き一本化（`.env.local`に旧appIdが残っていた）
 - [[2026-09-23-stg-cookie-gate]] — HTTP Basic認証→Cookieベースの共有パスワードゲート（30日間・パスワードのみ）へ移行。`lib/stg-gate.ts`新設、`/stg-login`ページ・`app/api/stg-gate/route.ts`追加
 - [[2026-10-08-plan-review-phase6.5]] — 全体計画（HANDOFF.md）の見直し。9/23〜10/7の45コミットをフェーズ6.5（自己テスト）の前倒しとして記録し区切り、次はフェーズ6ステップ4（まとめ機能）。未実装機能の棚卸し表・Basic認証の記述を実態に更新
+- [[2026-10-08-phase6-step4-1-collections]] — フェーズ6 ステップ4-1（まとめ機能: 作成・編集・削除・詳細・「まとめに追加する」・並び替え）。まとめ機能を4-1/4-2/4-3に分割。`/collections/mine` 新設、↑↓のみの並び替え、作成者名の非正規化、書き込みはAPI Routeのみ（rules を `allow write: if false`）。レビューでAPI入力の防御・上限判定のトランザクション化・aria-label を対応
 
 ## Entities
 - [[proxy]] — proxy.ts（旧middleware.ts、Next.js 16のproxy規約対応）

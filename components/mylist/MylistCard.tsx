@@ -1,7 +1,7 @@
 /**
  * マイリストのカード（ページ マイリスト機能仕様書 §5、共通 デザイントークン仕様書 v2.0 §6.1・§6.5・§6.6）。
  * - 親エリア: 再生リストのサムネイル（話数）・タイトル・配信者・ステータスチップ（クリックで変更ドロップダウン §5.8）・
- *   逆順トグル（§5.5、セカンダリボタンのトグルON）・削除（ゴーストボタン）
+ *   逆順トグル（§5.5、セカンダリボタンのトグルON）・まとめに追加（まとめ機能仕様書 §4.1）・削除（ゴーストボタン）
  * - 子エリア: 最後に再生した動画（§5.3）。サムネイル（右下に再生時間）＋進捗バー 3px・タイトル（省略せず折り返し）・
  *   残り時間・「続きから再生」
  *   （「続きから再生」は `?autoplay=1` 付きで遷移し、遷移先で自動再生を試みる。自動再生できない
@@ -28,6 +28,7 @@ import { ProgressBar } from '@/components/ui/ProgressBar';
 import { formatDuration } from '@/components/playlists/VideoList';
 import { ChevronDownIcon, ChevronRightIcon, PlayIcon, ReverseIcon, TrashIcon } from '@/components/ui/icons';
 import { useCanAutoplayAfterNavigation } from '@/lib/autoplay';
+import { AddToCollectionButton } from '@/components/collections/AddToCollectionButton';
 
 export interface MylistCardData {
   mylistId: string;
@@ -215,9 +216,12 @@ function Actions({
         <ReverseIcon size={13} />
         {entry.isReverseOrder ? (compact ? '逆順中' : '逆順再生中') : compact ? '逆順' : '逆順で再生'}
       </Button>
+      {/* まとめ機能仕様書 §4.1「マイリストページ」の作成導線 */}
+      <AddToCollectionButton playlistId={entry.playlistId} label={compact ? 'まとめ' : 'まとめに追加'} />
       <Button variant="ghost" size="sm" onClick={onRemove} aria-label="マイリストから削除">
         <TrashIcon size={13} />
-        削除
+        {/* モバイルは「まとめ」ボタン追加で1行に収まらなくなるためアイコンのみ（aria-label で名前は保つ） */}
+        {!compact && '削除'}
       </Button>
     </div>
   );

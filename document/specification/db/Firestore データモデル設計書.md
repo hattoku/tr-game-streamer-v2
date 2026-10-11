@@ -1,6 +1,6 @@
 # プレミテ Firestore データモデル設計書
 
-**バージョン**: v1.14  
+**バージョン**: v1.16  
 **作成日**: 2026年3月30日（更新）  
 **対象**: 開発チーム  
 **関連ドキュメント**: プレミテ企画書 / プレミテ_技術スタック仕様書 / 各機能仕様書
@@ -433,14 +433,20 @@ YouTubeチャンネルの情報。
 | フィールド | 型 | 必須 | 説明 |
 |-----------|-----|:---:|------|
 | `userId` | string | ✅ | 作成者のuserId |
+| `userDisplayName` | string | ✅ | 作成者の表示名（作成時・フォーム保存時点のスナップショット。`reviews.userDisplayName` と同じ非正規化コピー。再生リストの追加・解除や並び替えでは更新しない） |
+| `userProfileImageUrl` | string? | — | 作成者のプロフィール画像URL（同上） |
 | `title` | string | ✅ | まとめタイトル |
 | `description` | string? | — | まとめ説明文 |
 | `visibility` | string | ✅ | `"public"` / `"unlisted"` / `"private"` |
 | `playlistIds` | string[] | ✅ | まとめられた再生リストIDリスト（最大10件） |
 | `showSpoiler` | boolean | ✅ | ネタバレコメントを表示するか |
 | `savedCount` | number | ✅ | 保存された数 |
+| `sortOrder` | number | ✅ | 作成者の「自分のまとめ」での表示順（昇順）。新規作成時は既存の最小値−1（先頭）、並び替え時に0,1,2…で振り直す（まとめ機能仕様書 §4.5） |
 | `createdAt` | Timestamp | ✅ | 作成日時 |
 | `updatedAt` | Timestamp | ✅ | 最終更新日時 |
+
+> **書き込み経路**: 作成・編集・削除・並び替えはすべて `app/api/collections` 配下の API Route（Admin SDK）経由。
+> 1ユーザー10件の上限と作成者名の非正規化コピーをクライアントに偽装させないため、`firestore.rules` はクライアントからの書き込みを禁止している。
 
 ---
 
@@ -834,7 +840,8 @@ ai_operators ──── (1) users
 ## 6. セキュリティルール方針
 
 - **一般公開**: `playlists` (isPublic=true), `games`, `genres`, `tags`, `reviews` はゲストR可。
-- **個人データ**: `mylist`, `watch_progress`, `watch_history`, `collections` は自分のみRW可。
+- **個人データ**: `mylist`, `watch_progress`, `watch_history` は自分のみRW可。
+- **まとめ**: `collections` は公開・限定公開ならゲストR可、非公開は作成者本人と管理者のみR可。書き込みはAPI Route（Admin SDK）のみ（3.14節）。
 - **管理データ**: `workflows`, `ai_operators`, `app_settings` は管理者のみRW可。
 - **不変ログ**: `operation_logs` はシステムのみW、管理者はRのみ。
 
@@ -878,3 +885,4 @@ ai_operators ──── (1) users
 | v1.13 | 2026-09-23 | `reviews.watchStatus` から `"reviewing"` を削除し、`mylist.watchStatus` と同じ5値に統一（視聴ステータス記録UI・レビュー投稿UI統合）。3.11節の設計注記を「`mylist.watchStatus` が正、`reviews.watchStatus` はその非正規化コピー」に更新 |
 | v1.14 | 2026-09-26 | `users` に `hideUpcomingThumbnails` を追加（動画リストのネタバレ対策。設定ページから変更、既定 `false`） |
 | v1.15 | 2026-10-03 | マイリストページからの削除（app/api/mylist の DELETE）で `reviews.watchStatus` も解除するよう変更（ページ マイリスト機能仕様書 §5.9）。3.9節 `reviews.watchStatus` の書き込み経路と3.11節の設計注記を更新 |
+| v1.16 | 2026-10-08 | フェーズ6ステップ4（まとめ機能 4-1）。`collections` に作成者表示用の非正規化コピー `userDisplayName`/`userProfileImageUrl` と表示順 `sortOrder` を追加し、書き込み経路（API Route のみ）を明記。6章のルール方針で `collections` を個人データから分離 |

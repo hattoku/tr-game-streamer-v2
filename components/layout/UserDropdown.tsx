@@ -101,6 +101,8 @@ export function UserDropdown() {
         ))}
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={() => router.push(`/profile/`)}>プロフィール</DropdownMenuItem>
+        {/* 自分のまとめ一覧（まとめ機能仕様書 §4.1。プロフィールのまとめセクション実装までの入口） */}
+        <DropdownMenuItem onSelect={() => router.push('/collections/mine')}>自分のまとめ</DropdownMenuItem>
         <DropdownMenuItem onSelect={() => router.push('/settings')}>設定</DropdownMenuItem>
         {isAdmin && (
           <>

@@ -189,8 +189,9 @@ service cloud.firestore {
         || isSelf(resource.data.userId)
         || isAdmin();
 
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isSelf(resource.data.userId) || isAdmin();
+      // 書き込みは app/api/collections 配下（Admin SDK）のみ。1ユーザー10件の上限と作成者名の
+      // 非正規化コピー（userDisplayName/userProfileImageUrl）をクライアントに偽装させないため（フェーズ6ステップ4）。
+      allow write: if false;
     }
 
     // ---------------------------------------------------------------------
