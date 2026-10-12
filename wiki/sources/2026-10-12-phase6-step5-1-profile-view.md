@@ -52,7 +52,8 @@ lint / tsc / build 成功。stg＋Playwright（テストモードの一般ユー
 - マイリストカードのサムネイル右下に話数（`CountLabel`「N話」）。API の再生リスト情報に `videoCount` を追加
 - サムネイルのホバー効果: カード内に複数リンクがあるため `Card interactive`（浮き上がり）は使わず、サムネイルのリンクに `group` を付けて
   画像を `scale-[1.04]`＋`brightness-110`。**Tailwind v4 の `scale-*` は `transform` ではなく独立した `scale` プロパティ**なので、
-  トランジションは `transition-[scale,filter]` と書く（`transition-[transform,…]` だとアニメーションしない）
+  トランジションは `transition-[scale,filter]` と書く（`transition-[transform,…]` だとアニメーションしない）。
+  `components/ui/Card.tsx` の `THUMBNAIL_HOVER_IMG_CLASS` に共通化し、まとめカード（3枚並びのサムネイル）とまとめ詳細の再生リストカードにも適用
 - 遷移時のスクロール位置の不具合（アプリ全体）: Next.js の `<Link>` は遷移先の Page 要素が画面内に見えていればスクロール位置を保つため、
   長いページの下の方→短いページ（プロフィール→まとめ詳細）で最下部付近に着地していた。`ScrollToTopOnNavigate` を `SiteFrame` に置き、
   パス名変更時に先頭へ（popstate・クエリのみ・ハッシュ付きは除外）

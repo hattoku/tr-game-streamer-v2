@@ -8,7 +8,8 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { CountLabel } from '@/components/ui/Badge';
-import { Card } from '@/components/ui/Card';
+import { Card, THUMBNAIL_HOVER_IMG_CLASS } from '@/components/ui/Card';
+import { cn } from '@/components/ui/cn';
 import type { ProfilePlaylistJson } from '@/lib/profile';
 
 export function ProfilePlaylistCard({
@@ -38,7 +39,7 @@ export function ProfilePlaylistCard({
               <img
                 src={p.thumbnailUrl}
                 alt=""
-                className="absolute inset-0 size-full object-cover transition-[scale,filter] duration-[120ms] group-hover:scale-[1.04] group-hover:brightness-110"
+                className={cn('absolute inset-0 size-full object-cover', THUMBNAIL_HOVER_IMG_CLASS)}
                 loading="lazy"
               />
             )}

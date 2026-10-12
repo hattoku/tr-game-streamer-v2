@@ -20,7 +20,7 @@ import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { UserAvatar } from '@/components/layout/UserDropdown';
-import { Card } from '@/components/ui/Card';
+import { Card, THUMBNAIL_HOVER_IMG_CLASS } from '@/components/ui/Card';
 import { LinkButton } from '@/components/ui/Button';
 import { CountLabel } from '@/components/ui/Badge';
 import { StatusChip } from '@/components/ui/Chip';
@@ -191,12 +191,12 @@ function CollectionPlaylistCard({
   return (
     <Card className="flex flex-col gap-4">
       <div className="flex gap-3 md:gap-[18px]">
-        <Link href={href} className="relative block w-[128px] shrink-0 overflow-hidden rounded-[8px] bg-bg-player md:w-[224px]">
+        <Link href={href} className="group relative block w-[128px] shrink-0 overflow-hidden rounded-[8px] bg-bg-player md:w-[224px]">
           <span className="relative block aspect-video">
             {p.thumbnailUrl && (
               // absolute化: 通常フローの子だと画像自身の縦横比がaspect-videoコンテナの高さに影響してしまうため
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={p.thumbnailUrl} alt="" className="absolute inset-0 size-full object-cover" loading="lazy" />
+              <img src={p.thumbnailUrl} alt="" className={cn('absolute inset-0 size-full object-cover', THUMBNAIL_HOVER_IMG_CLASS)} loading="lazy" />
             )}
           </span>
           <span aria-hidden className="absolute inset-x-0 bottom-0 h-[46%] bg-thumb-overlay" />

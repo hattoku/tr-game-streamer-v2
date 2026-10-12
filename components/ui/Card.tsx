@@ -32,6 +32,13 @@ export function Card({ interactive = false, flush = false, className, children, 
   );
 }
 
+/**
+ * サムネイル画像のホバー効果（わずかに拡大・明るく）。カード内に複数のリンクがあり `interactive`（カード全体の浮き上がり）を
+ * 使えないカードで、サムネイルのリンクに `group` を付け、その中の <img> にこのクラスを当てる。
+ * Tailwind v4 の `scale-*` は `transform` ではなく独立した `scale` プロパティのため、トランジションは scale を指定する。
+ */
+export const THUMBNAIL_HOVER_IMG_CLASS = 'transition-[scale,filter] duration-[120ms] group-hover:scale-[1.04] group-hover:brightness-110';
+
 /** カード内セパレーター（§6.2） */
 export function CardDivider({ className }: { className?: string }) {
   return <div role="separator" className={cn('border-t border-border-divider', className)} />;
