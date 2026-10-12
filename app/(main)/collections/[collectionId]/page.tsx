@@ -7,7 +7,8 @@
  * - 閲覧可否（§2.2）は firestore.rules に任せる。非公開まとめを本人以外が開くと読み取りが拒否されるため、
  *   存在しない場合と同じく 404 にする（非公開まとめの存在を明かさない）。
  * - 作成者名はプロフィールページ（フェーズ6ステップ5）が未実装のためリンクにしない。
- * - 保存ボタン（§5.2・§8）はサブステップ4-3で実装する。
+ * - 保存ボタン（§5.2・§8.2）はログイン済みの作成者以外に、作成者の編集ボタンと同じ位置（タイトル行の右）に出す。
+ *   保存数はメタ情報の行に ♡ N で出す（onSnapshot で購読しているため保存・解除がすぐ反映される）。
  * - 作成者本人には公開設定を表示する（自分のまとめがどの範囲に見えているかを確認できるように）。
  */
 'use client';
@@ -25,8 +26,9 @@ import { CountLabel } from '@/components/ui/Badge';
 import { StatusChip } from '@/components/ui/Chip';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Skeleton, SkeletonText } from '@/components/ui/Skeleton';
-import { InventoryIcon, PencilIcon, StarIcon } from '@/components/ui/icons';
+import { FavoriteIcon, InventoryIcon, PencilIcon, StarIcon } from '@/components/ui/icons';
 import { VisibilityBadge } from '@/components/collections/VisibilityBadge';
+import { SaveCollectionButton } from '@/components/collections/SaveCollectionButton';
 import { cn } from '@/components/ui/cn';
 import {
   fetchCollectionPlaylists,
@@ -103,6 +105,7 @@ export default function CollectionDetailPage() {
               編集
             </LinkButton>
           )}
+          {user && !isOwner && <SaveCollectionButton collectionId={collectionId} className="shrink-0" />}
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-md text-text-muted">
           <span className="inline-flex min-w-0 items-center gap-2">
@@ -115,6 +118,10 @@ export default function CollectionDetailPage() {
             {collection.updatedAt &&
               formatCollectionDate(collection.updatedAt) !== formatCollectionDate(collection.createdAt) &&
               `（${formatCollectionDate(collection.updatedAt)} 更新）`}
+          </span>
+          <span className="inline-flex items-center gap-1" aria-label={`保存数 ${collection.savedCount}`}>
+            <FavoriteIcon size={13} />
+            {collection.savedCount.toLocaleString()}
           </span>
           {isOwner && <VisibilityBadge visibility={collection.visibility} />}
         </div>

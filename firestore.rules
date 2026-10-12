@@ -195,6 +195,16 @@ service cloud.firestore {
     }
 
     // ---------------------------------------------------------------------
+    // saved_collections — まとめの保存記録（{uid}_{collectionId}）
+    // ---------------------------------------------------------------------
+    match /saved_collections/{savedId} {
+      // 現状の読み取りは API Route（Admin SDK）のみだが、本人分の読み取りは許可しておく。
+      allow read: if isSelf(resource.data.userId) || isAdmin();
+      // collections.savedCount の増減と一体のため、書き込みは app/api/collections/[collectionId]/save のみ。
+      allow write: if false;
+    }
+
+    // ---------------------------------------------------------------------
     // workflows — 審査ワークフロー（提案・通報）
     // ---------------------------------------------------------------------
     match /workflows/{workflowId} {

@@ -3,6 +3,7 @@ import {
   COLLECTION_DESCRIPTION_MAX,
   COLLECTION_PLAYLISTS_MAX,
   COLLECTION_TITLE_MAX,
+  type CollectionJson,
   type CollectionVisibility,
 } from '@/lib/collections-shared';
 
@@ -60,4 +61,29 @@ export async function fetchCreatorSnapshot(uid: string): Promise<{ userDisplayNa
     userDisplayName: (userData?.displayName as string | undefined) || 'ユーザー',
     userProfileImageUrl: (userData?.profileImageUrl as string | undefined) ?? null,
   };
+}
+
+/** Firestore（Admin SDK）のまとめドキュメントを API レスポンス用の形にする */
+export function toCollectionJson(id: string, data: FirebaseFirestore.DocumentData): CollectionJson {
+  const millis = (v: unknown) => (v as { toMillis?: () => number } | undefined)?.toMillis?.() ?? null;
+  return {
+    id,
+    userId: data.userId ?? '',
+    userDisplayName: data.userDisplayName || 'ユーザー',
+    userProfileImageUrl: data.userProfileImageUrl ?? null,
+    title: data.title ?? '',
+    description: data.description ?? null,
+    visibility: data.visibility === 'public' || data.visibility === 'unlisted' ? data.visibility : 'private',
+    playlistIds: data.playlistIds ?? [],
+    showSpoiler: data.showSpoiler === true,
+    savedCount: data.savedCount ?? 0,
+    sortOrder: data.sortOrder ?? 0,
+    createdAt: millis(data.createdAt),
+    updatedAt: millis(data.updatedAt),
+  };
+}
+
+/** 保存記録のドキュメントID（mylist・reviews と同じ `{uid}_{対象ID}` 形式） */
+export function savedCollectionDocId(uid: string, collectionId: string): string {
+  return `${uid}_${collectionId}`;
 }

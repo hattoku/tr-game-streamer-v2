@@ -1,6 +1,6 @@
 # プレミテ Firestore データモデル設計書
 
-**バージョン**: v1.16  
+**バージョン**: v1.17  
 **作成日**: 2026年3月30日（更新）  
 **対象**: 開発チーム  
 **関連ドキュメント**: プレミテ企画書 / プレミテ_技術スタック仕様書 / 各機能仕様書
@@ -26,6 +26,7 @@
    - 3.12 [watch_progress](#312-watch_progress)
    - 3.13 [watch_history](#313-watch_history)
    - 3.14 [collections](#314-collections)
+     - 3.14.1 [saved_collections](#3141-saved_collections)
    - 3.15 [workflows](#315-workflows)
    - 3.16 [notices](#316-notices)
    - 3.17 [inquiries](#317-inquiries)
@@ -93,6 +94,7 @@ Firestoreはテーブル結合（JOIN）ができないため、一覧表示や�
 | 12 | `watch_progress` | 動画ごとの視聴進捗 | 動画プレーヤー仕様書 |
 | 13 | `watch_history` | 動画視聴履歴 | 視聴履歴機能仕様書 |
 | 14 | `collections` | まとめ（ユーザー作成のキュレーション） | まとめ機能仕様書 |
+| 14-1 | `saved_collections` | まとめの保存記録（他人のまとめを保存） | まとめ機能仕様書 §8 |
 | 15 | `workflows` | 審査ワークフロー（提案・通報） | 審査ワークフロー仕様書 |
 | 16 | `notices` | お知らせ（管理者→ユーザー向け） | お知らせ管理仕様書 |
 | 17 | `inquiries` | お問い合わせ・チャットスレッド | お問い合わせ管理仕様書 |
@@ -447,6 +449,23 @@ YouTubeチャンネルの情報。
 
 > **書き込み経路**: 作成・編集・削除・並び替えはすべて `app/api/collections` 配下の API Route（Admin SDK）経由。
 > 1ユーザー10件の上限と作成者名の非正規化コピーをクライアントに偽装させないため、`firestore.rules` はクライアントからの書き込みを禁止している。
+
+### 3.14.1 `saved_collections`
+
+ユーザーが他人のまとめを保存した記録（まとめ機能仕様書 §8）。2026-10-12 追加（フェーズ6ステップ4-3）。
+
+**パス**: `saved_collections/{userId}_{collectionId}`（mylist・reviews と同じ形式）
+
+| フィールド | 型 | 必須 | 説明 |
+|-----------|-----|:---:|------|
+| `userId` | string | ✅ | 保存したユーザーのuserId |
+| `collectionId` | string | ✅ | 保存したまとめのID |
+| `collectionTitle` | string | ✅ | 保存時点のまとめタイトル（まとめが非公開化され読めなくなった場合の案内に使う） |
+| `savedAt` | Timestamp | ✅ | 保存日時（保存したまとめ一覧は降順） |
+
+> **書き込み経路**: 保存・解除は `app/api/collections/[collectionId]/save`（Admin SDK）のみで、`collections.savedCount` の増減と同じトランザクションで行う。
+> 保存したまとめ一覧の取得も `app/api/collections/saved` 経由（非公開化されたまとめを「閲覧できなくなったまとめ」として返すため）。
+> まとめを削除すると、そのまとめの保存記録はすべて同時に削除される（まとめ本体と1バッチで削除するため、保存数が約500を超える規模になったら分割が必要）。公開・限定公開の他人のまとめのみ保存できる。
 
 ---
 
@@ -842,6 +861,7 @@ ai_operators ──── (1) users
 - **一般公開**: `playlists` (isPublic=true), `games`, `genres`, `tags`, `reviews` はゲストR可。
 - **個人データ**: `mylist`, `watch_progress`, `watch_history` は自分のみRW可。
 - **まとめ**: `collections` は公開・限定公開ならゲストR可、非公開は作成者本人と管理者のみR可。書き込みはAPI Route（Admin SDK）のみ（3.14節）。
+  `saved_collections` は本人と管理者のみR可、書き込みはAPI Routeのみ（3.14.1節）。
 - **管理データ**: `workflows`, `ai_operators`, `app_settings` は管理者のみRW可。
 - **不変ログ**: `operation_logs` はシステムのみW、管理者はRのみ。
 
@@ -851,6 +871,7 @@ ai_operators ──── (1) users
 
 ### 7.1 退会時の物理削除
 - `users`, `reviews`, `mylist`, `watch_history`, `watch_progress`, `helpful_votes`, `collections` を物理削除。
+- `saved_collections` は本人の保存記録に加え、削除される本人のまとめに対する他ユーザーの保存記録も物理削除する（3.14.1節）。
 
 ### 7.2 マスタ削除時の影響
 - `genres` 物理削除時: `games.genreId` を null 化。AI運営者への影響なし。
@@ -886,3 +907,4 @@ ai_operators ──── (1) users
 | v1.14 | 2026-09-26 | `users` に `hideUpcomingThumbnails` を追加（動画リストのネタバレ対策。設定ページから変更、既定 `false`） |
 | v1.15 | 2026-10-03 | マイリストページからの削除（app/api/mylist の DELETE）で `reviews.watchStatus` も解除するよう変更（ページ マイリスト機能仕様書 §5.9）。3.9節 `reviews.watchStatus` の書き込み経路と3.11節の設計注記を更新 |
 | v1.16 | 2026-10-08 | フェーズ6ステップ4（まとめ機能 4-1）。`collections` に作成者表示用の非正規化コピー `userDisplayName`/`userProfileImageUrl` と表示順 `sortOrder` を追加し、書き込み経路（API Route のみ）を明記。6章のルール方針で `collections` を個人データから分離 |
+| v1.17 | 2026-10-12 | フェーズ6ステップ4-3（まとめの保存機能）。3.14.1 `saved_collections` を追加（保存記録、書き込みはAPI Routeのみ、まとめ削除時に連動削除）。6章のルール方針に追記 |

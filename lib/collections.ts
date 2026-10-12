@@ -7,7 +7,13 @@
 import { collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { normalizeWatchStatus, type WatchStatus } from '@/components/ui/Chip';
-import { COLLECTION_PLAYLISTS_MAX, COLLECTIONS_PER_USER_MAX, type CollectionVisibility } from '@/lib/collections-shared';
+import {
+  COLLECTION_PLAYLISTS_MAX,
+  COLLECTIONS_PER_USER_MAX,
+  type CollectionJson,
+  type CollectionVisibility,
+  type SavedCollectionJson,
+} from '@/lib/collections-shared';
 
 export * from '@/lib/collections-shared';
 
@@ -80,6 +86,36 @@ export function sortCollections(list: CollectionData[]): CollectionData[] {
   return [...list].sort((a, b) => a.sortOrder - b.sortOrder || (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0));
 }
 
+/** 新着順（作成日時の降順、まとめ機能仕様書 §6.2） */
+export function sortCollectionsByNewest(list: CollectionData[]): CollectionData[] {
+  return [...list].sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0));
+}
+
+/**
+ * 公開まとめを全件取得し新着順で返す（まとめを探す・TOPの新着のまとめ）。限定公開・非公開は含めない（§6.2）。
+ * 公開再生リストと同じく、カタログ規模が小さい前提の全件クライアント取得。`visibility` の等価条件のみで複合index不要。
+ */
+export async function fetchPublicCollections(): Promise<CollectionData[]> {
+  const snap = await getDocs(query(collection(db, 'collections'), where('visibility', '==', 'public')));
+  return sortCollectionsByNewest(snap.docs.map(toCollectionData));
+}
+
+/**
+ * 指定の再生リストを含む公開まとめを新着順で取得する（再生リスト詳細「この再生リストを含むまとめ」、§7）。
+ * 等価条件＋array-contains（orderBy なし）は単一フィールドインデックスのマージで処理されるため複合indexは不要（stgで確認済み）。
+ */
+export async function fetchPublicCollectionsContaining(playlistId: string): Promise<CollectionData[]> {
+  const snap = await getDocs(
+    query(collection(db, 'collections'), where('visibility', '==', 'public'), where('playlistIds', 'array-contains', playlistId)),
+  );
+  return sortCollectionsByNewest(snap.docs.map(toCollectionData));
+}
+
+/** まとめカード用に、先頭3件の再生リストのサムネイルURLを引く（取得済みの公開再生リストから） */
+export function collectionThumbnails(c: CollectionData, thumbnailById: Map<string, string>): string[] {
+  return c.playlistIds.slice(0, 3).map((id) => thumbnailById.get(id) ?? '');
+}
+
 /**
  * 自分のまとめを全件取得する。`userId` の等価条件のみのため複合indexは不要
  * （非公開を含むため、firestore.rules の isSelf を満たす条件でクエリする必要がある）。
@@ -150,6 +186,8 @@ const API_ERROR_MESSAGE: Record<string, string> = {
   collection_limit: `作成できるまとめは${COLLECTIONS_PER_USER_MAX}件までです`,
   playlist_limit: `1つのまとめに入れられる再生リストは${COLLECTION_PLAYLISTS_MAX}件までです`,
   last_playlist: '再生リストが1件のみのまとめからは外せません',
+  not_found: 'このまとめは見つかりませんでした',
+  own_collection: '自分のまとめは保存できません',
 };
 
 export class CollectionApiError extends Error {
@@ -159,7 +197,7 @@ export class CollectionApiError extends Error {
 }
 
 /** app/api/collections 配下の API を IDトークン付きで呼ぶ */
-export async function callCollectionsApi<T = unknown>(path: string, method: 'POST' | 'PATCH' | 'DELETE', body?: unknown): Promise<T> {
+export async function callCollectionsApi<T = unknown>(path: string, method: 'GET' | 'POST' | 'PATCH' | 'DELETE', body?: unknown): Promise<T> {
   if (!auth.currentUser) throw new CollectionApiError('not_signed_in');
   const idToken = await auth.currentUser.getIdToken();
   const res = await fetch(path, {
@@ -170,4 +208,41 @@ export async function callCollectionsApi<T = unknown>(path: string, method: 'POS
   const json = (await res.json().catch(() => ({}))) as { error?: string } & T;
   if (!res.ok) throw new CollectionApiError(json.error ?? `status_${res.status}`);
   return json;
+}
+
+/** API Route が返したまとめ（日時はミリ秒）をクライアントの形に戻す */
+export function fromCollectionJson(c: CollectionJson): CollectionData {
+  return { ...c, createdAt: c.createdAt != null ? new Date(c.createdAt) : null, updatedAt: c.updatedAt != null ? new Date(c.updatedAt) : null };
+}
+
+/** 保存したまとめの1件（§8.4）。閲覧できなくなったまとめは collection が null */
+export interface SavedCollectionItem {
+  collectionId: string;
+  collectionTitle: string;
+  savedAt: Date;
+  collection: CollectionData | null;
+}
+
+/**
+ * 保存したまとめを保存日時の降順で取得する。非公開化されたまとめは本人でもクライアントから読めないため
+ * API（Admin SDK）経由で、閲覧できなくなったものも含めて返してもらう（まとめ機能仕様書 §1）。
+ */
+export async function fetchSavedCollections(): Promise<SavedCollectionItem[]> {
+  const { items } = await callCollectionsApi<{ items: SavedCollectionJson[] }>('/api/collections/saved', 'GET');
+  return items.map((i) => ({
+    collectionId: i.collectionId,
+    collectionTitle: i.collectionTitle,
+    savedAt: new Date(i.savedAt),
+    collection: i.collection ? fromCollectionJson(i.collection) : null,
+  }));
+}
+
+/** 保存の状態取得・保存・解除（§8.2）。保存は savedCount の増減を伴うため API 経由 */
+export async function fetchIsSaved(collectionId: string): Promise<boolean> {
+  const { saved } = await callCollectionsApi<{ saved: boolean }>(`/api/collections/${encodeURIComponent(collectionId)}/save`, 'GET');
+  return saved;
+}
+
+export async function setCollectionSaved(collectionId: string, saved: boolean): Promise<void> {
+  await callCollectionsApi(`/api/collections/${encodeURIComponent(collectionId)}/save`, saved ? 'POST' : 'DELETE');
 }

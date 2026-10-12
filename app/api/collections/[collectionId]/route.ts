@@ -4,7 +4,7 @@ import { adminDb } from '@/lib/firebase-admin';
 import { COLLECTION_PLAYLISTS_MAX } from '@/lib/collections-shared';
 import { arePublicPlaylists, fetchCreatorSnapshot, parseCollectionFields, readJsonObject } from '@/lib/collections-server';
 
-// まとめの編集・削除（ページ 再生リスト まとめ機能仕様書 §4.2・§4.6）。作成者本人のみ。
+// まとめの編集・削除（ページ 再生リスト まとめ機能仕様書 §4.2・§4.6）。作成者本人のみ。削除時は保存記録（saved_collections）も消す。
 // PATCH は2形態:
 // - フォーム保存: title/description/visibility/showSpoiler/playlistIds をまとめて置き換える
 //   （作成者名・アイコンの非正規化コピーもこのときだけ取り直す）
@@ -73,6 +73,12 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 export async function DELETE(request: NextRequest, { params }: Params) {
   const loaded = await loadOwnCollection(request, params);
   if ('errorResponse' in loaded) return loaded.errorResponse;
-  await loaded.ref.delete();
+  // 他のユーザーの保存記録も一緒に消す（まとめ機能仕様書 §1: 削除されたまとめは保存したまとめ一覧から自動で外す）。
+  // まとめ1件あたりの保存数は小さい前提で1バッチ（上限500書き込み）に収める
+  const savedSnap = await adminDb.collection('saved_collections').where('collectionId', '==', loaded.ref.id).get();
+  const batch = adminDb.batch();
+  savedSnap.docs.forEach((d) => batch.delete(d.ref));
+  batch.delete(loaded.ref);
+  await batch.commit();
   return NextResponse.json({ ok: true });
 }

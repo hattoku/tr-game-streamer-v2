@@ -13,3 +13,29 @@ export const VISIBILITY_LABEL: Record<CollectionVisibility, string> = {
   unlisted: '限定公開',
   public: '公開',
 };
+
+/** API Route（Admin SDK）からクライアントへ返すまとめの形。日時はミリ秒 */
+export interface CollectionJson {
+  id: string;
+  userId: string;
+  userDisplayName: string;
+  userProfileImageUrl: string | null;
+  title: string;
+  description: string | null;
+  visibility: CollectionVisibility;
+  playlistIds: string[];
+  showSpoiler: boolean;
+  savedCount: number;
+  sortOrder: number;
+  createdAt: number | null;
+  updatedAt: number | null;
+}
+
+/** 保存したまとめ一覧（GET /api/collections/saved）の1件。閲覧できなくなったまとめは collection が null */
+export interface SavedCollectionJson {
+  collectionId: string;
+  /** 保存時点のタイトル（閲覧できなくなった場合の案内に使う） */
+  collectionTitle: string;
+  savedAt: number;
+  collection: CollectionJson | null;
+}

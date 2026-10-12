@@ -1,7 +1,8 @@
 /**
  * TOPページ本実装（ページ top 仕様書。フェーズ6ステップ2）。
- * 未ログイン: ヒーロー（§4）→ 注目の再生リスト（§6）→ タグピックアップ（§8）
- * ログイン済み: マイリスト（§5）→ 注目の再生リスト（§6）→ 新着の再生リスト（§7）→ タグピックアップ（§8）
+ * 未ログイン: ヒーロー（§4）→ 注目の再生リスト（§6）→ 新着のまとめ → タグピックアップ（§8）
+ * ログイン済み: マイリスト（§5）→ 注目の再生リスト（§6）→ 新着の再生リスト（§7）→ 新着のまとめ → タグピックアップ（§8）
+ * 新着のまとめ（2026-10-12、まとめ機能仕様書 §7）は公開まとめを別途取得し、取得前・0件・失敗時は出さない（他セクションの表示は待たせない）。
  * 公開再生リスト全件（`fetchPublicPlaylists`）＋タグマスタ＋ジャンルマスタを1回だけ取得し、
  * 各セクション（`components/top/`）へ配列で渡して表示専用にする。マイリストセクションのみ
  * ログイン後に別途取得する（`useMylistEntries`、`components/top/MylistSection.tsx`内部）。
@@ -21,6 +22,8 @@ import { MylistSection } from '@/components/top/MylistSection';
 import { FeaturedSection } from '@/components/top/FeaturedSection';
 import { NewArrivalsSection } from '@/components/top/NewArrivalsSection';
 import { TagPickupSections } from '@/components/top/TagPickupSections';
+import { NewCollectionsSection } from '@/components/top/NewCollectionsSection';
+import { fetchPublicCollections, type CollectionData } from '@/lib/collections';
 import { Skeleton } from '@/components/ui/Skeleton';
 
 interface Genre {
@@ -33,6 +36,7 @@ export default function HomePage() {
   const [playlists, setPlaylists] = useState<PlaylistSummary[] | null>(null);
   const [tags, setTags] = useState<Map<string, TagInfo> | null>(null);
   const [genres, setGenres] = useState<Genre[] | null>(null);
+  const [collections, setCollections] = useState<CollectionData[]>([]);
 
   useEffect(() => {
     Promise.all([fetchPublicPlaylists(), fetchTagsMap(), getDocs(collection(db, 'genres'))]).then(
@@ -42,6 +46,9 @@ export default function HomePage() {
         setGenres(genresSnap.docs.map((d) => ({ id: d.id, name: (d.data().name as string) ?? '' })));
       },
     );
+    fetchPublicCollections()
+      .then(setCollections)
+      .catch(() => setCollections([]));
   }, []);
 
   const dataReady = playlists !== null && tags !== null && genres !== null;
@@ -59,6 +66,7 @@ export default function HomePage() {
         <>
           <FeaturedSection playlists={playlists} genres={genres} />
           {user && <NewArrivalsSection playlists={playlists} />}
+          <NewCollectionsSection collections={collections} playlists={playlists} />
           <TagPickupSections playlists={playlists} tags={tags} />
         </>
       ) : (
