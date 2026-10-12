@@ -9,10 +9,12 @@ import { BottomTabBar } from './BottomTabBar';
 import { Footer } from './Footer';
 import { Header } from './Header';
 import { PageContainer } from './PageContainer';
+import { ScrollToTopOnNavigate } from './ScrollToTopOnNavigate';
 
 export function SiteFrame({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-dvh flex-col pb-[calc(var(--spacing-bottom-tabs)+env(safe-area-inset-bottom))] md:pb-0">
+      <ScrollToTopOnNavigate />
       <Header />
       <main className="flex-1">
         <PageContainer className="py-6 md:py-8">{children}</PageContainer>

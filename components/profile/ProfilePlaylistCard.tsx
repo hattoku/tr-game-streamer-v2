@@ -29,11 +29,18 @@ export function ProfilePlaylistCard({
     <Card flush className="flex flex-col gap-3 p-3 md:p-4">
       <div className="flex gap-3 md:gap-4">
         {/* 遷移先はタイトルと同じため、キーボード・読み上げではタイトル側だけを対象にする（CollectionCard と同じ） */}
-        <Link href={href} tabIndex={-1} aria-hidden className="w-[128px] shrink-0 md:w-[176px]">
+        {/* カード内に複数のリンクがあるためカード全体の浮き上がり（interactive）は付けず、サムネイル自体のホバーで
+            わずかに拡大・明るくして押せることを示す（MylistCard・ChannelListCard と同じく各リンク側で手がかりを出す方針） */}
+        <Link href={href} tabIndex={-1} aria-hidden className="group w-[128px] shrink-0 md:w-[176px]">
           <span className="relative block aspect-video overflow-hidden rounded-[8px] bg-bg-player">
             {p.thumbnailUrl && (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={p.thumbnailUrl} alt="" className="absolute inset-0 size-full object-cover" loading="lazy" />
+              <img
+                src={p.thumbnailUrl}
+                alt=""
+                className="absolute inset-0 size-full object-cover transition-[scale,filter] duration-[120ms] group-hover:scale-[1.04] group-hover:brightness-110"
+                loading="lazy"
+              />
             )}
             {showVideoCount && p.videoCount > 0 && <CountLabel className="absolute bottom-1 right-1">{p.videoCount}話</CountLabel>}
           </span>
