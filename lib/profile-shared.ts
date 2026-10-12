@@ -8,6 +8,8 @@ export interface ProfilePlaylistJson {
   id: string;
   title: string;
   thumbnailUrl: string;
+  /** 話数（マイリストカードのサムネイル右下に出す） */
+  videoCount: number;
   gameId: string | null;
   gameName: string;
   /** 再生リストスコア（加重平均）。レビュー0件は null（「評価なし」） */

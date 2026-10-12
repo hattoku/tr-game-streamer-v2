@@ -7,16 +7,20 @@
  */
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { CountLabel } from '@/components/ui/Badge';
 import { Card } from '@/components/ui/Card';
 import type { ProfilePlaylistJson } from '@/lib/profile';
 
 export function ProfilePlaylistCard({
   playlist: p,
   meta,
+  showVideoCount = false,
   children,
 }: {
   playlist: ProfilePlaylistJson;
   meta: ReactNode;
+  /** サムネイル右下に話数を出す（マイリストカード。TOPのマイリストカードと同じ表記） */
+  showVideoCount?: boolean;
   children?: ReactNode;
 }) {
   const href = `/playlists/${p.id}`;
@@ -31,6 +35,7 @@ export function ProfilePlaylistCard({
               // eslint-disable-next-line @next/next/no-img-element
               <img src={p.thumbnailUrl} alt="" className="absolute inset-0 size-full object-cover" loading="lazy" />
             )}
+            {showVideoCount && p.videoCount > 0 && <CountLabel className="absolute bottom-1 right-1">{p.videoCount}話</CountLabel>}
           </span>
         </Link>
         <div className="flex min-w-0 flex-1 flex-col gap-[6px]">

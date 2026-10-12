@@ -64,6 +64,7 @@ export async function GET(request: NextRequest, { params }: Params) {
       id: s.id,
       title: p.title ?? '',
       thumbnailUrl: p.thumbnailUrl ?? '',
+      videoCount: p.videoCount ?? 0,
       gameId: p.gameId ?? null,
       gameName: p.gameName ?? '',
       score: p.score ?? null,

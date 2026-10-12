@@ -202,6 +202,7 @@ function ProfileView({ userId }: { userId: string }) {
               renderItem={(m) => (
                 <ProfilePlaylistCard
                   playlist={m.playlist}
+                  showVideoCount
                   meta={
                     <>
                       {m.watchStatus && <StatusChip status={m.watchStatus} active readOnly />}
