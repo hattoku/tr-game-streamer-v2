@@ -49,3 +49,12 @@ export async function requireUser(
   if ('errorResponse' in verified) return verified;
   return { uid: verified.uid };
 }
+
+/**
+ * ログイン任意の API 向け。Bearer トークンがあれば検証して uid を返し、無い・無効なら null（未ログイン扱い）。
+ * 公開プロフィールのように、閲覧者が本人かどうかで返す内容だけが変わる読み取り API で使う。
+ */
+export async function getOptionalUid(request: NextRequest): Promise<string | null> {
+  const verified = await verifyBearerToken(request);
+  return 'errorResponse' in verified ? null : verified.uid;
+}

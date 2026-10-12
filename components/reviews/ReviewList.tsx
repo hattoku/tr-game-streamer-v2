@@ -7,7 +7,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { collection, doc, onSnapshot, query, updateDoc, where } from 'firebase/firestore';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import type { User } from 'firebase/auth';
 import { db, auth } from '@/lib/firebase';
 import { Card, CardDivider } from '@/components/ui/Card';
@@ -20,9 +20,8 @@ import { MoreIcon, CommentIcon, FavoriteIcon } from '@/components/ui/icons';
 import { UserAvatar } from '@/components/layout/UserDropdown';
 import { LoginRequiredModal } from '@/components/layout/LoginRequiredModal';
 import { ReportModal } from './ReportModal';
+import { SpoilerRevealButton, useHideSpoilers } from './spoiler';
 import { StatusChip, normalizeWatchStatus, WATCH_STATUS_LABEL, WATCH_STATUS_ORDER, type WatchStatus } from '@/components/ui/Chip';
-
-const SPOILER_PREF_STORAGE_KEY = 'puremite:hideSpoilerReviews';
 
 interface ReviewItem {
   id: string;
@@ -60,15 +59,7 @@ export function ReviewList({
 }) {
   const [reviews, setReviews] = useState<ReviewItem[] | null>(null);
   const [votedIds, setVotedIds] = useState<Set<string>>(new Set());
-  const [hideSpoilers, setHideSpoilers] = useState(() => {
-    if (typeof window === 'undefined') return true;
-    try {
-      const stored = localStorage.getItem(SPOILER_PREF_STORAGE_KEY);
-      return stored != null ? stored === 'true' : true;
-    } catch {
-      return true;
-    }
-  });
+  const [hideSpoilers, toggleHideSpoilers] = useHideSpoilers(user);
   const [starFilter, setStarFilter] = useState<'all' | '5' | '4' | '3' | '2' | '1'>('all');
   const [revealedSpoilers, setRevealedSpoilers] = useState<Set<string>>(new Set());
   const [loginOpen, setLoginOpen] = useState(false);
@@ -113,33 +104,6 @@ export function ReviewList({
       setVotedIds(new Set());
     };
   }, [user]);
-
-  // ネタバレ非表示設定（ログイン済み: users を購読）。未ログイン時の初期値は
-  // LocalStorage から読み、useState の遅延初期化で描画時に一度だけ求める（effectでのsetStateを避ける）
-  useEffect(() => {
-    if (!user) return;
-    return onSnapshot(doc(db, 'users', user.uid), (snap) => {
-      const v = snap.data()?.hideSpoilerReviews;
-      setHideSpoilers(typeof v === 'boolean' ? v : true);
-    });
-  }, [user]);
-
-  async function toggleHideSpoilers(next: boolean) {
-    setHideSpoilers(next);
-    if (user) {
-      try {
-        await updateDoc(doc(db, 'users', user.uid), { hideSpoilerReviews: next });
-      } catch {
-        // 失敗してもローカル表示は切り替え済みのまま（次回訪問時は既定値に戻る）
-      }
-    } else {
-      try {
-        localStorage.setItem(SPOILER_PREF_STORAGE_KEY, String(next));
-      } catch {
-        // 無視
-      }
-    }
-  }
 
   async function handleHelpful(review: ReviewItem) {
     if (!user) {
@@ -273,13 +237,7 @@ export function ReviewList({
 
                   {review.comment &&
                     (spoilerHidden ? (
-                      <button
-                        type="button"
-                        onClick={() => setRevealedSpoilers((prev) => new Set(prev).add(review.id))}
-                        className="self-start rounded-[8px] border border-border-chip bg-bg-input px-3 py-2 text-base text-text-muted hover:text-text-primary"
-                      >
-                        ネタバレを含みます。表示する
-                      </button>
+                      <SpoilerRevealButton onReveal={() => setRevealedSpoilers((prev) => new Set(prev).add(review.id))} />
                     ) : (
                       <p className="whitespace-pre-wrap text-base text-text-secondary">{review.comment}</p>
                     ))}

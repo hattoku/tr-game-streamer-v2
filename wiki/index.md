@@ -44,6 +44,7 @@ tr-game-streamer-v2 の**コーディング支援用**Wiki（実装の変更履�
 - [[2026-10-08-phase6-step4-1-collections]] — フェーズ6 ステップ4-1（まとめ機能: 作成・編集・削除・詳細・「まとめに追加する」・並び替え）。まとめ機能を4-1/4-2/4-3に分割。`/collections/mine` 新設、↑↓のみの並び替え、作成者名の非正規化、書き込みはAPI Routeのみ（rules を `allow write: if false`）。レビューでAPI入力の防御・上限判定のトランザクション化・aria-label を対応
 - [[2026-10-12-phase6-step4-2-collections-discovery]] — フェーズ6 ステップ4-2（まとめを探す `/collections` と発見導線）。並び順は新着順のみ（保存数順は4-3）、PC 2列。再生リスト詳細「この再生リストを含むまとめ」・TOP「新着のまとめ」・探すページの自分のまとめ導線。等価条件＋array-containsは複合インデックス不要と確認
 - [[2026-10-12-phase6-step4-3-collections-save]] — フェーズ6 ステップ4-3（まとめの保存機能）。新コレクション `saved_collections`、保存・解除・一覧はすべてAPI（savedCountとトランザクション）、`/collections/saved`（非公開化は案内行、削除は自動除去）、保存数順ソート。退会時の削除は退会機能未実装のため積み残し
+- [[2026-10-12-phase6-step5-1-profile-view]] — フェーズ6 ステップ5-1（プロフィール閲覧ページ `/profile/[userId]`）。5-1閲覧/5-2編集に分割、画像アップロードは見送り。他人の users・mylist は rules を緩めず Admin SDK の公開API（ログイン任意、`getOptionalUid`）で返す。じゃばら共通部品、ネタバレ設定を `spoiler.tsx` に切り出し
 
 ## Entities
 - [[proxy]] — proxy.ts（旧middleware.ts、Next.js 16のproxy規約対応）
