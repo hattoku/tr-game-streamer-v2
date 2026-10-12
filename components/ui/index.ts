@@ -10,7 +10,7 @@ export type { ButtonVariant, ButtonSize } from './Button';
 export { Card, CardDivider, CardTitle, CardChildArea, SectionHeading } from './Card';
 export { Chip, StatusChip, chipClassName, WATCH_STATUS_LABEL, WATCH_STATUS_ORDER, WATCH_STATUS_PRIMARY, WATCH_STATUS_OTHER, normalizeWatchStatus } from './Chip';
 export type { WatchStatus } from './Chip';
-export { TrendingBadge, PlayingBadge, CountLabel, NewBadge, UnreadDot, CountBadge } from './Badge';
+export { TrendingBadge, PlayingBadge, CountLabel, NewBadge, UnreadDot, CountBadge, StatusBadge } from './Badge';
 export { Tag, TAG_BASE_CLASS } from './Tag';
 export { ProgressBar } from './ProgressBar';
 export { StarRating } from './StarRating';

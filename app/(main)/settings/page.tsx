@@ -3,34 +3,39 @@
  * フェーズ4.5ステップ6では「ドッグフーディングに本当に必要な項目」のみの最小版として実装する
  * （HANDOFF.mdフェーズ4.5ステップ6参照。仕様書側にも2026-09-20実装の注記を追加済み）。
  *
- * 入れたもの: 表示名変更（プロフィール仕様書§9.2・§9.4の前倒し）／連続再生
+ * 入れたもの: 連続再生
  * （isContinuousPlayEnabled、動画プレーヤーの同項目と同じフィールドを共有）／先の話のサムネイルを隠す
  * （hideUpcomingThumbnails、2026-09-26追加。再生リスト詳細の動画リストで使う）／ネタバレレビュー非表示
  * （hideSpoilerReviews、レビュー一覧の同項目と同じフィールドを共有）／マイリスト新着通知
- * （showNewArrivalNotification）／ログアウト。
+ * （showNewArrivalNotification）／マイリスト・レビュー履歴の公開設定（§5、isMylistPublic・isReviewHistoryPublic、
+ * フェーズ6ステップ5-2で追加）／ログアウト。表示名は以前ここで変更していたが、5-2でプロフィールページのインライン編集
+ * （プロフィール仕様書§9）へ移し、ここには「プロフィールを編集」への導線だけを置く（§1.2 の非スコープどおり）。
  *
  * 入れなかったもの（未解決事項・後続フェーズへ）: メールアドレス・パスワード・パスキー変更（§4）、
- * マイリスト・レビュー履歴の公開設定（§5、プロフィールページが無く効果が見えないため）、
  * プッシュ通知の許可状態・種別トグル（§6、FCM基盤が未実装）、退会（§8、削除ポリシー未設計）、
  * お問い合わせ導線（§9、/contact未実装）。
  */
 'use client';
 
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
-import { Button, Card, CardTitle, Checkbox, Field, Input, SectionHeading, Skeleton, SkeletonText, useToast } from '@/components/ui';
+import { Button, Card, CardTitle, Checkbox, LinkButton, SectionHeading, Skeleton, SkeletonText, useToast } from '@/components/ui';
 
 interface SettingsFields {
-  displayName: string;
   isContinuousPlayEnabled: boolean;
   hideUpcomingThumbnails: boolean;
   hideSpoilerReviews: boolean;
   showNewArrivalNotification: boolean;
+  isMylistPublic: boolean;
+  isReviewHistoryPublic: boolean;
 }
+
+/** トグルと同時に保存完了トーストを出す項目（§5.4。他の項目は従来どおり失敗時のみ通知） */
+const PRIVACY_KEYS: ReadonlySet<keyof SettingsFields> = new Set(['isMylistPublic', 'isReviewHistoryPublic']);
 
 export default function SettingsPage() {
   const { user, loading } = useAuth();
@@ -38,9 +43,6 @@ export default function SettingsPage() {
   const { toast } = useToast();
 
   const [fields, setFields] = useState<SettingsFields | null>(null);
-  const [displayNameInput, setDisplayNameInput] = useState('');
-  const [displayNameError, setDisplayNameError] = useState<string | null>(null);
-  const [savingName, setSavingName] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
 
   // 未ログインはログインページへ（§2.1）
@@ -53,45 +55,23 @@ export default function SettingsPage() {
     return onSnapshot(doc(db, 'users', user.uid), (snap) => {
       const data = snap.data();
       setFields({
-        displayName: (data?.displayName as string | undefined) ?? '',
         isContinuousPlayEnabled: typeof data?.isContinuousPlayEnabled === 'boolean' ? data.isContinuousPlayEnabled : true,
         hideUpcomingThumbnails: data?.hideUpcomingThumbnails === true,
         hideSpoilerReviews: typeof data?.hideSpoilerReviews === 'boolean' ? data.hideSpoilerReviews : true,
         showNewArrivalNotification: typeof data?.showNewArrivalNotification === 'boolean' ? data.showNewArrivalNotification : true,
+        // 未設定は公開（init-user で true を書くが、それ以前のアカウントにはフィールドが無い。プロフィール API と同じ扱い）
+        isMylistPublic: data?.isMylistPublic !== false,
+        isReviewHistoryPublic: data?.isReviewHistoryPublic !== false,
       });
-      setDisplayNameInput((data?.displayName as string | undefined) ?? '');
     });
   }, [user]);
 
-  async function handleSaveDisplayName(e: FormEvent) {
-    e.preventDefault();
-    if (!user) return;
-    const trimmed = displayNameInput.trim();
-    if (!trimmed) {
-      setDisplayNameError('入力してください');
-      return;
-    }
-    if (trimmed.length > 30) {
-      setDisplayNameError('30文字以内で入力してください');
-      return;
-    }
-    setDisplayNameError(null);
-    setSavingName(true);
-    try {
-      await updateDoc(doc(db, 'users', user.uid), { displayName: trimmed });
-      toast({ type: 'success', message: '表示名を保存しました' });
-    } catch {
-      toast({ type: 'error', message: '通信エラーが発生しました。時間をおいて再試行してください' });
-    } finally {
-      setSavingName(false);
-    }
-  }
-
-  async function toggleField(key: Exclude<keyof SettingsFields, 'displayName'>, value: boolean) {
+  async function toggleField(key: keyof SettingsFields, value: boolean) {
     setFields((prev) => (prev ? { ...prev, [key]: value } : prev));
     if (!user) return;
     try {
       await updateDoc(doc(db, 'users', user.uid), { [key]: value });
+      if (PRIVACY_KEYS.has(key)) toast({ type: 'success', message: '設定を保存しました' });
     } catch {
       toast({ type: 'error', message: '通信エラーが発生しました。時間をおいて再試行してください' });
     }
@@ -120,24 +100,12 @@ export default function SettingsPage() {
       <div className="flex flex-col gap-6">
         <Card>
           <CardTitle className="mb-4">アカウント</CardTitle>
-          <form onSubmit={handleSaveDisplayName} className="flex flex-col gap-3">
-            <Field label="表示名" error={displayNameError} hint="レビューやコメントに表示される名前です" className="max-w-sm">
-              {(props) => (
-                <Input
-                  {...props}
-                  value={displayNameInput}
-                  maxLength={30}
-                  onChange={(e) => setDisplayNameInput(e.target.value)}
-                  disabled={savingName}
-                />
-              )}
-            </Field>
-            <div>
-              <Button type="submit" variant="primary" size="sm" loading={savingName}>
-                保存する
-              </Button>
-            </div>
-          </form>
+          <p className="mb-3 text-md text-text-muted">表示名・自己紹介はプロフィールページで編集できます</p>
+          <div>
+            <LinkButton href={`/profile/${user.uid}`} variant="secondary" size="sm">
+              プロフィールを編集
+            </LinkButton>
+          </div>
         </Card>
 
         <Card>
@@ -166,6 +134,25 @@ export default function SettingsPage() {
           />
         </Card>
 
+        {/* 公開設定（§5 プライバシー設定）。見出しはプロフィールの「公開設定」ボタン・ポップアップと名前を揃える。
+            仕様のトグルスイッチ部品は無いため、他の設定項目と同じチェックボックスで揃える */}
+        <Card>
+          <CardTitle className="mb-4">公開設定</CardTitle>
+          <Checkbox
+            label="マイリストを公開する"
+            checked={fields.isMylistPublic}
+            onChange={(e) => toggleField('isMylistPublic', e.target.checked)}
+          />
+          <p className="mt-1 text-md text-text-muted">他のユーザーにマイリストを公開します</p>
+          <Checkbox
+            label="レビュー履歴を公開する"
+            checked={fields.isReviewHistoryPublic}
+            onChange={(e) => toggleField('isReviewHistoryPublic', e.target.checked)}
+            className="mt-4"
+          />
+          <p className="mt-1 text-md text-text-muted">他のユーザーにレビュー履歴を公開します</p>
+        </Card>
+
         <Card>
           <CardTitle className="mb-4">通知</CardTitle>
           <Checkbox
@@ -189,7 +176,7 @@ function SettingsSkeleton() {
   return (
     <div className="flex flex-col gap-6" aria-busy="true" aria-label="読み込み中">
       <Skeleton className="h-6 w-[80px]" />
-      {Array.from({ length: 4 }).map((_, i) => (
+      {Array.from({ length: 6 }).map((_, i) => (
         <Card key={i}>
           <SkeletonText lines={2} />
         </Card>

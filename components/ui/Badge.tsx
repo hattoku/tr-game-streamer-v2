@@ -7,6 +7,7 @@
  *                  未読ドット（§15.1）と同じ赤ドット＋白文字で表現する
  * - UnreadDot:     未読インジケーター（§15.1）
  * - CountBadge:    タブの件数バッジ（§15.2、ピル）
+ * - StatusBadge:   公開状態などの控えめなラベル（まとめの公開設定、プロフィールの「非公開」）
  */
 import type { ReactNode } from 'react';
 import { cn } from './cn';
@@ -29,6 +30,16 @@ export function PlayingBadge({ className }: { className?: string }) {
   return (
     <span className={cn('inline-flex items-center rounded-[4px] bg-brand-primary px-[7px] py-[2px] text-xs font-semibold leading-[1.5] text-white', className)}>
       再生中
+    </span>
+  );
+}
+
+/** 公開状態などの控えめなラベル（グレー地＋muted文字。押せない表示専用） */
+export function StatusBadge({ icon, className, children }: { icon?: ReactNode; className?: string; children: ReactNode }) {
+  return (
+    <span className={cn('inline-flex w-fit items-center gap-1 rounded-[4px] bg-bg-hover px-2 py-[2px] text-sm text-text-muted', className)}>
+      {icon}
+      {children}
     </span>
   );
 }

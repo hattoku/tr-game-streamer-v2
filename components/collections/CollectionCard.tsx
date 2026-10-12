@@ -3,8 +3,8 @@
  * 再生リストのサムネイル最大3件（3列固定）／「全X件」・保存数。「全X件」は件数によらず下段に常に出す。
  * 説明文は高さを揃えるため2行で省略する（グリッド・カルーセルで並べるため）。
  * 自分のまとめ一覧（/collections/mine）で使い、公開設定バッジと操作列を `badge`・`actions` で差し込む。
- * まとめを探す（/collections）・TOPの新着のまとめでも使い、プロフィール（ステップ5）でも使う想定。
- * 作成者名はプロフィールページが未実装のためリンクにしない。
+ * まとめを探す（/collections）・TOPの新着のまとめ・プロフィールのまとめ／保存したまとめでも使う。
+ * 作成者のアイコン・名前は作成者のプロフィールへのリンク（§6.3）。
  */
 import Link from 'next/link';
 import type { ReactNode } from 'react';
@@ -46,8 +46,13 @@ export function CollectionCard({
           {c.title}
         </Link>
         <div className="flex items-center gap-2">
-          <UserAvatar name={c.userDisplayName} imageUrl={c.userProfileImageUrl} size={20} />
-          <span className="min-w-0 truncate text-md text-text-tertiary">{c.userDisplayName}</span>
+          <Link
+            href={`/profile/${c.userId}`}
+            className="flex min-w-0 items-center gap-2 text-md text-text-tertiary hover:text-text-primary"
+          >
+            <UserAvatar name={c.userDisplayName} imageUrl={c.userProfileImageUrl} size={20} />
+            <span className="min-w-0 truncate">{c.userDisplayName}</span>
+          </Link>
           <span className="shrink-0 text-md text-text-muted">{formatCollectionDate(c.createdAt)} 作成</span>
         </div>
       </div>

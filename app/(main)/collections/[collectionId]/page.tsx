@@ -108,10 +108,14 @@ export default function CollectionDetailPage() {
           {user && !isOwner && <SaveCollectionButton collectionId={collectionId} className="shrink-0" />}
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-md text-text-muted">
-          <span className="inline-flex min-w-0 items-center gap-2">
+          {/* 作成者のプロフィールへ（§5.2） */}
+          <Link
+            href={`/profile/${collection.userId}`}
+            className="inline-flex min-w-0 items-center gap-2 text-text-secondary hover:text-text-primary"
+          >
             <UserAvatar name={collection.userDisplayName} imageUrl={collection.userProfileImageUrl} size={20} />
-            <span className="truncate text-text-secondary">{collection.userDisplayName}</span>
-          </span>
+            <span className="truncate">{collection.userDisplayName}</span>
+          </Link>
           {/* 何の日付か分かるよう「作成」を付け、後日編集されていれば更新日も添える（レビュー一覧と同じ表記） */}
           <span>
             {formatCollectionDate(collection.createdAt)} 作成

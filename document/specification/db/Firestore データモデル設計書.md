@@ -1,6 +1,6 @@
 # プレミテ Firestore データモデル設計書
 
-**バージョン**: v1.17  
+**バージョン**: v1.18  
 **作成日**: 2026年3月30日（更新）  
 **対象**: 開発チーム  
 **関連ドキュメント**: プレミテ企画書 / プレミテ_技術スタック仕様書 / 各機能仕様書
@@ -151,8 +151,8 @@ Firestoreはテーブル結合（JOIN）ができないため、一覧表示や�
 | `bannedAt` | Timestamp? | — | BAN設定日時 |
 | `isTestUser` | boolean | ✅ | テストモード用会員フラグ（デフォルト：`false`） |
 | `fcmTokens` | string[] | ✅ | FCMプッシュ通知トークン一覧（複数デバイス対応） |
-| `isMylistPublic` | boolean | ✅ | マイリストの公開設定（デフォルト：アカウント作成時にユーザーが選択） |
-| `isReviewHistoryPublic` | boolean | ✅ | レビュー履歴の公開設定（デフォルト：アカウント作成時にユーザーが選択） |
+| `isMylistPublic` | boolean | ✅ | マイリストの公開設定（デフォルト：`true`。`init-user` で作成。未設定の古いアカウントも公開扱い。設定ページ「プライバシー設定」で変更） |
+| `isReviewHistoryPublic` | boolean | ✅ | レビュー履歴の公開設定（デフォルト：`true`。同上） |
 | `showNewArrivalNotification` | boolean | ✅ | マイリストの新着通知表示設定（デフォルト：`true`） |
 | `isContinuousPlayEnabled` | boolean | ✅ | 連続再生設定（ユーザー全体共通、デフォルト：`true`）。動画プレーヤー仕様書「連続再生機能」参照 |
 | `hideUpcomingThumbnails` | boolean | — | 再生リスト詳細の動画リストで、到達済みより先の話のサムネイルを隠す設定（未設定は `false` 扱い）。動画プレーヤー仕様書「先の話のサムネイルを隠す（ユーザー設定）」参照 |
@@ -345,7 +345,7 @@ YouTubeチャンネルの情報。
 | `lastOpenedEpisode` | number? | — | 最後に開いた話数（`watch_progress` からの参照値） |
 | `genreExpertiseScore` | number? | — | ジャンル専門性スコア（変数G、算出時点のスナップショット） |
 | `commentScore` | number? | — | コメント有無による乗数（変数C。あり: `1.0` / なし: `0.5`。共通 信頼度スコアリングシステム仕様書 §3.3に準拠） |
-| `userDisplayName` | string | ✅ | 投稿者の表示名の非正規化コピー（投稿・更新時点のスナップショット）。`users`は本人・管理者以外読めないルールのため、レビュー一覧での表示にはこちらを参照する（HANDOFF.md未解決事項1の対応） |
+| `userDisplayName` | string | ✅ | 投稿者の表示名の非正規化コピー（投稿・更新時点のスナップショット）。`users`は本人・管理者以外読めないルールのため、レビュー一覧での表示にはこちらを参照する（HANDOFF.md未解決事項1の対応）。プロフィールで表示名を変更すると `PATCH /api/users/[userId]/profile` が本人の全レビュー分を新しい名前に揃える |
 | `userProfileImageUrl` | string? | — | 投稿者のプロフィール画像URLの非正規化コピー（同上） |
 | `postedAt` | Timestamp | ✅ | 初回投稿日時 |
 | `updatedAt` | Timestamp | ✅ | 最終更新日時 |
@@ -435,7 +435,7 @@ YouTubeチャンネルの情報。
 | フィールド | 型 | 必須 | 説明 |
 |-----------|-----|:---:|------|
 | `userId` | string | ✅ | 作成者のuserId |
-| `userDisplayName` | string | ✅ | 作成者の表示名（作成時・フォーム保存時点のスナップショット。`reviews.userDisplayName` と同じ非正規化コピー。再生リストの追加・解除や並び替えでは更新しない） |
+| `userDisplayName` | string | ✅ | 作成者の表示名（作成時・フォーム保存時点のスナップショット。`reviews.userDisplayName` と同じ非正規化コピー。再生リストの追加・解除や並び替えでは更新しない。プロフィールで表示名を変更したときは `reviews.userDisplayName` と同時に揃える） |
 | `userProfileImageUrl` | string? | — | 作成者のプロフィール画像URL（同上） |
 | `title` | string | ✅ | まとめタイトル |
 | `description` | string? | — | まとめ説明文 |
@@ -908,3 +908,4 @@ ai_operators ──── (1) users
 | v1.15 | 2026-10-03 | マイリストページからの削除（app/api/mylist の DELETE）で `reviews.watchStatus` も解除するよう変更（ページ マイリスト機能仕様書 §5.9）。3.9節 `reviews.watchStatus` の書き込み経路と3.11節の設計注記を更新 |
 | v1.16 | 2026-10-08 | フェーズ6ステップ4（まとめ機能 4-1）。`collections` に作成者表示用の非正規化コピー `userDisplayName`/`userProfileImageUrl` と表示順 `sortOrder` を追加し、書き込み経路（API Route のみ）を明記。6章のルール方針で `collections` を個人データから分離 |
 | v1.17 | 2026-10-12 | フェーズ6ステップ4-3（まとめの保存機能）。3.14.1 `saved_collections` を追加（保存記録、書き込みはAPI Routeのみ、まとめ削除時に連動削除）。6章のルール方針に追記 |
+| v1.18 | 2026-10-12 | フェーズ6ステップ5-2。`users.isMylistPublic`/`isReviewHistoryPublic` の既定値を実装（`true`）に合わせて修正。`reviews`/`collections` の `userDisplayName` がプロフィールでの表示名変更時に揃えられることを追記 |

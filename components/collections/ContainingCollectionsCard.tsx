@@ -44,6 +44,7 @@ export function ContainingCollectionsCard({ playlistId }: { playlistId: string }
               <span className="line-clamp-2 break-words text-base font-medium text-text-primary group-hover:text-text-secondary">
                 {c.title}
               </span>
+              {/* 行全体がまとめへのリンクのため、作成者名はプロフィールへのリンクにしない（リンクの入れ子を避ける） */}
               <span className="flex min-w-0 items-center gap-2 text-md text-text-muted">
                 <UserAvatar name={c.userDisplayName} imageUrl={c.userProfileImageUrl} size={18} />
                 <span className="min-w-0 truncate">{c.userDisplayName}</span>

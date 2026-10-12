@@ -61,3 +61,22 @@ export interface ProfileJson {
   /** まとめカードのサムネイル用（先頭3件の再生リストID → サムネイルURL） */
   collectionThumbnailById: Record<string, string>;
 }
+
+/** プロフィール編集（§9.2・§9.4）の上限。クライアントのフォームと PATCH /api/users/[userId]/profile の両方で使う */
+export const DISPLAY_NAME_MAX = 30;
+export const BIO_MAX = 200;
+
+export interface ProfileInputErrors {
+  displayName?: string;
+  bio?: string;
+}
+
+/** 表示名は trim 後 1〜30文字、自己紹介は trim 後 200文字以内（空欄可）。エラーが無ければ空オブジェクト */
+export function validateProfileInput({ displayName, bio }: { displayName: string; bio: string }): ProfileInputErrors {
+  const errors: ProfileInputErrors = {};
+  const name = displayName.trim();
+  if (!name) errors.displayName = '入力してください';
+  else if (name.length > DISPLAY_NAME_MAX) errors.displayName = `${DISPLAY_NAME_MAX}文字以内で入力してください`;
+  if (bio.trim().length > BIO_MAX) errors.bio = `${BIO_MAX}文字以内で入力してください`;
+  return errors;
+}

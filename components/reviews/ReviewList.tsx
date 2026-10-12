@@ -7,6 +7,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import type { User } from 'firebase/auth';
 import { db, auth } from '@/lib/firebase';
@@ -197,10 +198,18 @@ export function ReviewList({
                 {i > 0 && <CardDivider className="mb-3" />}
                 <div className="flex flex-col gap-2">
                   <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <UserAvatar name={review.userDisplayName} imageUrl={review.userProfileImageUrl} size={32} />
-                      <div className="flex flex-col">
-                        <span className="text-base font-medium text-text-primary">{review.userDisplayName}</span>
+                    <div className="flex min-w-0 items-center gap-2">
+                      {/* 投稿者のプロフィールへ（プロフィール仕様書 §1.1）。アイコンは名前と同じ遷移先のため、キーボード・読み上げでは名前側だけを対象にする */}
+                      <Link href={`/profile/${review.userId}`} tabIndex={-1} aria-hidden className="shrink-0">
+                        <UserAvatar name={review.userDisplayName} imageUrl={review.userProfileImageUrl} size={32} />
+                      </Link>
+                      <div className="flex min-w-0 flex-col">
+                        <Link
+                          href={`/profile/${review.userId}`}
+                          className="max-w-full self-start truncate text-base font-medium text-text-primary hover:text-text-secondary"
+                        >
+                          {review.userDisplayName}
+                        </Link>
                         <span className="text-sm text-text-muted">
                           {formatDate(review.postedAt)}
                           {review.updatedAt && review.postedAt && review.updatedAt.getTime() !== review.postedAt.getTime()

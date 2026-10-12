@@ -7,7 +7,7 @@
  * - マイリスト・レビュー履歴は、他人のページでは公開設定OFFならセクションごと出さない（API が null を返す。§2.3）。
  * - プロフィール画像のアップロードは見送り（Firebase Storage 未導入、2026-10-12 ユーザー決定）。アバターは UserAvatar の頭文字表示。
  * - 保存したまとめは既存の API（/api/collections/saved）から取る。閲覧できなくなったまとめは /collections/saved 側で管理する。
- * - 「編集する」（§9 インライン編集）はフェーズ6ステップ5-2で追加する。
+ * - ヘッダーと「編集する」（§9 インライン編集）は ProfileHeader。保存後は再取得せず、返ってきた表示名・自己紹介で差し替える。
  */
 'use client';
 
@@ -15,13 +15,14 @@ import { useEffect, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { notFound, useParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { UserAvatar } from '@/components/layout/UserDropdown';
 import { CollectionCard } from '@/components/collections/CollectionCard';
 import { ProfileAccordion } from '@/components/profile/ProfileAccordion';
+import { ProfileHeader } from '@/components/profile/ProfileHeader';
 import { ProfilePlaylistCard } from '@/components/profile/ProfilePlaylistCard';
 import { SpoilerRevealButton, useHideSpoilers } from '@/components/reviews/spoiler';
 import { Button, LinkButton } from '@/components/ui/Button';
-import { Card, CardTitle, SectionHeading } from '@/components/ui/Card';
+import { Card, CardTitle } from '@/components/ui/Card';
+import { StatusBadge } from '@/components/ui/Badge';
 import { StatusChip, WATCH_STATUS_LABEL } from '@/components/ui/Chip';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Checkbox } from '@/components/ui/Input';
@@ -132,23 +133,12 @@ function ProfileView({ userId }: { userId: string }) {
 
   return (
     <div className="mx-auto flex w-full max-w-[960px] flex-col gap-8">
-      {/* ① プロフィールヘッダー（§4） */}
-      <Card className="flex flex-col gap-4">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="flex min-w-0 items-center gap-4">
-            <UserAvatar name={u.displayName} imageUrl={u.profileImageUrl} size={72} />
-            <SectionHeading className="min-w-0 break-words">{u.displayName}</SectionHeading>
-          </div>
-          {isSelf && (
-            <LinkButton href="/settings" variant="secondary" size="sm">
-              <LockIcon size={13} />
-              公開設定
-            </LinkButton>
-          )}
-        </div>
-        {u.bio && <p className="whitespace-pre-wrap break-words text-base text-text-secondary">{u.bio}</p>}
-        {u.accountCreatedAt != null && <p className="text-md text-text-muted">登録日：{formatProfileDate(u.accountCreatedAt)}</p>}
-      </Card>
+      {/* ① プロフィールヘッダー（§4。本人は §9 のインライン編集） */}
+      <ProfileHeader
+        user={u}
+        isSelf={isSelf}
+        onUserChange={(next) => setProfile((prev) => (prev ? { ...prev, user: { ...prev.user, ...next } } : prev))}
+      />
 
       {/* ② 統計情報（§5） */}
       <section aria-label="統計情報">
@@ -191,7 +181,7 @@ function ProfileView({ userId }: { userId: string }) {
 
       {/* ④ マイリスト（§7） */}
       {mylist && (
-        <ProfileSection title="マイリスト" count={mylist.length}>
+        <ProfileSection title="マイリスト" count={mylist.length} privateBadge={isSelf && !u.isMylistPublic}>
           {mylist.length === 0 ? (
             <EmptyState icon={<InventoryIcon />} title="まだマイリストに登録している再生リストはありません" className="py-10" />
           ) : (
@@ -221,6 +211,7 @@ function ProfileView({ userId }: { userId: string }) {
         <ProfileSection
           title="レビュー履歴"
           count={reviews.length}
+          privateBadge={isSelf && !u.isReviewHistoryPublic}
           trailing={
             reviews.length > 0 && (
               <Checkbox label="ネタバレを隠す" checked={hideSpoilers} onChange={(e) => toggleHideSpoilers(e.target.checked)} />
@@ -333,21 +324,27 @@ function StatCard({ label, value, unit }: { label: string; value: number; unit: 
 function ProfileSection({
   title,
   count,
+  privateBadge = false,
   trailing,
   children,
 }: {
   title: string;
   count: number | undefined;
+  /** 本人のページで公開設定OFFのセクションに「非公開」を出す（他人からは見えないことを本人に示す） */
+  privateBadge?: boolean;
   trailing?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <section className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <CardTitle>
-          {title}
-          {count != null && <span className="ml-1 text-base font-normal text-text-muted">（{count}件）</span>}
-        </CardTitle>
+        <div className="flex flex-wrap items-center gap-2">
+          <CardTitle>
+            {title}
+            {count != null && <span className="ml-1 text-base font-normal text-text-muted">（{count}件）</span>}
+          </CardTitle>
+          {privateBadge && <StatusBadge icon={<LockIcon size={12} />}>非公開</StatusBadge>}
+        </div>
         {trailing}
       </div>
       {children}

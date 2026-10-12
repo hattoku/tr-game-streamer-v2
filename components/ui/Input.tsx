@@ -79,10 +79,15 @@ export function Field({ label, htmlFor, error, hint, className, children }: Fiel
   );
 }
 
-/** チェックボックス＋ラベル（§10、accent-color は globals.css で指定） */
+/** チェックボックス＋ラベル（§10、accent-color は globals.css で指定）。disabled 中は押せない見た目にする（§11.3） */
 export function Checkbox({ label, className, ...rest }: ComponentProps<'input'> & { label: ReactNode }) {
   return (
-    <label className={cn('inline-flex cursor-pointer items-center gap-2 text-base text-text-secondary', className)}>
+    <label
+      className={cn(
+        'inline-flex cursor-pointer items-center gap-2 text-base text-text-secondary has-disabled:cursor-default has-disabled:opacity-40',
+        className,
+      )}
+    >
       <input type="checkbox" className="size-4" {...rest} />
       {label}
     </label>
