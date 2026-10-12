@@ -34,7 +34,8 @@ export function Card({ interactive = false, flush = false, className, children, 
 
 /**
  * サムネイル画像のホバー効果（わずかに拡大・明るく）。カード内に複数のリンクがあり `interactive`（カード全体の浮き上がり）を
- * 使えないカードで、サムネイルのリンクに `group` を付け、その中の <img> にこのクラスを当てる。
+ * 使えないカードで、サムネイル1枚を囲む要素（リンク、または複数枚を1リンクにまとめた場合は各サムネイルの枠）に `group` を付け、
+ * その中の <img> にこのクラスを当てる。複数枚の親に `group` を付けると、1枚に乗せただけで全部が反応してしまうので避ける。
  * Tailwind v4 の `scale-*` は `transform` ではなく独立した `scale` プロパティのため、トランジションは scale を指定する。
  */
 export const THUMBNAIL_HOVER_IMG_CLASS = 'transition-[scale,filter] duration-[120ms] group-hover:scale-[1.04] group-hover:brightness-110';

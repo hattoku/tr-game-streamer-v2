@@ -52,10 +52,11 @@ export function CollectionCard({
         </div>
       </div>
       {excerpt && <p className="line-clamp-2 break-words text-base text-text-secondary">{excerpt}</p>}
-      {/* サムネイルは件数によらず3列固定で幅をそろえる。遷移先はタイトルと同じため、キーボード・読み上げではタイトル側だけを対象にする */}
-      <Link href={href} tabIndex={-1} aria-hidden className="group mt-auto grid max-w-[480px] grid-cols-3 gap-2">
+      {/* サムネイルは件数によらず3列固定で幅をそろえる。遷移先はタイトルと同じため、キーボード・読み上げではタイトル側だけを対象にする。
+          リンクは3枚で1つだが、ホバー効果はマウスを乗せた1枚だけに出す（group は各サムネイル側に付ける） */}
+      <Link href={href} tabIndex={-1} aria-hidden className="mt-auto grid max-w-[480px] grid-cols-3 gap-2">
         {Array.from({ length: Math.min(MAX_THUMBNAILS, c.playlistIds.length) }, (_, i) => (
-          <span key={i} className="relative block aspect-video overflow-hidden rounded-[6px] bg-bg-player">
+          <span key={i} className="group relative block aspect-video overflow-hidden rounded-[6px] bg-bg-player">
             {thumbnails?.[i] && (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={thumbnails[i]} alt="" className={cn('absolute inset-0 size-full object-cover', THUMBNAIL_HOVER_IMG_CLASS)} loading="lazy" />
