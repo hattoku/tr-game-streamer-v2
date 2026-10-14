@@ -5,8 +5,9 @@
  * 5セクション構成（要対応アラート／審査ワークフローサマリー／お問い合わせサマリー／
  * モニタリングサマリー／クイックリンク）のうち、データ源が存在しスコープに含まれる
  * 「通報サマリー」「新着動画再取得（旧・通知ページ下部の管理者用暫定カード）」の2セクションのみに
- * 縮小する。お問い合わせ・モニタリング・クォータ・不正検知・マスタ管理等はデータ源／機能自体が
+ * 縮小する。モニタリング・クォータ・不正検知・マスタ管理等はデータ源／機能自体が
  * 未実装のため今回は置かない。オーナー限定表示の出し分けも行わない（operator/owner共通）。
+ * お問い合わせサマリーはフェーズ7ステップ7-3-1で「未対応件数」だけを追加した（種別別内訳・24時間超過アラートは無し）。
  */
 'use client';
 
@@ -29,6 +30,7 @@ export default function AdminDashboardPage() {
   const { toast } = useToast();
 
   const [pendingReportCount, setPendingReportCount] = useState<number | null>(null);
+  const [openInquiryCount, setOpenInquiryCount] = useState<number | null>(null);
   const [lastBatch, setLastBatch] = useState<BatchLogSummary | null | undefined>(undefined);
 
   const [refreshBusy, setRefreshBusy] = useState(false);
@@ -39,6 +41,11 @@ export default function AdminDashboardPage() {
       query(collection(db, 'workflows'), where('type', '==', 'review_report'), where('status', '==', 'reviewing_lv1')),
     );
     setPendingReportCount(snap.size);
+  }
+
+  async function loadOpenInquiryCount() {
+    const snap = await getDocs(query(collection(db, 'inquiries'), where('status', '==', 'open')));
+    setOpenInquiryCount(snap.size);
   }
 
   async function loadLastBatch() {
@@ -56,7 +63,7 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     // 非同期 IIFE にして、effect 本体で同期的に setState しない形にする（react-hooks/set-state-in-effect）
     (async () => {
-      await Promise.all([loadPendingReportCount(), loadLastBatch()]);
+      await Promise.all([loadPendingReportCount(), loadOpenInquiryCount(), loadLastBatch()]);
     })();
   }, []);
 
@@ -105,6 +112,25 @@ export default function AdminDashboardPage() {
             </p>
           )}
           <Link href="/admin/workflows" className="w-fit text-base text-text-tertiary underline-offset-4 hover:text-text-primary hover:underline">
+            一覧を見る →
+          </Link>
+        </Card>
+
+        <Card className="flex flex-col gap-3">
+          <p className="text-lg font-medium text-text-primary">お問い合わせ</p>
+          {openInquiryCount === null ? (
+            <Skeleton className="h-9 w-16" />
+          ) : openInquiryCount === 0 ? (
+            <p className="inline-flex items-center gap-2 text-base text-text-secondary">
+              <CheckIcon size={16} className="text-text-tertiary" />
+              未対応のお問い合わせはありません
+            </p>
+          ) : (
+            <p className="text-score font-semibold text-text-primary">
+              {openInquiryCount.toLocaleString()} <span className="text-md font-normal text-text-muted">件 未対応</span>
+            </p>
+          )}
+          <Link href="/admin/inquiries" className="w-fit text-base text-text-tertiary underline-offset-4 hover:text-text-primary hover:underline">
             一覧を見る →
           </Link>
         </Card>

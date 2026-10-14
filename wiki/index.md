@@ -45,6 +45,7 @@ tr-game-streamer-v2 の**コーディング支援用**Wiki（実装の変更履�
 - [[2026-10-12-phase6-step4-2-collections-discovery]] — フェーズ6 ステップ4-2（まとめを探す `/collections` と発見導線）。並び順は新着順のみ（保存数順は4-3）、PC 2列。再生リスト詳細「この再生リストを含むまとめ」・TOP「新着のまとめ」・探すページの自分のまとめ導線。等価条件＋array-containsは複合インデックス不要と確認
 - [[2026-10-12-phase6-step4-3-collections-save]] — フェーズ6 ステップ4-3（まとめの保存機能）。新コレクション `saved_collections`、保存・解除・一覧はすべてAPI（savedCountとトランザクション）、`/collections/saved`（非公開化は案内行、削除は自動除去）、保存数順ソート。退会時の削除は退会機能未実装のため積み残し
 - [[2026-10-12-phase6-step5-1-profile-view]] — フェーズ6 ステップ5-1（プロフィール閲覧ページ `/profile/[userId]`）。5-1閲覧/5-2編集に分割、画像アップロードは見送り。他人の users・mylist は rules を緩めず Admin SDK の公開API（ログイン任意、`getOptionalUid`）で返す。じゃばら共通部品、ネタバレ設定を `spoiler.tsx` に切り出し
+- [[2026-10-14-phase7-step7-3-1-inquiries]] — フェーズ7 ステップ7-3-1（お問い合わせフォーム `/contact`＋管理画面 `/admin/inquiries` 一覧・詳細）。7-3 を2分割、メール通知は見送り。データモデル §3.17 改訂（status 4状態・body/relatedUrls）、書き込みは API のみ。7-3-2 前に operatorMemo の秘匿方法を決める申し送りあり
 
 ## Entities
 - [[proxy]] — proxy.ts（旧middleware.ts、Next.js 16のproxy規約対応）

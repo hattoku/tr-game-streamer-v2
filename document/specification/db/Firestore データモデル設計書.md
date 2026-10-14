@@ -1,6 +1,6 @@
 # プレミテ Firestore データモデル設計書
 
-**バージョン**: v1.18  
+**バージョン**: v1.19  
 **作成日**: 2026年3月30日（更新）  
 **対象**: 開発チーム  
 **関連ドキュメント**: プレミテ企画書 / プレミテ_技術スタック仕様書 / 各機能仕様書
@@ -537,24 +537,33 @@ YouTubeチャンネルの情報。
 | フィールド | 型 | 必須 | 説明 |
 |-----------|-----|:---:|------|
 | `userId` | string? | — | 送信者のuserId（ゲストはnull） |
-| `userName` | string | ✅ | 送信者の表示名 |
-| `email` | string | ✅ | 返信先メールアドレス |
-| `category` | string | ✅ | お問い合わせカテゴリ |
-| `subject` | string | ✅ | 件名 |
-| `status` | string | ✅ | `"open"` / `"in_progress"` / `"resolved"` / `"closed"` |
-| `isGuest` | boolean | ✅ | ゲスト送信フラグ |
-| `operatorMemo` | string? | — | 対応メモ |
+| `userName` | string? | — | 送信時点の送信者の表示名（`users.displayName` のスナップショット。ゲストはnull） |
+| `email` | string | ✅ | 返信先メールアドレス。ログイン済みはサーバー側でアカウントのメールアドレスを入れる（フォーム仕様書 §3） |
+| `category` | string | ✅ | お問い合わせ種別。`"bug"`（不具合・バグ報告）/ `"account"`（アカウントについて）/ `"content"`（掲載内容について）/ `"feedback"`（ご意見・ご要望）/ `"other"`（その他） |
+| `body` | string | ✅ | お問い合わせ内容（2,000文字以内）。スレッドでは先頭のユーザーメッセージとして表示する |
+| `relatedUrls` | string[] | ✅ | 関連URL（0〜5件、`http(s)://` で始まるもの） |
+| `status` | string | ✅ | `"open"`（未対応）/ `"in_progress"`（対応中）/ `"on_hold"`（保留中）/ `"resolved"`（対応済み＝スレッドのクローズ状態） |
+| `isGuest` | boolean | ✅ | ゲスト送信フラグ（ゲストのお問い合わせにはスレッドを作らない） |
+| `operatorMemo` | string? | — | 対応メモ（1,000文字以内、管理者のみ閲覧） |
 | `submittedAt` | Timestamp | ✅ | お問い合わせ送信日時 |
 | `updatedAt` | Timestamp | ✅ | 最終更新日時 |
 
-**サブコレクション**: `inquiries/{inquiryId}/messages/{messageId}`
+**サブコレクション**: `inquiries/{inquiryId}/messages/{messageId}`（ログイン済みユーザーのお問い合わせのみ。最初のお問い合わせ内容は含めず、その後の返信だけを入れる）
 
 | フィールド | 型 | 必須 | 説明 |
 |-----------|-----|:---:|------|
 | `senderId` | string? | — | 送信者ID |
 | `senderType` | string | ✅ | `"user"` / `"admin"` |
-| `body` | string | ✅ | メッセージ本文 |
+| `body` | string | ✅ | メッセージ本文（2,000文字以内） |
 | `sentAt` | Timestamp | ✅ | 送信日時 |
+
+> **設計注記（v1.19、フェーズ7ステップ7-3-1）**: 書き込みは API Route（Admin SDK）のみ。送信は `POST /api/inquiries`、管理操作
+> （ステータス変更・対応メモ・返信・クローズ・再オープン）は `PATCH /api/admin/inquiries/{inquiryId}`。フォームに件名欄が無いため
+> 旧版の `subject` を削除し、`body`・`relatedUrls` を追加。ステータスは管理仕様書 §3.4 の4状態に合わせ、旧版の `"closed"` は
+> `"resolved"` に統合した。削除は行わない（管理 お問い合わせ管理仕様書 §6）。
+> **未決事項（7-3-2 で決める）**: 送信者本人は rules で自分の `inquiries` を読めるため、クライアントから購読すると `operatorMemo`
+> （管理者のみ閲覧）も渡る。ユーザー側の履歴ページを作る前に、メモを管理者専用の場所へ分けるか、履歴をサーバー経由で取得するかを決める
+> （管理 お問い合わせ管理仕様書 §1.1）。
 
 ---
 
@@ -862,6 +871,7 @@ ai_operators ──── (1) users
 - **個人データ**: `mylist`, `watch_progress`, `watch_history` は自分のみRW可。
 - **まとめ**: `collections` は公開・限定公開ならゲストR可、非公開は作成者本人と管理者のみR可。書き込みはAPI Route（Admin SDK）のみ（3.14節）。
   `saved_collections` は本人と管理者のみR可、書き込みはAPI Routeのみ（3.14.1節）。
+- **お問い合わせ**: `inquiries`（と `messages`）は管理者と送信者本人のみR可。書き込みはAPI Route（Admin SDK）のみ（3.17節）。
 - **管理データ**: `workflows`, `ai_operators`, `app_settings` は管理者のみRW可。
 - **不変ログ**: `operation_logs` はシステムのみW、管理者はRのみ。
 
@@ -909,3 +919,4 @@ ai_operators ──── (1) users
 | v1.16 | 2026-10-08 | フェーズ6ステップ4（まとめ機能 4-1）。`collections` に作成者表示用の非正規化コピー `userDisplayName`/`userProfileImageUrl` と表示順 `sortOrder` を追加し、書き込み経路（API Route のみ）を明記。6章のルール方針で `collections` を個人データから分離 |
 | v1.17 | 2026-10-12 | フェーズ6ステップ4-3（まとめの保存機能）。3.14.1 `saved_collections` を追加（保存記録、書き込みはAPI Routeのみ、まとめ削除時に連動削除）。6章のルール方針に追記 |
 | v1.18 | 2026-10-12 | フェーズ6ステップ5-2。`users.isMylistPublic`/`isReviewHistoryPublic` の既定値を実装（`true`）に合わせて修正。`reviews`/`collections` の `userDisplayName` がプロフィールでの表示名変更時に揃えられることを追記 |
+| v1.19 | 2026-10-14 | フェーズ7ステップ7-3-1（お問い合わせ）。3.17 `inquiries` をフォーム仕様に合わせて改訂（`subject` 削除、`body`・`relatedUrls` 追加、`status` を4状態に、`userName` をゲスト null 可に）、書き込み経路（API Route のみ）を明記。6章のルール方針に追記 |

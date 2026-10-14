@@ -12,8 +12,8 @@
  * （プロフィール仕様書§9）へ移し、ここには「プロフィールを編集」への導線だけを置く（§1.2 の非スコープどおり）。
  *
  * 入れなかったもの（未解決事項・後続フェーズへ）: メールアドレス・パスワード・パスキー変更（§4）、
- * プッシュ通知の許可状態・種別トグル（§6、FCM基盤が未実装）、退会（§8、削除ポリシー未設計）、
- * お問い合わせ導線（§9、/contact未実装）。
+ * プッシュ通知の許可状態・種別トグル（§6、FCM基盤が未実装）、退会（§8、削除ポリシー未設計）。
+ * お問い合わせ導線（§9）はフェーズ7ステップ7-3-1で /contact と同時に追加した。
  */
 'use client';
 
@@ -166,6 +166,17 @@ export default function SettingsPage() {
           <Button variant="secondary" onClick={handleSignOut} loading={signingOut}>
             ログアウト
           </Button>
+        </Card>
+
+        {/* お問い合わせ導線（§9）。「お問い合わせ履歴を確認する」は履歴ページを作るステップ7-3-2で追加する */}
+        <Card>
+          <CardTitle className="mb-4">お問い合わせ</CardTitle>
+          <p className="mb-3 text-md text-text-muted">サービスに関するお問い合わせやご要望はこちらから</p>
+          <div>
+            <LinkButton href="/contact" variant="secondary" size="sm">
+              お問い合わせフォームへ
+            </LinkButton>
+          </div>
         </Card>
       </div>
     </div>

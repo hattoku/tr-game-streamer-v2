@@ -102,6 +102,12 @@ interface SelectMenuProps<T extends string> {
   /** 表示部の先頭に付ける固定ラベル（例:「ソート:」） */
   prefix?: ReactNode;
   'aria-label'?: string;
+  /** 未選択（value がどの選択肢にも一致しない）ときの表示文言（例:「選択してください」） */
+  placeholder?: string;
+  /** Field と組み合わせるときに受け取る id・aria 属性（表示部のボタンに付ける） */
+  id?: string;
+  'aria-invalid'?: boolean;
+  'aria-describedby'?: string;
   className?: string;
   align?: ComponentProps<typeof Radix.Content>['align'];
   disabled?: boolean;
@@ -116,13 +122,34 @@ const SELECT_TRIGGER_CLASS =
  * セレクト（§10「セレクトはブラウザ標準のドロップダウンを使わない」）。
  * 表示部は入力要素と同じ面にシェブロン、開いた一覧はドロップダウン（§13.3）。
  */
-export function SelectMenu<T extends string>({ value, onValueChange, options, prefix, className, align = 'end', disabled, ...rest }: SelectMenuProps<T>) {
+export function SelectMenu<T extends string>({
+  value,
+  onValueChange,
+  options,
+  prefix,
+  placeholder,
+  className,
+  align = 'end',
+  disabled,
+  ...rest
+}: SelectMenuProps<T>) {
   const current = options.find((o) => o.value === value);
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger disabled={disabled} aria-label={rest['aria-label']} className={cn(SELECT_TRIGGER_CLASS, className)}>
+      <DropdownMenuTrigger
+        id={rest.id}
+        disabled={disabled}
+        aria-label={rest['aria-label']}
+        aria-invalid={rest['aria-invalid']}
+        aria-describedby={rest['aria-describedby']}
+        className={cn(SELECT_TRIGGER_CLASS, 'aria-invalid:border-input-error', className)}
+      >
         {prefix && <span className="text-text-muted">{prefix}</span>}
-        <span className="text-text-primary">{current?.label ?? value}</span>
+        {current ? (
+          <span className="text-text-primary">{current.label}</span>
+        ) : (
+          <span className={placeholder ? 'text-input-placeholder' : 'text-text-primary'}>{placeholder ?? value}</span>
+        )}
         <ChevronDownIcon size={12} className="text-text-muted" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align={align}>

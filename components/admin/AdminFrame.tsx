@@ -17,6 +17,7 @@ import { isActivePath } from '@/components/layout/nav';
 const ADMIN_NAV = [
   { label: 'ダッシュボード', href: '/admin' },
   { label: '審査ワークフロー', href: '/admin/workflows' },
+  { label: 'お問い合わせ', href: '/admin/inquiries' },
 ] as const;
 
 function AdminNav({ pathname, className }: { pathname: string; className?: string }) {

@@ -228,28 +228,18 @@ service cloud.firestore {
 
     // ---------------------------------------------------------------------
     // inquiries — お問い合わせ（ゲスト送信可）
+    // 書き込みは API Route（Admin SDK）のみ（フェーズ7ステップ7-3-1）。送信者のメールアドレス・表示名を
+    // アカウントから取る・ステータスの自動遷移をサーバー側で保証するため。送信は POST /api/inquiries、
+    // 管理操作は PATCH /api/admin/inquiries/[inquiryId]。削除は行わない（管理 お問い合わせ管理仕様書 §6）。
     // ---------------------------------------------------------------------
     match /inquiries/{inquiryId} {
       allow read: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
-
-      // ゲスト（未ログイン）も送信可能。ログイン済みならuserIdの整合を要求。
-      allow create: if !isSignedIn()
-        || (request.resource.data.userId == request.auth.uid);
-
-      allow update: if isAdmin();
-      allow delete: if isAdmin();
+      allow write: if false;
 
       match /messages/{messageId} {
         allow read: if isAdmin()
           || (isSignedIn() && get(/databases/$(database)/documents/inquiries/$(inquiryId)).data.userId == request.auth.uid);
-
-        allow create: if isAdmin()
-          || (isSignedIn()
-              && get(/databases/$(database)/documents/inquiries/$(inquiryId)).data.userId == request.auth.uid
-              && request.resource.data.senderType == 'user'
-              && request.resource.data.senderId == request.auth.uid);
-
-        allow update, delete: if isAdmin();
+        allow write: if false;
       }
     }
 
