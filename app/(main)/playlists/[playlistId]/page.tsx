@@ -42,9 +42,9 @@ import { IS_PROD } from '@/lib/app-env';
 // レビュー投稿セクション（フェーズ3ステップ1）: PC版は左カラム（ヒーロー直下）、モバイル版は
 // 動画リスト直後という配置差があるため、PlaylistInfoCardと同じ「2箇所にレンダリングし
 // 片方をCSSで隠す」パターンで配置する（下記 reviewSection 変数参照）。
-// ゲーム情報セクション（2026-09-26）: 右カラムの最後（モバイルもページ最後）に
+// 関連ゲームセクション（2026-09-26、2026-10-15 に「ゲーム情報」から改称）: 右カラムの最後（モバイルもページ最後）に
 // GameInfoCard を置く。再生リストに gameId が無い（ゲーム未紐づけ）場合は表示しない。
-// まとめの発見導線（2026-10-12）: ゲーム情報の下に「この再生リストを含むまとめ」（ContainingCollectionsCard）。
+// まとめの発見導線（2026-10-12）: 関連ゲームの下に「この再生リストを含むまとめ」（ContainingCollectionsCard）。
 // ネタバレ対策（2026-09-26）: 配信者情報を動画リストの上へ移動し（スマホのファーストビューで
 // 動画リストを下げるため）、動画リストは約3話分の高さに抑える（VideoList 参照）。設定
 // 「先の話のサムネイルを隠す」（users.hideUpcomingThumbnails）がONなら到達済みより先の話を隠す。
@@ -89,7 +89,7 @@ interface GameInfo {
   tags: ResolvedTag[];
 }
 
-// ゲーム情報セクション（ページ 再生リスト詳細 仕様書「ゲーム情報セクション」）用に
+// 関連ゲームセクション（ページ 再生リスト詳細 仕様書「関連ゲームセクション」）用に
 // games ドキュメントとテーマ名・タグを解決する。
 // games/themes は誰でも読めるため未ログインでも取得できる。ゲームが存在しなければ null
 async function fetchGameInfo(gameId: string): Promise<GameInfo | null> {
@@ -325,7 +325,7 @@ export default function PlaylistDetailPage() {
         mylistCount: p.mylistCount ?? 0,
       });
       fetchTagsMap().then((tagsMap) => setTags(resolveTags(p.playlistTagIds ?? [], p.playlistTagsFixed ?? [], tagsMap)));
-      // ゲーム情報はページ下部のため、初期表示を待たせず後から反映する
+      // 関連ゲームはページ下部のため、初期表示を待たせず後から反映する
       setGame(null);
       if (p.gameId) {
         fetchGameInfo(p.gameId).then(setGame).catch((err) => console.error(err));

@@ -1,5 +1,6 @@
 /**
- * ゲーム情報セクション（ページ 再生リスト詳細 仕様書「ゲーム情報セクション」）。
+ * 関連ゲームセクション（ページ 再生リスト詳細 仕様書「関連ゲームセクション」）。
+ * パッケージ画像は楽天ブックスで取得できた版で配信機種と一致するとは限らないため、見出しは「ゲーム」と断定せず「関連ゲーム」とする。
  * 右カラムが縦に伸びすぎないよう、パッケージ画像（小）を左、タイトル・ジャンル・テーマ・
  * 「楽天ブックスで見る ↗」を右に置く横並びコンパクト構成（v1.9、2026-09-26）。
  * タイトル・「このゲームの再生リストを見る ›」（カード幅いっぱいのセカンダリボタン、配信者カードと共通）はゲームタイトル詳細（/games/[gameId]）へ、
@@ -45,7 +46,7 @@ export function GameInfoCard({ gameId, title, packageImageUrl, rakutenUrl, genre
 
   return (
     <Card className="flex flex-col gap-3">
-      <CardTitle className="text-md font-normal text-text-muted">ゲーム</CardTitle>
+      <CardTitle className="text-md font-normal text-text-muted">関連ゲーム</CardTitle>
       <div className="flex gap-4">
         {affiliateUrl ? (
           <a href={affiliateUrl} target="_blank" rel="noopener noreferrer" aria-label={`${title}を楽天ブックスで見る`} className="shrink-0">
