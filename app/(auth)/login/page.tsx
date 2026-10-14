@@ -226,6 +226,21 @@ function LoginForm({ mode }: { mode: Mode }) {
         </>
       )}
 
+      {/* 利用規約仕様書 §3.2・プライバシーポリシー仕様書 §3.2: 作成ボタンの直上、別タブで開く */}
+      {isSignup && (
+        <p className="text-center text-base text-text-muted">
+          アカウントを作成することで、
+          <Link href="/terms" target="_blank" rel="noopener noreferrer" className="whitespace-nowrap text-text-primary underline underline-offset-[3px] hover:text-text-secondary">
+            利用規約
+          </Link>
+          および
+          <Link href="/privacy" target="_blank" rel="noopener noreferrer" className="whitespace-nowrap text-text-primary underline underline-offset-[3px] hover:text-text-secondary">
+            プライバシーポリシー
+          </Link>
+          に同意したものとみなします。
+        </p>
+      )}
+
       <Button type="submit" variant="primary" size="full" loading={busy} disabled={submitDisabled} className="mt-1">
         {isSignup ? 'アカウントを作成する' : 'ログインする'}
       </Button>
