@@ -25,7 +25,7 @@ import { SIGNUP_HREF } from '@/components/layout/nav';
 //   フェーズ6ステップ3で管理画面ができたため分岐を実装）
 // - ログアウトはヘッダーのユーザードロップダウン（components/layout/UserDropdown.tsx）
 // 据え置き（HANDOFF.md 未解決事項 8・9、および計画書 §2.2）:
-// - 「パスワードをお忘れの方はこちら」（§5.1・§9）: /password-reset 未実装のためリンクを置かない
+// - 「パスワードをお忘れの方はこちら」（§5.1・§9）は /password-reset（フェーズ7ステップ7-2）へのリンクとして実装済み
 // - 「ログイン状態を維持する」（§5.2: 24時間/7日）: クライアント SDK では有効期限を指定できないため置かない
 // - ソーシャルログイン・パスキー・メール認証・初期設定フロー（§6〜§10）
 
@@ -238,6 +238,15 @@ function LoginForm({ mode }: { mode: Mode }) {
             プライバシーポリシー
           </Link>
           に同意したものとみなします。
+        </p>
+      )}
+
+      {/* §5.1・§9: ログインボタンの上。再発行フォームは /password-reset */}
+      {!isSignup && (
+        <p className="text-center text-base text-text-muted">
+          <Link href="/password-reset" className="text-text-primary underline underline-offset-[3px] hover:text-text-secondary">
+            パスワードをお忘れの方はこちら
+          </Link>
         </p>
       )}
 
