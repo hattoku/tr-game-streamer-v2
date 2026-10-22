@@ -1,5 +1,5 @@
 # 1. 依存関係のインストール用ステージ
-FROM node:20-alpine AS deps
+FROM node:24.22.1-alpine AS deps
 # Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ecaf0ad0645f44251#nodealpine to understand why libc6-compat might be needed.
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
@@ -9,7 +9,7 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 # 2. ビルド用ステージ
-FROM node:20-alpine AS builder
+FROM node:24.22.1-alpine AS builder
 
 # ビルド引数の定義 (Next.js のビルド時に環境変数を埋め込むために必要)。
 # Firebase Webアプリ設定は lib/firebase.ts に直書きしているためここでは渡さない。
@@ -34,7 +34,7 @@ COPY . .
 RUN npm run build
 
 # 3. 実行用ステージ
-FROM node:20-alpine AS runner
+FROM node:24.22.1-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
