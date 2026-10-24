@@ -46,6 +46,8 @@ tr-game-streamer-v2 の**コーディング支援用**Wiki（実装の変更履�
 - [[2026-10-12-phase6-step4-3-collections-save]] — フェーズ6 ステップ4-3（まとめの保存機能）。新コレクション `saved_collections`、保存・解除・一覧はすべてAPI（savedCountとトランザクション）、`/collections/saved`（非公開化は案内行、削除は自動除去）、保存数順ソート。退会時の削除は退会機能未実装のため積み残し
 - [[2026-10-12-phase6-step5-1-profile-view]] — フェーズ6 ステップ5-1（プロフィール閲覧ページ `/profile/[userId]`）。5-1閲覧/5-2編集に分割、画像アップロードは見送り。他人の users・mylist は rules を緩めず Admin SDK の公開API（ログイン任意、`getOptionalUid`）で返す。じゃばら共通部品、ネタバレ設定を `spoiler.tsx` に切り出し
 - [[2026-10-14-phase7-step7-3-1-inquiries]] — フェーズ7 ステップ7-3-1（お問い合わせフォーム `/contact`＋管理画面 `/admin/inquiries` 一覧・詳細）。7-3 を2分割、メール通知は見送り。データモデル §3.17 改訂（status 4状態・body/relatedUrls）、書き込みは API のみ。7-3-2 前に operatorMemo の秘匿方法を決める申し送りあり
+- [[2026-10-15-related-game-heading]] — 再生リスト詳細の「ゲーム」見出しを「関連ゲーム」に変更（楽天ブックスの画像が配信機種と一致しないことがあるため）。仕様書3本の呼称も統一（`de8cf09`）
+- [[2026-10-22-node24-docker-image]] — 本番イメージの Node.js を 20（EOL）から 24.22.1 に更新（2026-10-21 セキュリティリリース対応、Dockerfile 3ステージ、`b1dac1c`）
 
 ## Entities
 - [[proxy]] — proxy.ts（旧middleware.ts、Next.js 16のproxy規約対応）

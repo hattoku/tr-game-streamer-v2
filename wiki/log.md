@@ -1,5 +1,9 @@
 # 操作ログ
 
+## [2026-10-24] ingest | session: 別セッションのコミット2件を記録（関連ゲーム見出し・Node.js 24 更新）
+7-3-1 以降に main へ入った `de8cf09`（再生リスト詳細の見出しを「関連ゲーム」に）と `b1dac1c`（Dockerfile の Node.js を 24.22.1 に）を記録。
+→ [[2026-10-15-related-game-heading]] / [[2026-10-22-node24-docker-image]]
+
 ## [2026-10-14] ingest | session: フェーズ7ステップ7-3-1 お問い合わせフォームと管理画面
 HANDOFF.md の次ステップ（7-3 お問い合わせ）を計画し、2分割（7-3-1 フォーム＋管理／7-3-2 履歴・ユーザー側スレッド）とメール通知見送りをユーザー決定。
 7-3-1 を実装: データモデル §3.17 改訂、`/api/inquiries`・`/api/admin/inquiries/[id]`、`/contact`、`/admin/inquiries` 一覧・詳細、ダッシュボード件数、設定の導線。
