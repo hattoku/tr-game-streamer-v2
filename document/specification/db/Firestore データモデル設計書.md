@@ -1,6 +1,6 @@
 # プレミテ Firestore データモデル設計書
 
-**バージョン**: v1.20  
+**バージョン**: v1.21  
 **作成日**: 2026年3月30日（更新）  
 **対象**: 開発チーム  
 **関連ドキュメント**: プレミテ企画書 / プレミテ_技術スタック仕様書 / 各機能仕様書
@@ -548,6 +548,9 @@ YouTubeチャンネルの情報。
 | `status` | string | ✅ | `"open"`（未対応）/ `"in_progress"`（対応中）/ `"on_hold"`（保留中）/ `"resolved"`（対応済み＝スレッドのクローズ状態） |
 | `isGuest` | boolean | ✅ | ゲスト送信フラグ（ゲストのお問い合わせにはスレッドを作らない） |
 | `operatorMemo` | string? | — | 対応メモ（1,000文字以内、管理者のみ閲覧） |
+| `lastAdminMessageAt` | Timestamp? | — | 管理者が最後にスレッドへ返信した日時（ユーザー側の未読判定用） |
+| `userLastReadAt` | Timestamp? | — | 送信者本人が最後にスレッド詳細を開いた日時。`lastAdminMessageAt` より古ければ未読 |
+| `awaitingAdminReply` | boolean? | — | ユーザーが返信して管理者がまだ返信していない状態（管理画面の「ユーザー返信あり」）。ユーザーの返信で `true`、管理者の返信・クローズで `false`。未設定は `false` 扱い |
 | `submittedAt` | Timestamp | ✅ | お問い合わせ送信日時 |
 | `updatedAt` | Timestamp | ✅ | 最終更新日時 |
 
@@ -564,9 +567,9 @@ YouTubeチャンネルの情報。
 > （ステータス変更・対応メモ・返信・クローズ・再オープン）は `PATCH /api/admin/inquiries/{inquiryId}`。フォームに件名欄が無いため
 > 旧版の `subject` を削除し、`body`・`relatedUrls` を追加。ステータスは管理仕様書 §3.4 の4状態に合わせ、旧版の `"closed"` は
 > `"resolved"` に統合した。削除は行わない（管理 お問い合わせ管理仕様書 §6）。
-> **未決事項（7-3-2 で決める）**: 送信者本人は rules で自分の `inquiries` を読めるため、クライアントから購読すると `operatorMemo`
-> （管理者のみ閲覧）も渡る。ユーザー側の履歴ページを作る前に、メモを管理者専用の場所へ分けるか、履歴をサーバー経由で取得するかを決める
-> （管理 お問い合わせ管理仕様書 §1.1）。
+> **読み取り経路（v1.21、7-3-2）**: `operatorMemo` を送信者に渡さないため、`inquiries` と `messages` のクライアント読み取りは管理者のみとし、
+> 送信者本人は API（`GET /api/inquiries`・`GET /api/inquiries/{inquiryId}`、Admin SDK）経由で公開項目だけを受け取る。
+> ユーザーの返信・再オープンは `POST /api/inquiries/{inquiryId}`（管理 お問い合わせ管理仕様書 §1.1、2026-10-24 ユーザー決定）。
 
 ---
 
@@ -801,14 +804,15 @@ AI運営者（審査AI）の設定。プラットフォーム共通で1体のみ
 | フィールド | 型 | 必須 | 説明 |
 |-----------|-----|:---:|------|
 | `userId` | string | ✅ | 通知の宛先ユーザーのuserId |
-| `type` | string | ✅ | 通知種別。フェーズ2では`"series_new_episode"`のみ |
+| `type` | string | ✅ | 通知種別。`"series_new_episode"`（フェーズ2）／`"inquiry_reply"`（お問い合わせ返信、フェーズ7ステップ7-3-2） |
 | `playlistId` | string? | — | 対象再生リストのドキュメントID（`series_new_episode`のみ） |
 | `playlistTitle` | string? | — | 再生リストタイトル（denormalized、通知本文組み立て用） |
+| `inquiryId` | string? | — | 対象お問い合わせのドキュメントID（`inquiry_reply`のみ） |
 | `message` | string | ✅ | 通知本文（例：「「〇〇実況」に新しい動画が追加されました」） |
 | `isRead` | boolean | ✅ | 既読フラグ（デフォルト：`false`）。既読から未読へは戻さない |
 | `createdAt` | Timestamp | ✅ | 通知生成日時 |
 
-> **設計注記**: 生成はAdmin SDK経由（手動再取得API Route）のみ。クライアントからの
+> **設計注記**: 生成はAdmin SDK経由（新着動画の取得API Route、お問い合わせの返信API Route）のみ。クライアントからの
 > `create`は許可しない（firestore.rules参照）。90日保持・自動削除ポリシー
 > （仕様書8章）は、本格的なCloud Scheduler運用と合わせて別途対応する
 > （フェーズ2では未実装）。
@@ -924,3 +928,4 @@ ai_operators ──── (1) users
 | v1.18 | 2026-10-12 | フェーズ6ステップ5-2。`users.isMylistPublic`/`isReviewHistoryPublic` の既定値を実装（`true`）に合わせて修正。`reviews`/`collections` の `userDisplayName` がプロフィールでの表示名変更時に揃えられることを追記 |
 | v1.19 | 2026-10-14 | フェーズ7ステップ7-3-1（お問い合わせ）。3.17 `inquiries` をフォーム仕様に合わせて改訂（`subject` 削除、`body`・`relatedUrls` 追加、`status` を4状態に、`userName` をゲスト null 可に）、書き込み経路（API Route のみ）を明記。6章のルール方針に追記 |
 | v1.20 | 2026-10-24 | 通報承認時のレビュー処理を論理削除に変更（管理 審査ワークフロー仕様書 v9.0 §3.1）。`reviews` に `isHidden`・`hiddenAt`・`hiddenByWorkflowId` を追加。`workflows.reportData.hiddenReviewSnapshot` に承認時点のレビュー内容を退避する |
+| v1.21 | 2026-10-24 | フェーズ7ステップ7-3-2（お問い合わせ履歴）。§3.17 `inquiries` に `lastAdminMessageAt`・`userLastReadAt`・`awaitingAdminReply` を追加し、送信者本人の読み取りを API 経由に変更。§3.30 `notifications` に `inquiry_reply` 種別と `inquiryId` を追加 |

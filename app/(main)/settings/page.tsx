@@ -168,13 +168,16 @@ export default function SettingsPage() {
           </Button>
         </Card>
 
-        {/* お問い合わせ導線（§9）。「お問い合わせ履歴を確認する」は履歴ページを作るステップ7-3-2で追加する */}
+        {/* お問い合わせ導線（§9） */}
         <Card>
           <CardTitle className="mb-4">お問い合わせ</CardTitle>
           <p className="mb-3 text-md text-text-muted">サービスに関するお問い合わせやご要望はこちらから</p>
-          <div>
+          <div className="flex flex-wrap gap-2">
             <LinkButton href="/contact" variant="secondary" size="sm">
               お問い合わせフォームへ
+            </LinkButton>
+            <LinkButton href="/contact/history" variant="secondary" size="sm">
+              お問い合わせ履歴を確認する
             </LinkButton>
           </div>
         </Card>

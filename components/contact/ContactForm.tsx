@@ -2,7 +2,7 @@
  * お問い合わせフォーム（/contact）。document/specification/page/ページ お問い合わせフォーム仕様書.md 準拠。
  * ログイン・未ログインどちらも送信できる。ログイン済みはアカウントのメールアドレスを自動入力・編集不可にする（§3）。
  * 送信は POST /api/inquiries（Admin SDK）。入力チェックは lib/inquiry-shared.ts をサーバーと共有する。
- * 送信完了画面の `/contact/history` へのリンク（§7）は、履歴ページを作るフェーズ7ステップ7-3-2で追加する。
+ * 送信完了画面には、ログイン済みのときだけ `/contact/history` へのリンクを出す（§7、フェーズ7ステップ7-3-2）。
  */
 'use client';
 
@@ -106,7 +106,12 @@ export function ContactForm() {
           <p className="text-base text-text-secondary">
             {sentAsGuest ? 'ご入力のメールアドレスに折り返しご連絡いたします。' : 'お問い合わせ履歴からやり取りを確認できます。'}
           </p>
-          <p className="text-base">
+          <p className="flex flex-wrap gap-x-6 gap-y-2 text-base">
+            {!sentAsGuest && (
+              <Link href="/contact/history" className={LINK_CLASS}>
+                お問い合わせ履歴を見る
+              </Link>
+            )}
             <Link href="/" className={LINK_CLASS}>
               トップページへ戻る
             </Link>
