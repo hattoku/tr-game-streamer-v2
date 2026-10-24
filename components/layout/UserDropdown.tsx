@@ -105,6 +105,8 @@ export function UserDropdown() {
         <DropdownMenuItem onSelect={() => router.push('/collections/mine')}>自分のまとめ</DropdownMenuItem>
         {/* 保存したまとめ（まとめ機能仕様書 §8.3。仕様のヘッダーリンクの代わりにメニューに置く） */}
         <DropdownMenuItem onSelect={() => router.push('/collections/saved')}>保存したまとめ</DropdownMenuItem>
+        {/* お問い合わせ履歴（ページ お問い合わせ履歴 仕様書 §2。設定ページ経由だけでは分かりにくいため追加） */}
+        <DropdownMenuItem onSelect={() => router.push('/contact/history')}>お問い合わせ履歴</DropdownMenuItem>
         <DropdownMenuItem onSelect={() => router.push('/settings')}>設定</DropdownMenuItem>
         {isAdmin && (
           <>

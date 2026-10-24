@@ -124,7 +124,15 @@ export function ContactForm() {
   return (
     <Card>
       <form noValidate onSubmit={handleSubmit} className="flex flex-col gap-5">
-        <SectionHeading>お問い合わせ</SectionHeading>
+        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <SectionHeading>お問い合わせ</SectionHeading>
+          {/* 履歴への入り口（ページ お問い合わせフォーム仕様書 導線。ログイン済みのみ） */}
+          {user && (
+            <Link href="/contact/history" className={`text-sm ${LINK_CLASS}`}>
+              過去のお問い合わせを見る
+            </Link>
+          )}
+        </div>
 
         {formError && (
           <p role="alert" className="flex items-start gap-[6px] text-md text-input-error">
