@@ -1,6 +1,6 @@
 # プレミテ Firestore データモデル設計書
 
-**バージョン**: v1.19  
+**バージョン**: v1.20  
 **作成日**: 2026年3月30日（更新）  
 **対象**: 開発チーム  
 **関連ドキュメント**: プレミテ企画書 / プレミテ_技術スタック仕様書 / 各機能仕様書
@@ -347,6 +347,9 @@ YouTubeチャンネルの情報。
 | `commentScore` | number? | — | コメント有無による乗数（変数C。あり: `1.0` / なし: `0.5`。共通 信頼度スコアリングシステム仕様書 §3.3に準拠） |
 | `userDisplayName` | string | ✅ | 投稿者の表示名の非正規化コピー（投稿・更新時点のスナップショット）。`users`は本人・管理者以外読めないルールのため、レビュー一覧での表示にはこちらを参照する（HANDOFF.md未解決事項1の対応）。プロフィールで表示名を変更すると `PATCH /api/users/[userId]/profile` が本人の全レビュー分を新しい名前に揃える |
 | `userProfileImageUrl` | string? | — | 投稿者のプロフィール画像URLの非正規化コピー（同上） |
+| `isHidden` | boolean? | — | 通報承認による非表示（論理削除）フラグ。`true` のレビューは一覧・集計・スコアから除外する（管理 審査ワークフロー仕様書 §3.1）。未設定は `false` 扱い。書き込みは Admin SDK のみ（本人のクライアント更新の許可フィールドに含めない） |
+| `hiddenAt` | Timestamp? | — | 非表示にした日時 |
+| `hiddenByWorkflowId` | string? | — | 非表示の根拠となった `workflows` のドキュメントID |
 | `postedAt` | Timestamp | ✅ | 初回投稿日時 |
 | `updatedAt` | Timestamp | ✅ | 最終更新日時 |
 
@@ -483,7 +486,7 @@ YouTubeチャンネルの情報。
 | `genreId` | string? | — | 関連ジャンルID（STEP1審査者特定に使用） |
 | `step1AssignedOperatorIds` | string[] | ✅ | STEP1にアサインされた運営者のuserIdリスト |
 | `proposalData` | map? | — | 提案データ（種別により異なる） |
-| `reportData` | map? | — | 通報データ（種別により異なる） |
+| `reportData` | map? | — | 通報データ（種別により異なる）。`review_report` は `targetType`・`reviewId`・`playlistId`・`reason`・`detail` を持ち、承認時に `hiddenReviewSnapshot`（承認時点のレビュー内容: `userId`・`userDisplayName`・`starRating`・`comment`・`hasSpoiler`・`postedAt`・`updatedAt`）を追記する（管理 審査ワークフロー仕様書 §3.1） |
 | `step1History` | map[] | ✅ | STEP1の審査履歴（配列） |
 | `step1Errors` | map[] | ✅ | AI審査エラー記録（配列） |
 | `step2History` | map[] | ✅ | STEP2の審査履歴（配列） |
@@ -920,3 +923,4 @@ ai_operators ──── (1) users
 | v1.17 | 2026-10-12 | フェーズ6ステップ4-3（まとめの保存機能）。3.14.1 `saved_collections` を追加（保存記録、書き込みはAPI Routeのみ、まとめ削除時に連動削除）。6章のルール方針に追記 |
 | v1.18 | 2026-10-12 | フェーズ6ステップ5-2。`users.isMylistPublic`/`isReviewHistoryPublic` の既定値を実装（`true`）に合わせて修正。`reviews`/`collections` の `userDisplayName` がプロフィールでの表示名変更時に揃えられることを追記 |
 | v1.19 | 2026-10-14 | フェーズ7ステップ7-3-1（お問い合わせ）。3.17 `inquiries` をフォーム仕様に合わせて改訂（`subject` 削除、`body`・`relatedUrls` 追加、`status` を4状態に、`userName` をゲスト null 可に）、書き込み経路（API Route のみ）を明記。6章のルール方針に追記 |
+| v1.20 | 2026-10-24 | 通報承認時のレビュー処理を論理削除に変更（管理 審査ワークフロー仕様書 v9.0 §3.1）。`reviews` に `isHidden`・`hiddenAt`・`hiddenByWorkflowId` を追加。`workflows.reportData.hiddenReviewSnapshot` に承認時点のレビュー内容を退避する |

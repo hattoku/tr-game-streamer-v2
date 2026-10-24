@@ -36,9 +36,11 @@ export async function GET(request: NextRequest, { params }: Params) {
     adminDb.collection('collections').where('userId', '==', userId).where('visibility', '==', 'public').get(),
   ]);
 
-  // 星評価・視聴ステータス・コメントのいずれかがある投稿をレビューとして数える（§5.3）
+  // 星評価・視聴ステータス・コメントのいずれかがある投稿をレビューとして数える（§5.3）。
+  // 通報で非表示のレビューは本人のプロフィールでも数えない（管理 審査ワークフロー仕様書 §3.1）
   const reviewDocs = reviewSnap.docs
     .map((d) => ({ id: d.id, data: d.data() }))
+    .filter(({ data }) => data.isHidden !== true)
     .filter(({ data }) => data.starRating != null || normalizeWatchStatus(data.watchStatus) != null || !!(data.comment as string | null)?.trim());
   const mylistDocs = mylistSnap.docs.map((d) => d.data());
   const collections = collectionSnap.docs

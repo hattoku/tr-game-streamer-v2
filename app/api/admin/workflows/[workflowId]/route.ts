@@ -51,14 +51,31 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const reviewId = workflow.reportData?.reviewId as string | undefined;
   const playlistId = workflow.reportData?.playlistId as string | undefined;
 
+  // 承認時は対象レビューを論理削除（非表示化）する（§3.1）。ドキュメントと内容は残し、承認時点の内容を
+  // reportData.hiddenReviewSnapshot にも退避する（投稿者が後でレビューを削除しても審査記録に残るように）
+  let hiddenReviewSnapshot: Record<string, unknown> | null = null;
   if (action === 'approve' && reviewId) {
-    // 承認時「対象コメントを物理削除」（§3）。app/api/reviews/upsert/route.ts の DELETE と同じ削除パターン。
     const reviewRef = adminDb.collection('reviews').doc(reviewId);
-    const reviewSnap = await reviewRef.get();
-    if (reviewSnap.exists) {
-      const reviewUserId = reviewSnap.data()!.userId as string;
-      await reviewRef.delete();
-      const userRef = adminDb.collection('users').doc(reviewUserId);
+    // 読み取りから非表示化までの間に本人が削除・更新しても取りこぼさないようトランザクションにする
+    const review = await adminDb.runTransaction(async (tx) => {
+      const snap = await tx.get(reviewRef);
+      const data = snap.data();
+      if (!data || data.isHidden === true) return null;
+      tx.update(reviewRef, { isHidden: true, hiddenAt: now, hiddenByWorkflowId: workflowId });
+      return data;
+    });
+    if (review) {
+      hiddenReviewSnapshot = {
+        userId: review.userId,
+        userDisplayName: review.userDisplayName ?? null,
+        starRating: review.starRating ?? null,
+        comment: review.comment ?? null,
+        hasSpoiler: review.hasSpoiler === true,
+        postedAt: review.postedAt ?? null,
+        updatedAt: review.updatedAt ?? null,
+      };
+      // users.reviewCount は表示中のレビューだけを数える
+      const userRef = adminDb.collection('users').doc(review.userId as string);
       const userSnap = await userRef.get();
       const currentCount = userSnap.data()?.reviewCount ?? 0;
       if (userSnap.exists) await userRef.update({ reviewCount: Math.max(0, currentCount - 1) });
@@ -67,6 +84,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   }
 
   await workflowRef.update({
+    ...(hiddenReviewSnapshot ? { 'reportData.hiddenReviewSnapshot': hiddenReviewSnapshot } : {}),
     status: action === 'approve' ? 'approved' : 'rejected',
     step2History: [
       ...(workflow.step2History ?? []),
