@@ -31,6 +31,7 @@ export default function AdminDashboardPage() {
 
   const [pendingReportCount, setPendingReportCount] = useState<number | null>(null);
   const [openInquiryCount, setOpenInquiryCount] = useState<number | null>(null);
+  const [awaitingReplyCount, setAwaitingReplyCount] = useState<number | null>(null);
   const [lastBatch, setLastBatch] = useState<BatchLogSummary | null | undefined>(undefined);
 
   const [refreshBusy, setRefreshBusy] = useState(false);
@@ -44,8 +45,13 @@ export default function AdminDashboardPage() {
   }
 
   async function loadOpenInquiryCount() {
-    const snap = await getDocs(query(collection(db, 'inquiries'), where('status', '==', 'open')));
-    setOpenInquiryCount(snap.size);
+    // 「ユーザー返信あり」（ユーザーが返信して運営がまだ返していない）も並べて出す（7-3-2、ユーザー決定）
+    const [openSnap, awaitingSnap] = await Promise.all([
+      getDocs(query(collection(db, 'inquiries'), where('status', '==', 'open'))),
+      getDocs(query(collection(db, 'inquiries'), where('awaitingAdminReply', '==', true))),
+    ]);
+    setOpenInquiryCount(openSnap.size);
+    setAwaitingReplyCount(awaitingSnap.size);
   }
 
   async function loadLastBatch() {
@@ -118,17 +124,24 @@ export default function AdminDashboardPage() {
 
         <Card className="flex flex-col gap-3">
           <p className="text-lg font-medium text-text-primary">お問い合わせ</p>
-          {openInquiryCount === null ? (
+          {openInquiryCount === null || awaitingReplyCount === null ? (
             <Skeleton className="h-9 w-16" />
-          ) : openInquiryCount === 0 ? (
+          ) : openInquiryCount === 0 && awaitingReplyCount === 0 ? (
             <p className="inline-flex items-center gap-2 text-base text-text-secondary">
               <CheckIcon size={16} className="text-text-tertiary" />
               未対応のお問い合わせはありません
             </p>
           ) : (
-            <p className="text-score font-semibold text-text-primary">
-              {openInquiryCount.toLocaleString()} <span className="text-md font-normal text-text-muted">件 未対応</span>
-            </p>
+            <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1">
+              <p className="text-score font-semibold text-text-primary">
+                {openInquiryCount.toLocaleString()} <span className="text-md font-normal text-text-muted">件 未対応</span>
+              </p>
+              {awaitingReplyCount > 0 && (
+                <p className="text-score font-semibold text-text-primary">
+                  {awaitingReplyCount.toLocaleString()} <span className="text-md font-normal text-text-muted">件 ユーザー返信あり</span>
+                </p>
+              )}
+            </div>
           )}
           <Link href="/admin/inquiries" className="w-fit text-base text-text-tertiary underline-offset-4 hover:text-text-primary hover:underline">
             一覧を見る →

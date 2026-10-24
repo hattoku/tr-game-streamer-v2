@@ -26,6 +26,8 @@ export async function POST(request: NextRequest) {
   if (review.userId === uid) {
     return NextResponse.json({ error: 'own_review' }, { status: 403 });
   }
+  // 通報で非表示のレビューには新規に投票できない（押下済みの取り消しは下で許可する）
+  const isHidden = review.isHidden === true;
 
   const voteRef = adminDb.collection('helpful_votes').doc(`${uid}_${reviewId}`);
   const voteSnap = await voteRef.get();
@@ -34,6 +36,9 @@ export async function POST(request: NextRequest) {
   const hasComment = typeof review.comment === 'string' && review.comment.trim() !== '';
   if (willVote && !hasComment) {
     return NextResponse.json({ error: 'no_comment' }, { status: 400 });
+  }
+  if (willVote && isHidden) {
+    return NextResponse.json({ error: 'review_hidden' }, { status: 409 });
   }
 
   if (willVote) {

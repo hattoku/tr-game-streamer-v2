@@ -20,6 +20,10 @@ import { WATCH_STATUS_ORDER, normalizeWatchStatus, type WatchStatus } from '@/co
 // NGワード判定: firestore.rules は ng_words を管理者以外に非公開としているため
 // （回避策を助長しないため）、最終送信時のサーバー側チェックはここで行う。入力中の
 // リアルタイムチェックは app/api/reviews/validate-comment/route.ts（デバウンス呼び出し）。
+//
+// 通報承認で非表示（isHidden）になったレビュー（管理 審査ワークフロー仕様書 §3.1）: 本人が編集しても
+// 非表示のまま引き継ぐ。星評価・コメントを消したとき（削除）だけ非表示を解く。users.reviewCount は
+// 表示中のレビューだけを数えるため、非表示のレビューの削除では減らさず、非表示を解いたときに戻す。
 
 const MAX_COMMENT_LENGTH = 2000;
 
@@ -99,10 +103,12 @@ export async function POST(request: NextRequest) {
     const batch = adminDb.batch();
     let touched = false;
     if (existingSnap.exists) {
-      const userRef = adminDb.collection('users').doc(uid);
-      const userSnap = await userRef.get();
       batch.delete(reviewRef);
-      batch.update(userRef, { reviewCount: Math.max(0, (userSnap.data()?.reviewCount ?? 0) - 1) });
+      if (existing?.isHidden !== true) {
+        const userRef = adminDb.collection('users').doc(uid);
+        const userSnap = await userRef.get();
+        batch.update(userRef, { reviewCount: Math.max(0, (userSnap.data()?.reviewCount ?? 0) - 1) });
+      }
       touched = true;
     }
     if (mylistSnap.exists) {
@@ -159,6 +165,9 @@ export async function POST(request: NextRequest) {
 
   const now = new Date();
   const batch = adminDb.batch();
+  // 非表示のレビューで星評価・コメントが両方外れた（視聴ステータスだけ残る）ら、DELETE と同じく非表示を解く
+  const keepHidden = existing?.isHidden === true && (starRating != null || !!comment);
+  const unhide = existing?.isHidden === true && !keepHidden;
 
   // マイリスト同期（mylist.watchStatus を正とする）。
   // - 視聴ステータスが指定されていれば、そのステータスで登録・更新する
@@ -220,10 +229,13 @@ export async function POST(request: NextRequest) {
     userProfileImageUrl: (userData?.profileImageUrl as string | undefined) ?? null,
     postedAt: existing ? existing.postedAt : now,
     updatedAt: now,
+    ...(keepHidden
+      ? { isHidden: true, hiddenAt: existing!.hiddenAt ?? null, hiddenByWorkflowId: existing!.hiddenByWorkflowId ?? null }
+      : {}),
   });
 
-  // users.reviewCount（集計キャッシュ）は新規投稿時のみ加算する
-  if (!existing) {
+  // users.reviewCount（集計キャッシュ）は新規投稿時と、非表示を解いたときに加算する
+  if ((!existing || unhide) && userSnap.exists) {
     const userRef = adminDb.collection('users').doc(uid);
     batch.update(userRef, { reviewCount: (userData?.reviewCount ?? 0) + 1 });
   }
@@ -263,6 +275,7 @@ export async function DELETE(request: NextRequest) {
       const genreExpertiseScore = typeof existing.genreExpertiseScore === 'number' ? existing.genreExpertiseScore : 0;
       const helpfulScore = Math.log((existing.helpfulCount ?? 0) + 1);
       const commentScore = 0.5;
+      const wasHidden = existing.isHidden === true;
       await reviewRef.update({
         starRating: null,
         comment: null,
@@ -272,13 +285,21 @@ export async function DELETE(request: NextRequest) {
         // 旧 "reviewing" 値が残っていた場合はこの機会に正規化した値へ移行する
         watchStatus: remainingWatchStatus,
         updatedAt: new Date(),
+        // 非表示の対象だった星評価・コメントが消えたので非表示を解く（内容は workflows 側に退避済み）
+        ...(wasHidden ? { isHidden: FieldValue.delete(), hiddenAt: FieldValue.delete(), hiddenByWorkflowId: FieldValue.delete() } : {}),
       });
+      if (wasHidden) {
+        const userRef = adminDb.collection('users').doc(auth.uid);
+        if ((await userRef.get()).exists) await userRef.update({ reviewCount: FieldValue.increment(1) });
+      }
     } else {
       await reviewRef.delete();
-      const userRef = adminDb.collection('users').doc(auth.uid);
-      const userSnap = await userRef.get();
-      const currentCount = userSnap.data()?.reviewCount ?? 0;
-      await userRef.update({ reviewCount: Math.max(0, currentCount - 1) });
+      if (existing.isHidden !== true) {
+        const userRef = adminDb.collection('users').doc(auth.uid);
+        const userSnap = await userRef.get();
+        const currentCount = userSnap.data()?.reviewCount ?? 0;
+        await userRef.update({ reviewCount: Math.max(0, currentCount - 1) });
+      }
     }
   }
   await recalculatePlaylistScore(playlistId);

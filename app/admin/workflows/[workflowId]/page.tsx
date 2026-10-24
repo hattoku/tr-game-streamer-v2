@@ -35,12 +35,15 @@ interface WorkflowDetail {
   playlistId: string;
   operatorMemo: string | null;
   submittedAt: number;
+  /** 承認時に退避したレビュー内容（審査ワークフロー仕様書 §3.1）。投稿者が後で削除しても残る */
+  hiddenSnapshot: TargetReview | null;
 }
 
 interface TargetReview {
   comment: string | null;
   starRating: number | null;
   userDisplayName: string;
+  isHidden?: boolean;
 }
 
 const MAX_MEMO_LENGTH = 1000;
@@ -79,6 +82,13 @@ export default function AdminWorkflowDetailPage() {
         playlistId: (data.reportData?.playlistId as string) ?? '',
         operatorMemo: (data.operatorMemo as string) ?? null,
         submittedAt: data.submittedAt?.toMillis?.() ?? 0,
+        hiddenSnapshot: data.reportData?.hiddenReviewSnapshot
+          ? {
+              comment: (data.reportData.hiddenReviewSnapshot.comment as string) ?? null,
+              starRating: (data.reportData.hiddenReviewSnapshot.starRating as number) ?? null,
+              userDisplayName: (data.reportData.hiddenReviewSnapshot.userDisplayName as string) ?? 'ユーザー',
+            }
+          : null,
       });
     });
   }, [workflowId]);
@@ -92,7 +102,8 @@ export default function AdminWorkflowDetailPage() {
 
   useEffect(() => {
     if (!workflow?.reviewId) return;
-    getDoc(doc(db, 'reviews', workflow.reviewId)).then((snap) => {
+    // 承認で isHidden が立つのを即時に反映するため購読する
+    return onSnapshot(doc(db, 'reviews', workflow.reviewId), (snap) => {
       if (!snap.exists()) {
         setTargetReview(null);
         return;
@@ -102,6 +113,7 @@ export default function AdminWorkflowDetailPage() {
         comment: (data.comment as string) ?? null,
         starRating: (data.starRating as number) ?? null,
         userDisplayName: (data.userDisplayName as string) ?? 'ユーザー',
+        isHidden: data.isHidden === true,
       });
     });
   }, [workflow?.reviewId]);
@@ -208,16 +220,30 @@ export default function AdminWorkflowDetailPage() {
           <p className="text-lg font-medium text-text-primary">通報対象のレビュー</p>
           {targetReview === undefined ? (
             <SkeletonText lines={2} />
-          ) : targetReview === null ? (
-            <p className="text-base text-text-muted">対象レビューは既に削除されています</p>
           ) : (
-            <div className="flex flex-col gap-1 rounded-[8px] bg-bg-hover px-3 py-2">
-              <div className="flex items-center gap-2">
-                <span className="text-base text-text-primary">{targetReview.userDisplayName}</span>
-                {targetReview.starRating != null && <StarRating value={targetReview.starRating} readOnly size={14} />}
-              </div>
-              {targetReview.comment && <p className="whitespace-pre-wrap text-base text-text-secondary">{targetReview.comment}</p>}
-            </div>
+            (() => {
+              // 承認済みなら承認時点の内容（退避分）を出す。投稿者が後で削除・書き直していても審査した内容が分かるように
+              const shown = workflow.hiddenSnapshot ?? targetReview;
+              if (!shown) return <p className="text-base text-text-muted">対象レビューは既に削除されています</p>;
+              return (
+                <>
+                  {workflow.hiddenSnapshot && (
+                    <p className="text-md text-text-muted">
+                      {targetReview?.isHidden
+                        ? '非表示中（承認時点の内容）'
+                        : '承認時点の内容。投稿者がレビューを削除したため、現在は非表示が解除されています'}
+                    </p>
+                  )}
+                  <div className="flex flex-col gap-1 rounded-[8px] bg-bg-hover px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base text-text-primary">{shown.userDisplayName}</span>
+                      {shown.starRating != null && <StarRating value={shown.starRating} readOnly size={14} />}
+                    </div>
+                    {shown.comment && <p className="whitespace-pre-wrap text-base text-text-secondary">{shown.comment}</p>}
+                  </div>
+                </>
+              );
+            })()
           )}
         </div>
 
@@ -285,7 +311,7 @@ export default function AdminWorkflowDetailPage() {
         title={confirmAction === 'approve' ? '通報を承認しますか?' : '通報を却下しますか?'}
         description={
           confirmAction === 'approve'
-            ? '承認すると、対象のレビューコメントは削除されます。'
+            ? '承認すると、対象のレビューは非表示になります（内容は審査記録に残ります）。'
             : '却下すると、対象のレビューコメントはそのまま掲載が継続されます。'
         }
       >

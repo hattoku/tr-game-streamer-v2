@@ -37,6 +37,7 @@ interface NotificationItem {
   message: string;
   isRead: boolean;
   playlistId: string | null;
+  inquiryId: string | null;
   createdAt: number;
 }
 
@@ -94,6 +95,7 @@ export default function NotificationsPage() {
         message: d.data().message ?? '',
         isRead: d.data().isRead ?? false,
         playlistId: d.data().playlistId ?? null,
+        inquiryId: d.data().inquiryId ?? null,
         createdAt: d.data().createdAt?.toMillis?.() ?? 0,
       })),
     );
@@ -121,6 +123,7 @@ export default function NotificationsPage() {
       all: list.length,
       unread: list.filter((n) => !n.isRead).length,
       series_new_episode: list.filter((n) => n.type === 'series_new_episode').length,
+      inquiry_reply: list.filter((n) => n.type === 'inquiry_reply').length,
     };
   }, [items]);
 
@@ -151,6 +154,8 @@ export default function NotificationsPage() {
     }
     // 遷移先（§2.1）: シリーズ新着は該当再生リストの動画プレーヤーページ
     if (n.type === 'series_new_episode' && n.playlistId) router.push(`/playlists/${n.playlistId}`);
+    // お問い合わせ返信は該当スレッド（フェーズ7ステップ7-3-2）
+    if (n.type === 'inquiry_reply' && n.inquiryId) router.push(`/contact/history/${n.inquiryId}`);
   }
 
   async function handleMarkAllRead() {
@@ -188,7 +193,7 @@ export default function NotificationsPage() {
       </div>
 
       {items.length === 0 ? (
-        <EmptyState icon={<BellIcon />} title="通知はまだありません" description="マイリストに登録した再生リストに新しい動画が追加されると、ここでお知らせします" />
+        <EmptyState icon={<BellIcon />} title="通知はまだありません" description="マイリストに登録した再生リストの新着動画や、お問い合わせへの返信をここでお知らせします" />
       ) : (
         <>
           <Tabs value={filter} onValueChange={(v) => changeFilter(v as Filter)}>
@@ -202,6 +207,12 @@ export default function NotificationsPage() {
               <TabsTrigger value="series_new_episode" count={counts.series_new_episode}>
                 シリーズ新着
               </TabsTrigger>
+              {/* 届いたことがある種別だけタブを出す（お知らせ・審査結果の通知は未実装） */}
+              {counts.inquiry_reply > 0 && (
+                <TabsTrigger value="inquiry_reply" count={counts.inquiry_reply}>
+                  お問い合わせ返信
+                </TabsTrigger>
+              )}
             </TabsList>
           </Tabs>
 

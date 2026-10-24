@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getOptionalUid } from '@/lib/api-auth';
+import { getOptionalUid, requireUser } from '@/lib/api-auth';
 import { adminAuth, adminDb } from '@/lib/firebase-admin';
 import { readJsonObject } from '@/lib/collections-server';
-import { INQUIRY_URLS_MAX, hasInquiryErrors, normalizeRelatedUrls, validateInquiryInput } from '@/lib/inquiry-shared';
+import {
+  INQUIRY_URLS_MAX,
+  hasInquiryErrors,
+  isInquiryStatus,
+  normalizeRelatedUrls,
+  validateInquiryInput,
+  type UserInquirySummaryJson,
+} from '@/lib/inquiry-shared';
 
 // お問い合わせの送信（ページ お問い合わせフォーム仕様書 §7）。ログイン・未ログインどちらも送信できる。
 // ログイン済みは返信先を確実にするため、メールアドレス・表示名をクライアントの値ではなくアカウントから取る（§3）。
@@ -55,4 +62,30 @@ export async function POST(request: NextRequest) {
   });
 
   return NextResponse.json({ id: ref.id });
+}
+
+// 自分のお問い合わせ一覧（ページ お問い合わせ履歴 仕様書 §3・§1.1）。対応メモ・メールアドレス等の内部項目を渡さないため
+// rules で本人の直接読み取りを閉じ、ここで公開してよい項目だけを返す。userId の等価条件のみのため複合インデックス不要。
+// ゲストとして送ったお問い合わせ（userId が null）は含まれない
+export async function GET(request: NextRequest) {
+  const auth = await requireUser(request);
+  if ('errorResponse' in auth) return auth.errorResponse;
+
+  const snap = await adminDb.collection('inquiries').where('userId', '==', auth.uid).get();
+  const items: UserInquirySummaryJson[] = snap.docs
+    .map((d) => {
+      const data = d.data();
+      const lastAdmin: number = data.lastAdminMessageAt?.toMillis?.() ?? 0;
+      const lastRead: number = data.userLastReadAt?.toMillis?.() ?? 0;
+      return {
+        id: d.id,
+        category: (data.category as string) ?? 'other',
+        status: isInquiryStatus(data.status) ? data.status : 'open',
+        body: (data.body as string) ?? '',
+        submittedAt: data.submittedAt?.toMillis?.() ?? 0,
+        hasUnread: lastAdmin > lastRead,
+      };
+    })
+    .sort((a, b) => b.submittedAt - a.submittedAt);
+  return NextResponse.json({ items });
 }
