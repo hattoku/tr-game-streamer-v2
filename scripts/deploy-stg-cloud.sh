@@ -12,6 +12,7 @@ set -euo pipefail
 # - RAKUTEN_AFFILIATE_ID はビルド時埋め込み値なので、クラウド環境の環境変数から渡す（未設定なら空）
 # - --allow-unauthenticated は付けない（公開設定は既存サービスに設定済みで、付けると IAM 変更権限が要るため）
 # - ビルドは --async で投入して状態をポーリングする（ログのストリーミングに Project Viewer 権限が要るのを避ける）
+# - ソースのアップロード先を --gcs-source-staging-dir で明示する（既定バケットの確認に storage.buckets.list が要るのを避ける）
 
 PROJECT_ID="tr-game-streamer-stg"
 REPO_NAME="tr-game-streamer"
@@ -54,6 +55,7 @@ echo "--- Deploying to STAGING ($PROJECT_ID) from cloud ---"
 echo "Building and pushing Docker image..."
 BUILD_ID="$(gcloud builds submit --config cloudbuild.yaml \
   --substitutions "_IMAGE_URL=$IMAGE_URL,_APP_ENV=stg,_RAKUTEN_AFFILIATE_ID=$RAKUTEN_AFFILIATE_ID" \
+  --gcs-source-staging-dir "gs://${PROJECT_ID}_cloudbuild/source" \
   --async --format 'value(id)' .)"
 echo "Build ID: $BUILD_ID"
 while true; do
