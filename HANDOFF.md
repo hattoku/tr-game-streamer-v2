@@ -12,7 +12,7 @@
 > **7-3-2** 実装済み（2026-10-24、stg 実機確認は未実施）＝`/contact/history`（一覧・未読）・`/contact/history/[inquiryId]`（スレッド・返信・再オープン）、
 > 本人専用API `GET /api/inquiries`・`GET|POST /api/inquiries/[inquiryId]`（`operatorMemo` を渡さないため rules で本人の直接読み取りを閉じた、ユーザー決定）、
 > 管理者の返信でサイト内通知（`inquiry_reply`）、管理画面の「ユーザー返信あり」（`awaitingAdminReply`、ユーザー決定）、送信完了画面・設定ページの導線。
-> **7-4** 実装済み（2026-10-25）＝一般ユーザーは `/playlists/new` で「提案する」（`POST /api/playlists/propose`）、ゲームタイトル追加提案モーダル（`POST /api/games/propose`）。
+> **7-4** 実装済み（2026-10-25）＝一般ユーザーは `/playlists/new` で「提案する」（`POST /api/playlists/propose`）。ゲームタイトルが候補に無ければ同じフォームで新しいゲームタイトル名を入力し、再生リストと1件の提案として同時に送る（ユーザー決定。当初の別ウィンドウのゲームタイトル提案は廃止）。
 > 提案は `workflows`（`playlist_register`・`game_title_register`）に API 経由で保存し、管理画面 `/admin/workflows` の「提案」セクションで通報と同じ単一ステップで承認/却下（ユーザー決定）。
 > 承認時に管理者の登録と同じ処理（`lib/playlist-registration.ts`）で本登録、承認前にゲームタイトルを差し替え可（ユーザー決定）。rules で提案のクライアント直接作成を禁止。
 > 計画は `/mnt/project-files/plans/7-4-再生リスト提案フロー-実装計画.md`。次は 7-1 の本文整備（利用規約・プライバシーポリシー）→本番デプロイ。

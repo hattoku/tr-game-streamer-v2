@@ -6,6 +6,9 @@
  * - ゲームタイトルは承認前に差し替えられる（§10.1 の最小版、2026-10-25 ユーザー決定）。差し替えは承認時に
  *   `gameId` として送り、サーバーが editHistory に記録する（提案内容そのものは書き換えない）。
  * - チャンネルが未登録なら、管理者の直接登録と同じく説明文（任意・手入力）を書ける。
+ * - 提案者がゲームタイトルを候補から選べず新しいゲームタイトル名を入力した提案（proposalData.gameId が null、§14.3 v10.1）は、
+ *   「ゲームタイトルを登録して承認」で GameCreateModal（タイトル名入り）を開き、登録できたらそのまま再生リストも登録して承認する。
+ *   既存のゲームタイトルで足りる場合は「ゲームタイトルを選ぶ」で選んでから通常どおり承認する。
  */
 'use client';
 
@@ -19,6 +22,7 @@ import { useToast } from '@/components/ui/Toast';
 import { ExternalLinkIcon, PencilIcon } from '@/components/ui/icons';
 import { PlaylistSummary } from '@/components/playlists/PlaylistSummary';
 import { GameSelectModal, type GameOption } from '@/components/playlists/GameSelectModal';
+import { GameCreateModal } from '@/components/games/GameCreateModal';
 import {
   callWorkflowApi,
   isPendingStatus,
@@ -37,6 +41,7 @@ const APPROVE_ERRORS: Record<string, string> = {
   not_public: '再生リストが非公開・限定公開になっているため登録できません',
   playlist_not_found: '再生リストがYouTube上で見つかりませんでした',
   game_not_found: 'ゲームタイトルが見つかりませんでした。選び直してください',
+  game_required: 'ゲームタイトルを登録するか、選んでから承認してください',
 };
 
 export function PlaylistProposalDetail({ workflowId, data }: { workflowId: string; data: DocumentData }) {
@@ -45,6 +50,9 @@ export function PlaylistProposalDetail({ workflowId, data }: { workflowId: strin
   const pending = isPendingStatus(status);
   const proposal = data.proposalData ?? {};
   const proposedGame = { id: (proposal.gameId as string) ?? '', title: (proposal.gameName as string) ?? '' };
+  /** 新しいゲームタイトルとして提案された名前（既存のゲームタイトルを選んだ提案では null） */
+  const newGameTitle = (proposal.newGameTitle as string | undefined) ?? null;
+  const newGameNote = (proposal.newGameNote as string | undefined) ?? null;
 
   const [channelRegistered, setChannelRegistered] = useState<boolean | null>(null);
   const [channelDescription, setChannelDescription] = useState('');
@@ -53,9 +61,12 @@ export function PlaylistProposalDetail({ workflowId, data }: { workflowId: strin
   const [selectedGame, setSelectedGame] = useState<{ id: string; title: string } | null>(null);
   const [confirmAction, setConfirmAction] = useState<DecisionAction | null>(null);
   const [approveError, setApproveError] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const game = selectedGame ?? proposedGame;
   const gameChanged = game.id !== proposedGame.id;
+  /** まだゲームタイトルが決まっていない（新しいゲームタイトル付きの提案で、登録も選択もしていない） */
+  const needsGame = !game.id;
 
   useEffect(() => {
     if (!pending || !proposal.channelId) return;
@@ -82,14 +93,14 @@ export function PlaylistProposalDetail({ workflowId, data }: { workflowId: strin
       .catch((e) => console.error('games の読み込みに失敗', e));
   }
 
-  async function handleDecision(action: DecisionAction, comment: string | null): Promise<boolean> {
+  async function handleDecision(action: DecisionAction, comment: string | null, gameId: string = game.id): Promise<boolean> {
     setApproveError(null);
     try {
       await callWorkflowApi(workflowId, {
         action,
         comment,
         ...(action === 'approve'
-          ? { gameId: game.id, channelDescription: channelRegistered === false ? channelDescription : undefined }
+          ? { gameId, channelDescription: channelRegistered === false ? channelDescription : undefined }
           : {}),
       });
       toast({ type: 'success', message: action === 'approve' ? '承認し、再生リストを登録しました' : '却下しました' });
@@ -107,7 +118,9 @@ export function PlaylistProposalDetail({ workflowId, data }: { workflowId: strin
   }
 
   // 承認済みなら実際に登録したゲームタイトル（差し替えた場合は差し替え後）を出す
-  const shownGameName = pending ? game.title : ((proposal.approvedGameName as string) ?? proposedGame.title);
+  const shownGameName = pending
+    ? game.title || `${newGameTitle ?? ''}（新しいゲームタイトル・未登録）`
+    : ((proposal.approvedGameName as string) ?? proposedGame.title);
 
   return (
     <>
@@ -144,16 +157,25 @@ export function PlaylistProposalDetail({ workflowId, data }: { workflowId: strin
             {pending && (
               <Button variant="ghost" size="sm" onClick={openGameModal}>
                 <PencilIcon size={14} />
-                ゲームタイトルを変更
+                {needsGame ? '既存のゲームタイトルから選ぶ' : 'ゲームタイトルを変更'}
               </Button>
             )}
           </div>
-          {pending && gameChanged && (
+          {newGameTitle && (
+            <div className="flex flex-col gap-1 rounded-[8px] bg-bg-hover px-3 py-2">
+              <p className="text-base text-text-primary">新しいゲームタイトルとして提案: {newGameTitle}</p>
+              {newGameNote && <p className="whitespace-pre-wrap text-base text-text-secondary">備考: {newGameNote}</p>}
+            </div>
+          )}
+          {pending && gameChanged && newGameTitle && (
+            <p className="text-md text-text-muted">承認すると「{game.title}」で登録します。</p>
+          )}
+          {pending && gameChanged && !newGameTitle && (
             <p className="text-md text-text-muted">
               提案時のゲームタイトル「{proposedGame.title}」から変更しています。承認すると「{game.title}」で登録します。
             </p>
           )}
-          {!pending && proposal.approvedGameId && (
+          {!pending && proposal.approvedGameId && !newGameTitle && (
             <p className="text-md text-text-muted">提案時のゲームタイトル「{proposedGame.title}」から変更して登録しました。</p>
           )}
           {pending && channelRegistered === false && (
@@ -181,10 +203,29 @@ export function PlaylistProposalDetail({ workflowId, data }: { workflowId: strin
 
         <WorkflowMemo workflowId={workflowId} operatorMemo={(data.operatorMemo as string) ?? null} />
 
-        {pending && (
-          <WorkflowDecisionButtons onReject={() => setConfirmAction('reject')} onApprove={() => setConfirmAction('approve')} />
-        )}
+        {pending &&
+          (needsGame ? (
+            <WorkflowDecisionButtons
+              onReject={() => setConfirmAction('reject')}
+              onApprove={() => setCreateOpen(true)}
+              approveLabel="ゲームタイトルを登録して承認"
+            />
+          ) : (
+            <WorkflowDecisionButtons onReject={() => setConfirmAction('reject')} onApprove={() => setConfirmAction('approve')} />
+          ))}
       </Card>
+
+      <GameCreateModal
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        defaultTitle={newGameTitle ?? ''}
+        onCreated={(g) => {
+          // 登録したゲームタイトルを選んだ状態にしてから、続けて再生リストを登録して承認する。
+          // 再生リストの登録だけ失敗した場合も、このゲームタイトルが選ばれたまま審査中に残る
+          setSelectedGame({ id: g.id, title: g.title });
+          void handleDecision('approve', null, g.id);
+        }}
+      />
 
       <GameSelectModal
         open={gameModalOpen}

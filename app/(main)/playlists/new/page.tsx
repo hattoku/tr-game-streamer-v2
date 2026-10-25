@@ -14,8 +14,8 @@ import { AlertIcon, CheckIcon, ChevronDownIcon, InfoIcon, XIcon } from '@/compon
 import { cn } from '@/components/ui/cn';
 import { GameSelectModal, type GameOption } from '@/components/playlists/GameSelectModal';
 import { GameCreateModal } from '@/components/games/GameCreateModal';
-import { GameProposalModal } from '@/components/playlists/GameProposalModal';
 import { PlaylistSummary } from '@/components/playlists/PlaylistSummary';
+import { MAX_GAME_PROPOSAL_NOTE_LENGTH, MAX_GAME_TITLE_LENGTH } from '@/lib/proposal-shared';
 
 // 「再生リストを追加する」。
 // document/specification/page/ページ 再生リストを追加する 仕様書.md §2.1（1カラム）、§4.1（URL入力・確認エリア）、
@@ -23,8 +23,9 @@ import { PlaylistSummary } from '@/components/playlists/PlaylistSummary';
 // フェーズ2.5ステップ7でデザイン適用（wiki/sources/2026-09-12-login-and-register-design-plan.md）。
 // 管理者は「登録する」（/api/playlists/register で即登録、§6.1）、一般ユーザーは「提案する」
 // （/api/playlists/propose で `workflows` に保存、§5.4・§6.2。フェーズ7ステップ7-4）。一般ユーザーには
-// 未登録チャンネルの説明文欄を出さず（承認時に管理者が書く）、ゲームタイトル選択モーダルのフッターは
-// ゲームタイトル追加提案モーダル（§4.2.2）を開く。AI説明文自動生成（§4.1.4）はスコープ外。
+// 未登録チャンネルの説明文欄を出さず（承認時に管理者が書く）、ゲームタイトル選択モーダルのフッターからは
+// 「新しいゲームタイトルとして入力する」に切り替えられる（§4.2.2 v3.15。ゲームタイトルと再生リストを1件の提案として同時に送る）。
+// AI説明文自動生成（§4.1.4）はスコープ外。
 // 流入元対応: `?gameId=`（ゲーム詳細から、§3.2）はゲームタイトルを事前選択、`?channelId=`（チャンネル詳細から、§3.3）は
 // 案内エリアを表示し、プレビューした再生リストのチャンネルが流入元と一致しなければ登録不可にする（§5.2、
 // サーバー側 register・propose でも `sourceChannelId` で再検証）。`?url=`（管理画面のゲームタイトル登録提案の承認後
@@ -111,7 +112,9 @@ export default function NewPlaylistPage() {
   const [selectedGame, setSelectedGame] = useState<GameOption | null>(null);
   const [gameModalOpen, setGameModalOpen] = useState(false);
   const [gameCreateModalOpen, setGameCreateModalOpen] = useState(false);
-  const [gameProposalModalOpen, setGameProposalModalOpen] = useState(false);
+  // 一般ユーザーが候補に無いゲームタイトルを新しく入力している状態（§4.2.2）。null なら通常の選択
+  const [newGame, setNewGame] = useState<{ title: string; note: string } | null>(null);
+  const [newGameTitleError, setNewGameTitleError] = useState<string | null>(null);
   const [gameError, setGameError] = useState<string | null>(null);
 
   const [channelDescription, setChannelDescription] = useState('');
@@ -257,11 +260,14 @@ export default function NewPlaylistPage() {
     !preview.playlistAlreadyRegistered &&
     !alreadyProposed &&
     !sourceChannelMismatch;
-  const canSubmit = constraintsOk && !!selectedGame && !submitting;
+  const newGameTitle = newGame?.title.trim() ?? '';
+  const newGameReady =
+    !!newGame && !!newGameTitle && newGameTitle.length <= MAX_GAME_TITLE_LENGTH && newGame.note.trim().length <= MAX_GAME_PROPOSAL_NOTE_LENGTH;
+  const canSubmit = constraintsOk && (!!selectedGame || (!isAdmin && newGameReady)) && !submitting;
 
   async function handleSubmit() {
     if (!constraintsOk || submitting) return;
-    if (!selectedGame) {
+    if (!selectedGame && !(newGame && !isAdmin)) {
       // ボタンは非活性のため通常は起きない（§7.2 の注記）。保険としてインラインのみ
       setGameError('ゲームタイトルを選択してください');
       return;
@@ -275,13 +281,20 @@ export default function NewPlaylistPage() {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
         body: JSON.stringify({
           playlistUrl: playlistUrl.trim(),
-          gameId: selectedGame.id,
+          gameId: selectedGame?.id,
+          ...(newGame && !selectedGame ? { newGameTitle, newGameNote: newGame.note.trim() } : {}),
           channelDescription: isAdmin && !preview?.channelAlreadyRegistered ? channelDescription : undefined,
           sourceChannelId: sourceChannelId ?? undefined,
         }),
       });
       const body = await res.json();
       if (!res.ok) {
+        if (body.error === 'game_exists') {
+          // 新しいゲームタイトルが同名で登録済み（§4.2.2 バリデーション）。入力欄に出す
+          setNewGameTitleError('このゲームタイトルはすでに登録されています。一覧から選んでください');
+          toast({ type: 'error', message: '登録済みのゲームタイトルです' });
+          return;
+        }
         const errors = isAdmin ? REGISTER_ERRORS : PROPOSE_ERRORS;
         const msg = errors[body.error as string] ?? errors.default;
         setSubmitError(msg.inline || null);
@@ -304,6 +317,8 @@ export default function NewPlaylistPage() {
     setUrlError(null);
     setSelectedGame(null);
     setGameError(null);
+    setNewGame(null);
+    setNewGameTitleError(null);
     setChannelDescription('');
     setSubmitError(null);
     setCompletion(null);
@@ -489,34 +504,94 @@ export default function NewPlaylistPage() {
         )}
 
         <div className="flex flex-col gap-4 p-[18px]">
-          {/* ゲームタイトル選択（§4.2）。表示部は入力要素と同じ面＋シェブロン（トークン仕様書 §10 のセレクト） */}
-          <Field label="ゲームタイトル" error={gameError}>
-            {(props) => (
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  id={props.id}
-                  aria-invalid={props['aria-invalid']}
-                  aria-describedby={props['aria-describedby']}
-                  aria-haspopup="dialog"
+          {/* ゲームタイトル選択（§4.2）。表示部は入力要素と同じ面＋シェブロン（トークン仕様書 §10 のセレクト）。
+              一般ユーザーが「新しいゲームタイトルとして入力する」を選んだ場合は入力欄に切り替える（§4.2.2） */}
+          {newGame && !isAdmin ? (
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-md text-text-tertiary">ゲームタイトル（新しいゲームタイトルとして提案します）</p>
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={() => {
-                    setGameError(null);
+                    setNewGame(null);
+                    setNewGameTitleError(null);
                     setGameModalOpen(true);
                   }}
                   disabled={submitting}
-                  className={cn(INPUT_CLASS, 'flex items-center justify-between gap-2 text-left', !selectedGame && 'text-input-placeholder')}
                 >
-                  <span className="truncate">{selectedGame ? selectedGame.title : 'ゲームタイトルを選択する'}</span>
-                  <ChevronDownIcon size={16} className="shrink-0 text-text-muted" />
-                </button>
-                {selectedGame && (
-                  <Button variant="ghost" size="sm" aria-label="ゲームタイトルの選択を解除" onClick={() => setSelectedGame(null)} disabled={submitting}>
-                    <XIcon size={16} />
-                  </Button>
-                )}
+                  一覧から選び直す
+                </Button>
               </div>
-            )}
-          </Field>
+              <Field
+                label={`ゲームタイトル名 *（${newGameTitle.length}/${MAX_GAME_TITLE_LENGTH}）`}
+                error={
+                  newGameTitleError ??
+                  (newGameTitle.length > MAX_GAME_TITLE_LENGTH ? `${MAX_GAME_TITLE_LENGTH}文字以内で入力してください` : null)
+                }
+              >
+                {(props) => (
+                  <Input
+                    {...props}
+                    value={newGame.title}
+                    onChange={(e) => {
+                      setNewGame({ ...newGame, title: e.target.value });
+                      setNewGameTitleError(null);
+                    }}
+                    onBlur={() => {
+                      if (!newGame.title.trim()) setNewGameTitleError('ゲームタイトル名を入力してください');
+                    }}
+                    disabled={submitting}
+                  />
+                )}
+              </Field>
+              <Field
+                label={`備考（${newGame.note.trim().length}/${MAX_GAME_PROPOSAL_NOTE_LENGTH}）`}
+                hint="発売機種・シリーズ情報など補足があれば記入してください"
+                error={
+                  newGame.note.trim().length > MAX_GAME_PROPOSAL_NOTE_LENGTH ? `${MAX_GAME_PROPOSAL_NOTE_LENGTH}文字以内で入力してください` : null
+                }
+              >
+                {(props) => (
+                  <Textarea
+                    {...props}
+                    value={newGame.note}
+                    onChange={(e) => setNewGame({ ...newGame, note: e.target.value })}
+                    disabled={submitting}
+                    rows={2}
+                  />
+                )}
+              </Field>
+            </div>
+          ) : (
+            <Field label="ゲームタイトル" error={gameError}>
+              {(props) => (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    id={props.id}
+                    aria-invalid={props['aria-invalid']}
+                    aria-describedby={props['aria-describedby']}
+                    aria-haspopup="dialog"
+                    onClick={() => {
+                      setGameError(null);
+                      setGameModalOpen(true);
+                    }}
+                    disabled={submitting}
+                    className={cn(INPUT_CLASS, 'flex items-center justify-between gap-2 text-left', !selectedGame && 'text-input-placeholder')}
+                  >
+                    <span className="truncate">{selectedGame ? selectedGame.title : 'ゲームタイトルを選択する'}</span>
+                    <ChevronDownIcon size={16} className="shrink-0 text-text-muted" />
+                  </button>
+                  {selectedGame && (
+                    <Button variant="ghost" size="sm" aria-label="ゲームタイトルの選択を解除" onClick={() => setSelectedGame(null)} disabled={submitting}>
+                      <XIcon size={16} />
+                    </Button>
+                  )}
+                </div>
+              )}
+            </Field>
+          )}
 
           {submitError && (
             <p role="alert" className="flex items-start gap-[6px] text-md text-input-error">
@@ -539,13 +614,16 @@ export default function NewPlaylistPage() {
         games={games}
         onSelect={setSelectedGame}
         onAddNew={isAdmin ? () => setGameCreateModalOpen(true) : undefined}
-        onPropose={isAdmin ? undefined : () => setGameProposalModalOpen(true)}
-      />
-      <GameProposalModal
-        open={gameProposalModalOpen}
-        onOpenChange={setGameProposalModalOpen}
-        defaultPlaylistUrl={playlistUrl.trim()}
-        onBack={() => setGameModalOpen(true)}
+        onEnterNew={
+          isAdmin
+            ? undefined
+            : (query) => {
+                setSelectedGame(null);
+                setGameError(null);
+                setNewGameTitleError(null);
+                setNewGame({ title: query, note: '' });
+              }
+        }
       />
       <GameCreateModal
         open={gameCreateModalOpen}

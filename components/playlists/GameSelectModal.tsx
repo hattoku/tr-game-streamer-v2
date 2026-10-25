@@ -3,7 +3,7 @@
  * 検索欄でインクリメンタル絞り込み、行クリックで選択して閉じる。
  * 候補のサムネイルは games.packageImageUrl（楽天ブックスの縦長パッケージ画像。無ければプレースホルダー）。
  * フッターは案内文「お探しのゲームタイトルが見つかりませんか？」＋secondaryボタン。
- * 一般ユーザーには`onPropose`で「ゲームタイトルの登録を提案する」（§4.2.2 提案モーダル、フェーズ7ステップ7-4）、
+ * 一般ユーザーには`onEnterNew`で「新しいゲームタイトルとして入力する」（§4.2.2 v3.15。検索欄の文字を渡し、フォーム側で入力に切り替える）、
  * 管理者には`onAddNew`で「新しいゲームタイトルを登録する」（GameCreateModal、フェーズ4.5ステップ2）を出す。
  * どちらも渡されなければフッターは出さない。
  */
@@ -28,12 +28,11 @@ interface GameSelectModalProps {
   onSelect: (game: GameOption) => void;
   /** 管理者専用の直接登録モーダルを開く。渡された場合のみフッターリンクを表示する */
   onAddNew?: () => void;
-  /** 一般ユーザー向けのゲームタイトル追加提案モーダルを開く。onAddNew とはどちらか一方を渡す */
-  onPropose?: () => void;
+  /** 一般ユーザー向け: 新しいゲームタイトルとして入力する（検索欄の文字を渡す）。onAddNew とはどちらか一方を渡す */
+  onEnterNew?: (query: string) => void;
 }
 
-export function GameSelectModal({ open, onOpenChange, games, onSelect, onAddNew, onPropose }: GameSelectModalProps) {
-  const footerAction = onAddNew ?? onPropose;
+export function GameSelectModal({ open, onOpenChange, games, onSelect, onAddNew, onEnterNew }: GameSelectModalProps) {
   const [search, setSearch] = useState('');
 
   const filtered = useMemo(() => {
@@ -91,19 +90,22 @@ export function GameSelectModal({ open, onOpenChange, games, onSelect, onAddNew,
           </ul>
         )}
 
-        {footerAction && (
+        {(onAddNew || onEnterNew) && (
           <div className="flex flex-col gap-3 border-t border-border-divider pt-4 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-base text-text-muted">お探しのゲームタイトルが見つかりませんか？</p>
             <Button
               variant="secondary"
               onClick={() => {
+                // 閉じると検索欄がリセットされるため、先に値を取っておく
+                const query = search.trim();
                 handleOpenChange(false);
-                footerAction();
+                if (onAddNew) onAddNew();
+                else onEnterNew?.(query);
               }}
               className="w-full sm:w-auto"
             >
               <PlusIcon size={14} />
-              {onAddNew ? '新しいゲームタイトルを登録する' : 'ゲームタイトルの登録を提案する'}
+              {onAddNew ? '新しいゲームタイトルを登録する' : '新しいゲームタイトルとして入力する'}
             </Button>
           </div>
         )}

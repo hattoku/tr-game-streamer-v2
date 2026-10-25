@@ -12,7 +12,8 @@ import { GAME_PROPOSAL_TYPE, PLAYLIST_PROPOSAL_TYPE } from '@/lib/proposal-share
 // - 再生リスト登録提案の承認: /api/playlists/register と同じ登録処理（lib/playlist-registration.ts）を実行する。
 //   `gameId` を渡すと提案のゲームタイトルを差し替えて登録し、editHistory に記録する（§10.1 の最小版、2026-10-25 ユーザー決定）。
 //   未登録チャンネルの説明文は `channelDescription`（任意）。登録に失敗したら審査中のまま残す。
-// - ゲームタイトル登録提案の承認: 管理者が先に GameCreateModal（POST /api/admin/games）で登録し、その `createdGameId` を渡す。
+//   新しいゲームタイトル付きの提案（proposalData.gameId が null、§14.3 v10.1）は、管理者が GameCreateModal で登録した gameId を渡す。
+// - ゲームタイトル登録提案（旧形式、v10.1 以降は新規作成なし）の承認: 管理者が先に GameCreateModal（POST /api/admin/games）で登録し、その `createdGameId` を渡す。
 // operator/owner共通のためロール別の分岐は無い（requireAdminのみで判定）。
 // STEP1/STEP2の二段階フローは実装しないため、承認・却下の記録は常にstep2Historyへ追記する
 // （step1Historyは使わない。AI運営者・ジャンル別担当アサインが未実装のため）。
@@ -71,8 +72,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const updates: Record<string, unknown> = {};
     if (action === 'approve' && workflow.type === PLAYLIST_PROPOSAL_TYPE) {
       const proposal = workflow.proposalData ?? {};
-      const originalGameId = proposal.gameId as string;
+      // 新しいゲームタイトル付きの提案（§14.3 v10.1）は gameId が null。管理者が先にゲームタイトルを登録（または選択）して gameId を渡す
+      const originalGameId = (proposal.gameId as string | null) ?? null;
       const gameId = typeof body.gameId === 'string' && body.gameId ? body.gameId : originalGameId;
+      if (!gameId) {
+        return NextResponse.json({ error: 'game_required' }, { status: 400 });
+      }
 
       // 同時承認で二重登録しないよう、承認処理中の印（approvingAt）をトランザクションで先に取る。
       // 処理が途中で落ちた場合に詰まらないよう、2分より古い印は取り直してよい

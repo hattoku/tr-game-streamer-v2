@@ -2,8 +2,8 @@
 
 ## [2026-10-25] ingest | session: フェーズ7ステップ7-4 一般ユーザーの再生リスト提案フロー
 全体計画の次ステップとして 7-4 を計画。審査は通報と同じ単一ステップの簡易版、承認前にゲームタイトルを差し替え可とユーザー決定。
-`/api/playlists/propose`・`/api/games/propose` を追加し、提案は `workflows` に API 経由で保存（rules でクライアント直接作成を禁止）。
-登録処理を `lib/playlist-registration.ts` に切り出して承認時に共用。`/playlists/new` を一般ユーザーに開放、管理画面の一覧を通報/提案の2セクションに。
+`/api/playlists/propose` を追加し、提案は `workflows` に API 経由で保存（rules でクライアント直接作成を禁止）。
+登録処理を `lib/playlist-registration.ts` に切り出して承認時に共用。stg テストの指摘で、新しいゲームタイトルも同じフォームで再生リストと同時に提案する形に作り直し（ユーザー決定）。`/playlists/new` を一般ユーザーに開放、管理画面の一覧を通報/提案の2セクションに。
 → [[2026-10-25-phase7-step7-4-proposals]]
 
 ## [2026-10-24] ingest | session: 別セッションのコミット2件を記録（関連ゲーム見出し・Node.js 24 更新）
