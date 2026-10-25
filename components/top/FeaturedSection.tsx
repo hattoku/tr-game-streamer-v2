@@ -1,7 +1,8 @@
 /**
  * TOPページ 注目の再生リストセクション（ページ top 仕様書 §6）。未ログイン・ログイン済み問わず表示。
  * ジャンルタブ（総合＋対象があるジャンルのみ、§6.3実装注記）で絞り込み、加重平均スコアの高い順に
- * カルーセル表示する。スコアなし（レビュー0件）は対象外。対象が1件も無ければセクション自体を出さない。
+ * カルーセル表示する。スコアなし（レビュー0件）と、ログイン中のユーザーが完走済みの再生リスト（`excludePlaylistIds`、
+ * §6.4）は対象外。対象が1件も無ければセクション自体を出さない。
  * タブは`/mylist`のフィルタタブ（app/(main)/mylist/page.tsx）と同じく、Radix Tabsを絞り込みUIとしてのみ
  * 使い（TabsContentは使わず、選択状態に応じてこのコンポーネント側でカード配列をフィルタする）。
  */
@@ -20,8 +21,20 @@ interface Genre {
 
 const OVERALL = '__overall__';
 
-export function FeaturedSection({ playlists, genres }: { playlists: PlaylistSummary[]; genres: Genre[] }) {
-  const scored = useMemo(() => sortPlaylists(playlists.filter((p) => p.score != null), 'score'), [playlists]);
+export function FeaturedSection({
+  playlists,
+  genres,
+  excludePlaylistIds,
+}: {
+  playlists: PlaylistSummary[];
+  genres: Genre[];
+  /** 表示しない再生リストID（ログイン中のユーザーが完走済みのもの、§6.4） */
+  excludePlaylistIds: Set<string>;
+}) {
+  const scored = useMemo(
+    () => sortPlaylists(playlists.filter((p) => p.score != null && !excludePlaylistIds.has(p.id)), 'score'),
+    [playlists, excludePlaylistIds],
+  );
 
   // 対象（スコア付き再生リスト）が1件以上あるジャンルのみタブとして出す（§6.3実装注記）
   const availableGenres = useMemo(() => {
@@ -32,10 +45,13 @@ export function FeaturedSection({ playlists, genres }: { playlists: PlaylistSumm
 
   const [genreId, setGenreId] = useState<string>(OVERALL);
 
+  // 除外対象が後から届いてタブが消えた場合は「総合」に戻す
+  const activeGenreId = availableGenres.some((g) => g.id === genreId) ? genreId : OVERALL;
+
   const filtered = useMemo(() => {
-    if (genreId === OVERALL) return scored;
-    return scored.filter((p) => p.gameGenreIds.includes(genreId));
-  }, [scored, genreId]);
+    if (activeGenreId === OVERALL) return scored;
+    return scored.filter((p) => p.gameGenreIds.includes(activeGenreId));
+  }, [scored, activeGenreId]);
 
   if (scored.length === 0) return null;
 
@@ -45,7 +61,7 @@ export function FeaturedSection({ playlists, genres }: { playlists: PlaylistSumm
       viewAllHref="/playlists"
       extra={
         availableGenres.length > 0 && (
-          <Tabs value={genreId} onValueChange={setGenreId}>
+          <Tabs value={activeGenreId} onValueChange={setGenreId}>
             <TabsList aria-label="ジャンルで絞り込み" scrollable>
               <TabsTrigger value={OVERALL}>総合</TabsTrigger>
               {availableGenres.map((g) => (
