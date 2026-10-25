@@ -32,7 +32,10 @@ export interface GameOption {
 }
 
 // 楽天の検索を始めるまでの待ち時間と、検索する最小文字数
-const RAKUTEN_DEBOUNCE_MS = 800;
+// サーバー側（/api/games/rakuten-search）はユーザーごとに1.5秒の間隔を求めるため、それより長く待つ。
+// それでも 429 が返ったら（連続入力の間が詰まった場合）少し待って1回だけ取り直す
+const RAKUTEN_DEBOUNCE_MS = 1600;
+const RAKUTEN_RETRY_MS = 1600;
 const RAKUTEN_MIN_QUERY = 2;
 
 interface GameSelectModalProps {
@@ -51,7 +54,7 @@ interface GameSelectModalProps {
 export function GameSelectModal({ open, onOpenChange, games, onSelect, onAddNew, onEnterNew, onPickRakuten }: GameSelectModalProps) {
   const [search, setSearch] = useState('');
   // 楽天ブックスの候補（onPickRakuten があるときだけ使う）。query は結果がどの検索語のものか
-  const [rakuten, setRakuten] = useState<{ query: string; status: 'loading' | 'done' | 'error'; results: RakutenGameSearchResult[] } | null>(null);
+  const [rakuten, setRakuten] = useState<{ query: string; status: 'loading' | 'done' | 'error' | 'rate_limited'; results: RakutenGameSearchResult[] } | null>(null);
 
   const filtered = useMemo(() => games.filter((g) => matchesGameQuery(g, search)), [games, search]);
 
@@ -65,12 +68,18 @@ export function GameSelectModal({ open, onOpenChange, games, onSelect, onAddNew,
       try {
         if (!auth.currentUser) throw new Error('not signed in');
         const idToken = await auth.currentUser.getIdToken();
-        const res = await fetch(`/api/games/rakuten-search?title=${encodeURIComponent(query)}`, {
-          headers: { Authorization: `Bearer ${idToken}` },
-        });
+        const call = () =>
+          fetch(`/api/games/rakuten-search?title=${encodeURIComponent(query)}`, { headers: { Authorization: `Bearer ${idToken}` } });
+        let res = await call();
+        if (res.status === 429) {
+          await new Promise((resolve) => setTimeout(resolve, RAKUTEN_RETRY_MS));
+          res = await call();
+        }
         const body = await res.json();
         setRakuten((prev) =>
-          prev?.query === query ? { query, status: res.ok ? 'done' : 'error', results: res.ok ? (body.results ?? []) : [] } : prev,
+          prev?.query === query
+            ? { query, status: res.ok ? 'done' : res.status === 429 ? 'rate_limited' : 'error', results: res.ok ? (body.results ?? []) : [] }
+            : prev,
         );
       } catch {
         setRakuten((prev) => (prev?.query === query ? { query, status: 'error', results: [] } : prev));
@@ -142,6 +151,10 @@ export function GameSelectModal({ open, onOpenChange, games, onSelect, onAddNew,
               <p className="px-2 pb-1 text-md text-text-tertiary">楽天ブックスの候補（まだ登録されていないゲーム）</p>
               {rakutenStatus === 'loading' ? (
                 <p className="px-2 py-3 text-base text-text-muted">楽天ブックスで探しています…</p>
+              ) : rakutenStatus === 'rate_limited' ? (
+                <p className="px-2 py-3 text-base text-text-muted">
+                  楽天ブックスの検索が混み合っています。しばらく待ってから入力し直すか、「新しいゲームタイトルとして入力する」で入力してください
+                </p>
               ) : rakutenStatus === 'error' ? (
                 <p className="px-2 py-3 text-base text-text-muted">楽天ブックスの候補を取得できませんでした。少し待ってから入力し直してください</p>
               ) : rakutenCandidates.length === 0 ? (

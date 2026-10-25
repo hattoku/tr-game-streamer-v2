@@ -12,7 +12,18 @@ const HOURLY_LIMIT = 60;
 const MAX_QUERY_LENGTH = 100;
 const recentRequests = new Map<string, number[]>();
 
+// 1時間より古い記録しか無いユーザーを時々捨てる（Map が増え続けないように）
+let lastSweep = 0;
+function sweep(now: number) {
+  if (now - lastSweep < 10 * 60 * 1000) return;
+  lastSweep = now;
+  for (const [uid, history] of recentRequests) {
+    if (now - (history[history.length - 1] ?? 0) >= 60 * 60 * 1000) recentRequests.delete(uid);
+  }
+}
+
 function isRateLimited(uid: string, now: number): boolean {
+  sweep(now);
   const history = (recentRequests.get(uid) ?? []).filter((t) => now - t < 60 * 60 * 1000);
   const last = history[history.length - 1] ?? 0;
   if (now - last < MIN_INTERVAL_MS || history.length >= HOURLY_LIMIT) {

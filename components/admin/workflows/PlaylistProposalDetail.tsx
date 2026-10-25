@@ -49,6 +49,7 @@ const APPROVE_ERRORS: Record<string, string> = {
   playlist_not_found: '再生リストがYouTube上で見つかりませんでした',
   game_not_found: 'ゲームタイトルが見つかりませんでした。選び直してください',
   game_required: 'ゲームタイトルを登録するか、選んでから承認してください',
+  already_processed: 'ほかの操作で処理中か、すでに処理済みです。画面を再読み込みして確認してください',
 };
 
 export function PlaylistProposalDetail({ workflowId, data }: { workflowId: string; data: DocumentData }) {

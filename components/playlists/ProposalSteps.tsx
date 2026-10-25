@@ -36,7 +36,7 @@ export function ProposalSteps({
                 className={cn(
                   'flex size-7 shrink-0 items-center justify-center rounded-full text-md font-semibold',
                   active && 'bg-gradient-primary text-white shadow-primary',
-                  done && 'bg-bg-selected text-toast-success',
+                  done && 'bg-bg-selected text-text-secondary',
                   isRejectedStep && 'bg-bg-selected text-input-error',
                   muted && 'bg-bg-btn text-text-muted',
                 )}

@@ -25,7 +25,7 @@
  */
 'use client';
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { collection, getDocs } from 'firebase/firestore';
 import { db, auth } from '@/lib/firebase';
 import { Modal } from '@/components/ui/Modal';
@@ -131,7 +131,8 @@ export function GameCreateModal({ open, onOpenChange, initial, defaultTitle, pre
   // モーダルを開くたびにフォームをリセットする（TagEditModalと同じ
   // 「propが変わったらstateを調整する」パターン。effect内のsetStateより1テンポ早い）。
   // 編集モードでは initial の値で初期化する（楽天URL・画像URLも各欄にそのまま見える）
-  const prefillGenreAppliedRef = useRef(false);
+  // 開いた回数。提案から開いたときのジャンル解決を「開くたびに一度だけ」走らせる effect の依存に使う
+  const [openCount, setOpenCount] = useState(0);
   const [wasOpen, setWasOpen] = useState(open);
   if (open !== wasOpen) {
     setWasOpen(open);
@@ -158,15 +159,16 @@ export function GameCreateModal({ open, onOpenChange, initial, defaultTitle, pre
       setSelectedRakuten(prefillRakuten ? { title: prefillRakuten.title, imageUrl: prefillRakuten.imageUrl } : null);
       setRakutenItemFetching(false);
       setRakutenItemError(null);
-      prefillGenreAppliedRef.current = false;
+      setOpenCount((c) => c + 1);
     }
   }
 
   // 提案から開いたときの楽天の商品のジャンル・テーマは、マスタ（genres/themes）が揃ってから一度だけ解決して入れる
   const prefillBooksGenreId = !initial ? (prefill?.rakuten?.booksGenreId ?? '') : '';
+  const genresLoaded = genres.length > 0;
   useEffect(() => {
-    if (!open || !prefillBooksGenreId || genres.length === 0 || prefillGenreAppliedRef.current) return;
-    prefillGenreAppliedRef.current = true;
+    if (!open || !prefillBooksGenreId || !genresLoaded) return;
+    let cancelled = false;
     (async () => {
       try {
         const idToken = await getIdToken();
@@ -175,14 +177,18 @@ export function GameCreateModal({ open, onOpenChange, initial, defaultTitle, pre
         });
         if (!res.ok) return;
         const body = await res.json();
-        applyRakutenGenre(body.genre ?? null);
+        // 解決を待つ間にモーダルを閉じた・開き直した場合は反映しない
+        if (!cancelled) applyRakutenGenre(body.genre ?? null);
       } catch (e) {
         console.error('楽天ブックスジャンル解決に失敗', e);
       }
     })();
-    // applyRakutenGenre は描画ごとに作り直される関数のため依存に含めない（開くたびに一度だけ）
+    return () => {
+      cancelled = true;
+    };
+    // applyRakutenGenre は描画ごとに作り直される関数のため依存に含めない（openCount で開くたびに一度だけ）
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, prefillBooksGenreId, genres.length]);
+  }, [open, openCount, prefillBooksGenreId, genresLoaded]);
 
   useEffect(() => {
     if (!open || genres.length > 0) return;

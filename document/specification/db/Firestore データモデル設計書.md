@@ -943,4 +943,4 @@ ai_operators ──── (1) users
 | v1.20 | 2026-10-24 | 通報承認時のレビュー処理を論理削除に変更（管理 審査ワークフロー仕様書 v9.0 §3.1）。`reviews` に `isHidden`・`hiddenAt`・`hiddenByWorkflowId` を追加。`workflows.reportData.hiddenReviewSnapshot` に承認時点のレビュー内容を退避する |
 | v1.21 | 2026-10-24 | フェーズ7ステップ7-3-2（お問い合わせ履歴）。§3.17 `inquiries` に `lastAdminMessageAt`・`userLastReadAt`・`awaitingAdminReply` を追加し、送信者本人の読み取りを API 経由に変更。§3.30 `notifications` に `inquiry_reply` 種別と `inquiryId` を追加 |
 | v1.22 | 2026-10-25 | フェーズ7ステップ7-4（一般ユーザーの提案フロー）。§3.15 `workflows` に `proposalData`（`playlist_register`・`game_title_register`）と `editHistory` の構造を定義し、提案の作成を API 経由に限定。`playlists.proposedBy` を追加 |
-| v1.23 | 2026-10-25 | 再生リスト提案フローの作り込み。`games.aliases`（別名）、`workflows.proposalData` に `newGamePlatforms`・`newGameRakuten`・`rejectReasonCode`、`notifications` に `review_result` 種別と `workflowId` を追加 |
+| v1.23 | 2026-10-25 | 再生リスト提案フローの作り込み。`workflows` の本人による直接読み取りを通報（`review_report`）に限定（提案は運営メモ・内部メモを含むため提案履歴 API 経由）。`games.aliases`（別名）、`workflows.proposalData` に `newGamePlatforms`・`newGameRakuten`・`rejectReasonCode`、`notifications` に `review_result` 種別と `workflowId` を追加 |

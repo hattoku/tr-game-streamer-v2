@@ -43,6 +43,3 @@ export interface ProposalRakutenItem {
   hardware: string;
   booksGenreId: string;
 }
-
-/** 新しいゲームタイトルで選べる機種の上限（候補は lib/game-shared.ts の PLATFORM_OPTIONS） */
-export const MAX_GAME_PROPOSAL_PLATFORMS = 18;

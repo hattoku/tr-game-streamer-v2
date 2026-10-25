@@ -139,18 +139,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (action === 'reject' && workflow.type === PLAYLIST_PROPOSAL_TYPE) {
       updates['proposalData.rejectReasonCode'] = body.rejectReasonCode;
     }
-    const batch = adminDb.batch();
-    batch.update(workflowRef, {
-      ...updates,
-      status: action === 'approve' ? 'approved' : 'rejected',
-      step2History: [...(workflow.step2History ?? []), historyEntry],
-      updatedAt: now,
-    });
     // 審査結果通知（§14.4）。再生リスト登録提案のみ（旧形式のゲームタイトル登録提案は対象外）
+    let notification: Record<string, unknown> | null = null;
     if (workflow.type === PLAYLIST_PROPOSAL_TYPE && workflow.submittedBy) {
       const playlistTitle = (workflow.proposalData?.title as string) ?? '';
       const registeredPlaylistId = (updates['proposalData.registeredPlaylistId'] as string | undefined) ?? null;
-      batch.set(adminDb.collection('notifications').doc(), {
+      notification = {
         userId: workflow.submittedBy,
         type: 'review_result',
         workflowId,
@@ -162,9 +156,28 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
             : `再生リスト「${playlistTitle}」の提案は見送りになりました（${rejectReasonLabel}）`,
         isRead: false,
         createdAt: now,
-      });
+      };
     }
-    await batch.commit();
+    // 状態の確定と通知はトランザクションで一度だけ行う。並行した承認・却下（却下どうしも含む）で状態と通知が食い違わないよう、
+    // 審査中のままであること、却下なら承認処理中の印（approvingAt）が有効でないことを確かめてから書く
+    const committed = await adminDb.runTransaction(async (tx) => {
+      const snap = await tx.get(workflowRef);
+      const current = snap.data();
+      if (!current || (current.status !== 'reviewing_lv1' && current.status !== 'reviewing_lv2')) return false;
+      const approvingAt = current.approvingAt?.toMillis?.() ?? 0;
+      if (action === 'reject' && approvingAt && now.getTime() - approvingAt < APPROVING_LOCK_MS) return false;
+      tx.update(workflowRef, {
+        ...updates,
+        status: action === 'approve' ? 'approved' : 'rejected',
+        step2History: [...(current.step2History ?? []), historyEntry],
+        updatedAt: now,
+      });
+      if (notification) tx.set(adminDb.collection('notifications').doc(), notification);
+      return true;
+    });
+    if (!committed) {
+      return NextResponse.json({ error: 'already_processed' }, { status: 409 });
+    }
     return NextResponse.json({ ok: true });
   }
 

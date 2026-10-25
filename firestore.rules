@@ -208,7 +208,10 @@ service cloud.firestore {
     // workflows — 審査ワークフロー（提案・通報）
     // ---------------------------------------------------------------------
     match /workflows/{workflowId} {
-      allow read: if isAdmin() || (isSignedIn() && resource.data.submittedBy == request.auth.uid);
+      // 本人が直接読めるのは通報（ReportModal の重複チェック）だけ。提案は運営メモ・内部メモ（step2History.comment）を
+      // 含むため、提案者には GET /api/playlists/proposals（表示用の項目だけ）で返す（ページ 再生リストを追加する 仕様書 §9.4）
+      allow read: if isAdmin()
+        || (isSignedIn() && resource.data.submittedBy == request.auth.uid && resource.data.type == 'review_report');
 
       // クライアントから直接作れるのは通報（ReportModal）だけ。提案（playlist_register・game_title_register）は
       // 内容をサーバー側で検証するため API（POST /api/playlists/propose、Admin SDK）経由のみ（7-4）

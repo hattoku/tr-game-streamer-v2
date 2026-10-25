@@ -32,11 +32,20 @@ import { AlertIcon } from '@/components/ui/icons';
 
 type Mode = 'login' | 'signup';
 
-/** `next` クエリを、サイト内のパス（`/` 始まりで `//` 始まりでない。/login 自体は除く）のときだけ返す（オープンリダイレクト防止） */
+/**
+ * `next` クエリを、同じオリジンのサイト内パスのときだけ返す（オープンリダイレクト防止）。
+ * 制御文字・空白を含むもの（URL解決時にタブ等が除かれて `//外部` になりうる）と、/login 自体は受け付けない
+ */
 function safeNextPath(next: string | null): string | null {
-  if (!next || !next.startsWith('/') || next.startsWith('//') || next.startsWith('/\\')) return null;
-  if (next === '/login' || next.startsWith('/login?') || next.startsWith('/login/')) return null;
-  return next;
+  if (!next || !next.startsWith('/') || /[\u0000-\u0020\u007f\\]/.test(next)) return null;
+  try {
+    const base = window.location.origin;
+    const url = new URL(next, base);
+    if (url.origin !== base || url.pathname === '/login' || url.pathname.startsWith('/login/')) return null;
+    return `${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    return null;
+  }
 }
 
 /** ログイン⇔アカウント作成の切り替えリンク先（next を引き継ぐ） */
