@@ -493,6 +493,7 @@ YouTubeチャンネルの情報。
 | `step2History` | map[] | ✅ | STEP2の審査履歴（配列） |
 | `editHistory` | map[] | ✅ | 申請内容の編集履歴（配列） |
 | `operatorMemo` | string? | — | 運営メモ |
+| `approvingAt` | Timestamp? | — | 再生リスト登録提案の承認処理中の印（同時承認の防止、2分で失効。処理後は削除。v1.22） |
 | `submittedAt` | Timestamp | ✅ | 提出日時 |
 | `updatedAt` | Timestamp | ✅ | 最終更新日時 |
 

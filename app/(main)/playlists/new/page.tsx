@@ -315,7 +315,11 @@ export default function NewPlaylistPage() {
   if (completion && !isAdmin) {
     return (
       <div className="mx-auto max-w-[720px]">
-        <SectionHeading className="mb-2">📨 提案を受け付けました</SectionHeading>
+        {/* 仕様の「📨」は管理者向け完了画面（✅）と同じくアイコンで描く */}
+        <SectionHeading className="mb-2 flex items-center gap-2">
+          <CheckIcon size={22} className="shrink-0 text-toast-success" />
+          提案を受け付けました
+        </SectionHeading>
         <p className="mb-5 text-base text-text-secondary">ありがとうございます！提案内容を確認後、プレミテに掲載します。</p>
         <Card>
           <PlaylistSummary
@@ -541,6 +545,7 @@ export default function NewPlaylistPage() {
         open={gameProposalModalOpen}
         onOpenChange={setGameProposalModalOpen}
         defaultPlaylistUrl={playlistUrl.trim()}
+        onBack={() => setGameModalOpen(true)}
       />
       <GameCreateModal
         open={gameCreateModalOpen}

@@ -30,6 +30,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'game_exists' }, { status: 409 });
   }
 
+  // 同じタイトルの審査中の提案があれば重ねて作らない（ノイズ対策。再生リスト提案の「提案済み」と同じ考え方）
+  const sameProposals = await adminDb
+    .collection('workflows')
+    .where('type', '==', GAME_PROPOSAL_TYPE)
+    .where('proposalData.gameTitle', '==', gameTitle)
+    .get();
+  if (sameProposals.docs.some((d) => d.data().status === 'reviewing_lv1' || d.data().status === 'reviewing_lv2')) {
+    return NextResponse.json({ error: 'already_proposed' }, { status: 409 });
+  }
+
   await adminDb.collection('workflows').add(
     newWorkflowRecord(GAME_PROPOSAL_TYPE, auth.uid, { playlistUrl, gameTitle, note: note || null }),
   );

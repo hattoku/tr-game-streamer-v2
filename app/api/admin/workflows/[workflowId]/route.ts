@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/api-auth';
 import { adminDb } from '@/lib/firebase-admin';
 import { recalculatePlaylistScore } from '@/lib/review-score';
-import { registerPlaylist } from '@/lib/playlist-registration';
+import { FieldValue } from 'firebase-admin/firestore';
+import { registerPlaylist, type PlaylistApiError } from '@/lib/playlist-registration';
 import { GAME_PROPOSAL_TYPE, PLAYLIST_PROPOSAL_TYPE } from '@/lib/proposal-shared';
 
 // 審査ワークフローの承認・却下・運営メモ更新API（管理_審査ワークフロー仕様書 §9, §11）。
@@ -15,6 +16,9 @@ import { GAME_PROPOSAL_TYPE, PLAYLIST_PROPOSAL_TYPE } from '@/lib/proposal-share
 // operator/owner共通のためロール別の分岐は無い（requireAdminのみで判定）。
 // STEP1/STEP2の二段階フローは実装しないため、承認・却下の記録は常にstep2Historyへ追記する
 // （step1Historyは使わない。AI運営者・ジャンル別担当アサインが未実装のため）。
+// 再生リスト登録提案の承認処理中の印（approvingAt）の有効期間
+const APPROVING_LOCK_MS = 2 * 60 * 1000;
+
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ workflowId: string }> }) {
   const auth = await requireAdmin(request);
   if ('errorResponse' in auth) return auth.errorResponse;
@@ -69,6 +73,22 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       const proposal = workflow.proposalData ?? {};
       const originalGameId = proposal.gameId as string;
       const gameId = typeof body.gameId === 'string' && body.gameId ? body.gameId : originalGameId;
+
+      // 同時承認で二重登録しないよう、承認処理中の印（approvingAt）をトランザクションで先に取る。
+      // 処理が途中で落ちた場合に詰まらないよう、2分より古い印は取り直してよい
+      const claimed = await adminDb.runTransaction(async (tx) => {
+        const snap = await tx.get(workflowRef);
+        const current = snap.data();
+        if (!current || (current.status !== 'reviewing_lv1' && current.status !== 'reviewing_lv2')) return false;
+        const approvingAt = current.approvingAt?.toMillis?.() ?? 0;
+        if (approvingAt && now.getTime() - approvingAt < APPROVING_LOCK_MS) return false;
+        tx.update(workflowRef, { approvingAt: now });
+        return true;
+      });
+      if (!claimed) {
+        return NextResponse.json({ error: 'already_processed' }, { status: 409 });
+      }
+
       const result = await registerPlaylist({
         playlistUrl: proposal.playlistUrl as string,
         gameId,
@@ -76,13 +96,24 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         registeredBy: uid,
         proposedBy: workflow.submittedBy as string,
       });
-      if ('error' in result) {
-        return NextResponse.json({ error: result.error, message: result.message }, { status: result.status });
+      let registered: { playlistId: string; gameName: string } | null = 'error' in result ? null : result;
+      // 前回の承認で登録まで済み、ワークフローの更新だけ失敗していた場合（この提案者の提案として登録済み）は承認として扱う
+      if ('error' in result && result.error === 'already_registered' && proposal.youtubePlaylistId) {
+        const existing = (await adminDb.collection('playlists').doc(proposal.youtubePlaylistId as string).get()).data();
+        if (existing && existing.proposedBy === workflow.submittedBy) {
+          registered = { playlistId: proposal.youtubePlaylistId as string, gameName: (existing.gameName as string) ?? '' };
+        }
       }
-      updates['proposalData.registeredPlaylistId'] = result.playlistId;
+      if (!registered) {
+        await workflowRef.update({ approvingAt: FieldValue.delete() });
+        const error = result as PlaylistApiError;
+        return NextResponse.json({ error: error.error, message: error.message }, { status: error.status });
+      }
+      updates.approvingAt = FieldValue.delete();
+      updates['proposalData.registeredPlaylistId'] = registered.playlistId;
       if (gameId !== originalGameId) {
         updates['proposalData.approvedGameId'] = gameId;
-        updates['proposalData.approvedGameName'] = result.gameName;
+        updates['proposalData.approvedGameName'] = registered.gameName;
         updates.editHistory = [
           ...(workflow.editHistory ?? []),
           { editedAt: now, operatorId: uid, field: 'gameId', from: originalGameId, to: gameId },

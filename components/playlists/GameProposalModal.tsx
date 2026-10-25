@@ -13,6 +13,7 @@ import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Field, Input, Textarea } from '@/components/ui/Input';
 import { useToast } from '@/components/ui/Toast';
+import { CheckIcon } from '@/components/ui/icons';
 import { MAX_GAME_PROPOSAL_NOTE_LENGTH, MAX_GAME_TITLE_LENGTH } from '@/lib/proposal-shared';
 
 interface GameProposalModalProps {
@@ -20,6 +21,8 @@ interface GameProposalModalProps {
   onOpenChange: (open: boolean) => void;
   /** 再生リスト追加フォームで入力済みのURL（あれば自動入力する） */
   defaultPlaylistUrl: string;
+  /** 「戻る」: ゲームタイトル選択モーダルへ戻る（§4.2.2 のフッター） */
+  onBack: () => void;
 }
 
 function isPlaylistUrl(url: string): boolean {
@@ -33,9 +36,10 @@ function isPlaylistUrl(url: string): boolean {
 const SUBMIT_ERRORS: Record<string, { field: 'url' | 'title' | null; message: string }> = {
   invalid_url: { field: 'url', message: 'YouTubeの再生リストURLを入力してください' },
   game_exists: { field: 'title', message: 'このゲームタイトルはすでに登録されています。選択画面で検索してください' },
+  already_proposed: { field: 'title', message: 'このゲームタイトルはすでに提案されています。登録までお待ちください' },
 };
 
-export function GameProposalModal({ open, onOpenChange, defaultPlaylistUrl }: GameProposalModalProps) {
+export function GameProposalModal({ open, onOpenChange, defaultPlaylistUrl, onBack }: GameProposalModalProps) {
   const { toast } = useToast();
   const [playlistUrl, setPlaylistUrl] = useState('');
   const [gameTitle, setGameTitle] = useState('');
@@ -105,10 +109,23 @@ export function GameProposalModal({ open, onOpenChange, defaultPlaylistUrl }: Ga
   }
 
   return (
-    <Modal open={open} onOpenChange={onOpenChange} title="ゲームタイトルの追加を提案する">
+    <Modal
+      open={open}
+      onOpenChange={onOpenChange}
+      // 完了時はタイトルを受付メッセージに切り替える（仕様の「📨」は他の完了画面と同じくアイコンで描く）
+      title={
+        done ? (
+          <span className="flex items-center gap-2">
+            <CheckIcon size={22} className="shrink-0 text-toast-success" />
+            提案を受け付けました
+          </span>
+        ) : (
+          'ゲームタイトルの追加を提案する'
+        )
+      }
+    >
       {done ? (
         <div className="flex flex-col gap-4" aria-live="polite">
-          <p className="text-xl font-medium text-text-primary">📨 提案を受け付けました</p>
           <p className="text-base text-text-secondary">
             ありがとうございます！
             <br />
@@ -150,7 +167,14 @@ export function GameProposalModal({ open, onOpenChange, defaultPlaylistUrl }: Ga
             {(props) => <Textarea {...props} value={note} onChange={(e) => setNote(e.target.value)} disabled={submitting} rows={3} />}
           </Field>
           <div className="flex justify-between gap-2">
-            <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={submitting}>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                onOpenChange(false);
+                onBack();
+              }}
+              disabled={submitting}
+            >
               戻る
             </Button>
             <Button variant="primary" onClick={handleSubmit} loading={submitting}>
