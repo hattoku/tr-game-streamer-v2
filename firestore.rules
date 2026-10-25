@@ -211,7 +211,7 @@ service cloud.firestore {
       allow read: if isAdmin() || (isSignedIn() && resource.data.submittedBy == request.auth.uid);
 
       // クライアントから直接作れるのは通報（ReportModal）だけ。提案（playlist_register・game_title_register）は
-      // 内容をサーバー側で検証するため API（POST /api/playlists/propose・/api/games/propose、Admin SDK）経由のみ（7-4）
+      // 内容をサーバー側で検証するため API（POST /api/playlists/propose、Admin SDK）経由のみ（7-4）
       allow create: if isSignedIn()
         && request.resource.data.submittedBy == request.auth.uid
         && request.resource.data.status == 'reviewing_lv1'
@@ -263,7 +263,7 @@ service cloud.firestore {
     }
 
     // ユーザー向けサイト内通知（管理者向けadmin_notificationsとは別物）。
-    // 生成は API Route（Admin SDK）限定（新着動画の取得、お問い合わせへの返信）。本人はisReadの更新のみ可。
+    // 生成は API Route（Admin SDK）限定（新着動画の取得、お問い合わせへの返信、提案の審査結果）。本人はisReadの更新のみ可。
     match /notifications/{notificationId} {
       allow read: if isSelf(resource.data.userId) || isAdmin();
       allow update: if isSelf(resource.data.userId) && onlyChangedKeys(['isRead']);

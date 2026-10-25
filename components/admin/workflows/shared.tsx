@@ -78,12 +78,19 @@ export function WorkflowHeader({
 }
 
 /** 承認・却下の履歴（step2History）のうち最新の1件。却下理由・承認コメントを残った記録として見せる */
-export function WorkflowDecisionNote({ history }: { history: Array<{ action?: string; comment?: string | null }> | undefined }) {
+export function WorkflowDecisionNote({
+  history,
+  rejectLabel = '却下理由',
+}: {
+  history: Array<{ action?: string; comment?: string | null }> | undefined;
+  /** 却下時の自由記述の見出し（再生リスト登録提案は定型理由とは別の内部メモのため差し替える） */
+  rejectLabel?: string;
+}) {
   const last = history?.[history.length - 1];
   if (!last?.comment) return null;
   return (
     <p className="whitespace-pre-wrap text-base text-text-secondary">
-      {last.action === 'rejected' ? '却下理由' : '承認コメント'}: {last.comment}
+      {last.action === 'rejected' ? rejectLabel : '承認コメント'}: {last.comment}
     </p>
   );
 }
@@ -180,6 +187,8 @@ export function WorkflowDecisionButtons({
 /**
  * 承認・却下の確認ダイアログ（§9.1 承認はコメント任意・§9.2 却下は理由必須）。
  * `onSubmit` が例外を投げなければ閉じる（エラー表示は呼び出し側）。
+ * `rejectReasons` を渡すと（再生リスト登録提案、§14.4）、却下は定型理由の選択が必須になり、自由記述は任意の内部メモになる
+ * （選んだ定型理由は提案者に見せる。自由記述は見せない）。
  */
 export function WorkflowDecisionModal({
   action,
@@ -187,27 +196,33 @@ export function WorkflowDecisionModal({
   title,
   description,
   onSubmit,
+  rejectReasons,
 }: {
   action: DecisionAction | null;
   onClose: () => void;
   title: Record<DecisionAction, string>;
   description: Record<DecisionAction, ReactNode>;
-  onSubmit: (action: DecisionAction, comment: string | null) => Promise<boolean>;
+  onSubmit: (action: DecisionAction, comment: string | null, rejectReasonCode: string | null) => Promise<boolean>;
+  rejectReasons?: ReadonlyArray<{ code: string; label: string }>;
 }) {
   const [comment, setComment] = useState('');
+  const [reasonCode, setReasonCode] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  const usesReasons = action === 'reject' && !!rejectReasons;
+  const canSubmit = action === 'approve' || (usesReasons ? !!reasonCode : !!comment.trim());
 
   function close() {
     setComment('');
+    setReasonCode(null);
     onClose();
   }
 
   async function handleSubmit() {
-    if (!action || submitting) return;
-    if (action === 'reject' && !comment.trim()) return;
+    if (!action || submitting || !canSubmit) return;
     setSubmitting(true);
     try {
-      const ok = await onSubmit(action, comment.trim() || null);
+      const ok = await onSubmit(action, comment.trim() || null, usesReasons ? reasonCode : null);
       if (ok) close();
     } finally {
       setSubmitting(false);
@@ -224,14 +239,33 @@ export function WorkflowDecisionModal({
       description={action ? description[action] : undefined}
     >
       <div className="flex flex-col gap-4">
-        <Field label={action === 'approve' ? 'コメント（任意）' : '却下理由（必須）'}>
+        {usesReasons && (
+          <fieldset className="flex flex-col gap-2">
+            <legend className="mb-1 text-md text-text-tertiary">見送り理由（必須・提案者に表示されます）</legend>
+            {rejectReasons!.map((r) => (
+              <label key={r.code} className="flex cursor-pointer items-start gap-2 text-base text-text-secondary">
+                <input
+                  type="radio"
+                  name="reject-reason"
+                  value={r.code}
+                  checked={reasonCode === r.code}
+                  onChange={() => setReasonCode(r.code)}
+                  disabled={submitting}
+                  className="mt-[3px]"
+                />
+                <span>{r.label}</span>
+              </label>
+            ))}
+          </fieldset>
+        )}
+        <Field label={action === 'approve' ? 'コメント（任意）' : usesReasons ? '内部メモ（任意・提案者には表示されません）' : '却下理由（必須）'}>
           {(props) => <Textarea {...props} value={comment} onChange={(e) => setComment(e.target.value)} disabled={submitting} rows={3} />}
         </Field>
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={close} disabled={submitting}>
             キャンセル
           </Button>
-          <Button variant="primary" onClick={handleSubmit} loading={submitting} disabled={action === 'reject' && !comment.trim()}>
+          <Button variant="primary" onClick={handleSubmit} loading={submitting} disabled={!canSubmit}>
             {action === 'approve' ? '承認する' : '却下する'}
           </Button>
         </div>

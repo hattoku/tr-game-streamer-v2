@@ -58,6 +58,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const batch = adminDb.batch();
   batch.update(gameRef, {
     title: resolved.title,
+    aliases: resolved.aliases,
     packageImageUrl: resolved.packageImageUrl,
     rakutenUrl: resolved.rakutenUrl,
     description: resolved.description,

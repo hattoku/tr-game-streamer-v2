@@ -19,8 +19,9 @@ import { cn } from '@/components/ui/cn';
 // 通知一覧ページ。document/specification/page/ページ ユーザー通知機能仕様書.md §5 準拠。
 // フェーズ2.5ステップ6でデザイン適用（wiki/sources/2026-09-11-phase2.5-design-plan.md §4）。
 // - 見出し＋「すべて既読にする」（§5.2, §5.6）
-// - フィルタタブは実装済み種別のみ: すべて／未読／シリーズ新着（§5.3。お知らせ・審査結果・お問い合わせ返信は
-//   依拠する機能が未実装のためタブを出さない）
+// - フィルタタブは実装済み種別のみ: すべて／未読／シリーズ新着（§5.3。お知らせは依拠する機能が未実装のためタブを出さない。
+//   審査結果・お問い合わせ返信は届いたことがあるときだけ出す）
+// - 審査結果（再生リスト登録提案、§2.1 実装状況 2026-10-25）: 承認は公開された再生リスト、見送りは提案履歴へ遷移
 // - カード: 未読ドット・種別ラベル・本文・日時（相対表示、title に絶対時刻）。クリックで個別既読＋遷移（§5.4）
 // - ページネーション 20件（§5.5）。クライアント側で分割（通知は本人分のみで件数が小さい）
 // - 空状態2種（§5.7）。未ログインは /login へ（§5.1）
@@ -124,6 +125,7 @@ export default function NotificationsPage() {
       unread: list.filter((n) => !n.isRead).length,
       series_new_episode: list.filter((n) => n.type === 'series_new_episode').length,
       inquiry_reply: list.filter((n) => n.type === 'inquiry_reply').length,
+      review_result: list.filter((n) => n.type === 'review_result').length,
     };
   }, [items]);
 
@@ -156,6 +158,8 @@ export default function NotificationsPage() {
     if (n.type === 'series_new_episode' && n.playlistId) router.push(`/playlists/${n.playlistId}`);
     // お問い合わせ返信は該当スレッド（フェーズ7ステップ7-3-2）
     if (n.type === 'inquiry_reply' && n.inquiryId) router.push(`/contact/history/${n.inquiryId}`);
+    // 審査結果は、承認なら公開された再生リスト、見送りなら提案履歴（ページ ユーザー通知機能仕様書 §2.1 実装状況）
+    if (n.type === 'review_result') router.push(n.playlistId ? `/playlists/${n.playlistId}` : '/playlists/proposals');
   }
 
   async function handleMarkAllRead() {
@@ -193,7 +197,7 @@ export default function NotificationsPage() {
       </div>
 
       {items.length === 0 ? (
-        <EmptyState icon={<BellIcon />} title="通知はまだありません" description="マイリストに登録した再生リストの新着動画や、お問い合わせへの返信をここでお知らせします" />
+        <EmptyState icon={<BellIcon />} title="通知はまだありません" description="マイリストに登録した再生リストの新着動画や、提案の審査結果・お問い合わせへの返信をここでお知らせします" />
       ) : (
         <>
           <Tabs value={filter} onValueChange={(v) => changeFilter(v as Filter)}>
@@ -207,7 +211,12 @@ export default function NotificationsPage() {
               <TabsTrigger value="series_new_episode" count={counts.series_new_episode}>
                 シリーズ新着
               </TabsTrigger>
-              {/* 届いたことがある種別だけタブを出す（お知らせ・審査結果の通知は未実装） */}
+              {/* 届いたことがある種別だけタブを出す（お知らせの通知は未実装） */}
+              {counts.review_result > 0 && (
+                <TabsTrigger value="review_result" count={counts.review_result}>
+                  審査結果
+                </TabsTrigger>
+              )}
               {counts.inquiry_reply > 0 && (
                 <TabsTrigger value="inquiry_reply" count={counts.inquiry_reply}>
                   お問い合わせ返信

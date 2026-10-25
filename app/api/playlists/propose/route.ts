@@ -2,7 +2,40 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireUser } from '../../../../lib/api-auth';
 import { adminDb } from '../../../../lib/firebase-admin';
 import { fetchValidPlaylist, hasPendingPlaylistProposal, newWorkflowRecord } from '../../../../lib/playlist-registration';
-import { MAX_GAME_PROPOSAL_NOTE_LENGTH, MAX_GAME_TITLE_LENGTH, PLAYLIST_PROPOSAL_TYPE } from '../../../../lib/proposal-shared';
+import {
+  MAX_GAME_PROPOSAL_NOTE_LENGTH,
+  MAX_GAME_TITLE_LENGTH,
+  PLAYLIST_PROPOSAL_TYPE,
+  type ProposalRakutenItem,
+} from '../../../../lib/proposal-shared';
+import { PLATFORM_OPTIONS } from '../../../../lib/game-shared';
+import { normalizeRakutenBooksItemUrl } from '../../../../lib/rakuten-shared';
+
+// 新しいゲームタイトルで楽天ブックスの候補を選んだ場合の商品情報（§9.2 v4.0）。審査時の登録モーダルの自動セットに使うだけだが、
+// 画像URLはそのまま games に入りうるため楽天の画像ドメインに限る。形が合わなければ null（提案自体は受け付ける）
+function parseRakutenItem(value: unknown): ProposalRakutenItem | null {
+  if (!value || typeof value !== 'object') return null;
+  const v = value as Record<string, unknown>;
+  const itemUrl = typeof v.itemUrl === 'string' ? normalizeRakutenBooksItemUrl(v.itemUrl) : null;
+  const title = typeof v.title === 'string' ? v.title.trim().slice(0, 300) : '';
+  if (!itemUrl || !title) return null;
+  let imageUrl = '';
+  if (typeof v.imageUrl === 'string') {
+    try {
+      const u = new URL(v.imageUrl);
+      if (u.protocol === 'https:' && (u.hostname === 'rakuten.co.jp' || u.hostname.endsWith('.rakuten.co.jp'))) imageUrl = u.toString();
+    } catch {
+      // 画像URLが不正なら画像なしで扱う
+    }
+  }
+  return {
+    itemUrl,
+    title,
+    imageUrl,
+    hardware: typeof v.hardware === 'string' ? v.hardware.trim().slice(0, 50) : '',
+    booksGenreId: typeof v.booksGenreId === 'string' && /^[\d/]{1,100}$/.test(v.booksGenreId) ? v.booksGenreId : '',
+  };
+}
 
 // 一般ユーザーの再生リスト登録提案API（ページ 再生リストを追加する 仕様書 §5.4、フェーズ7ステップ7-4）。
 // 本番の `playlists` には書かず、`workflows`（type: "playlist_register"、ステータス「審査中」）に保存する。
@@ -10,15 +43,20 @@ import { MAX_GAME_PROPOSAL_NOTE_LENGTH, MAX_GAME_TITLE_LENGTH, PLAYLIST_PROPOSAL
 // 承認時に /api/playlists/register と同じ登録処理（lib/playlist-registration.ts）が走る。
 // 制約チェック（§4.1.5・§5.2）は登録と同じ順序でサーバー側でも行う（クライアントの判定を信用しない）。
 // ゲームタイトルは既存の `gameId` か、候補に無い場合の新しいゲームタイトル `newGameTitle`（＋`newGameNote`）のどちらか
-// （§4.2.2 v3.15。ゲームタイトルと再生リストを1件の提案として同時に送る）。
+// （§4.2.2 v3.15。ゲームタイトルと再生リストを1件の提案として同時に送る）。新しいゲームタイトルには任意で機種（`newGamePlatforms`）と、
+// 楽天ブックスの候補から選んだ場合の商品情報（`newGameRakuten`）を付けられる（§9.2 v4.0）。
 export async function POST(request: NextRequest) {
   const auth = await requireUser(request);
   if ('errorResponse' in auth) return auth.errorResponse;
 
-  const { playlistUrl, gameId, newGameTitle, newGameNote, sourceChannelId } = await request.json();
+  const { playlistUrl, gameId, newGameTitle, newGameNote, newGamePlatforms, newGameRakuten, sourceChannelId } = await request.json();
   const existingGameId = typeof gameId === 'string' && gameId ? gameId : null;
   const newTitle = typeof newGameTitle === 'string' ? newGameTitle.trim() : '';
   const newNote = typeof newGameNote === 'string' ? newGameNote.trim() : '';
+  const newPlatforms = Array.isArray(newGamePlatforms)
+    ? [...new Set(newGamePlatforms.filter((p: unknown): p is string => typeof p === 'string' && PLATFORM_OPTIONS.includes(p)))]
+    : [];
+  const newRakuten = parseRakutenItem(newGameRakuten);
   if (typeof playlistUrl !== 'string' || (!existingGameId && !newTitle)) {
     return NextResponse.json({ error: 'invalid_request' }, { status: 400 });
   }
@@ -70,7 +108,9 @@ export async function POST(request: NextRequest) {
       channelIconUrl: channel.iconUrl,
       gameId: existingGameId,
       gameName,
-      ...(existingGameId ? {} : { newGameTitle: newTitle, newGameNote: newNote || null }),
+      ...(existingGameId
+        ? {}
+        : { newGameTitle: newTitle, newGameNote: newNote || null, newGamePlatforms: newPlatforms, newGameRakuten: newRakuten }),
     }),
   );
 

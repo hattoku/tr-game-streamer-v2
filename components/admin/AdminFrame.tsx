@@ -13,6 +13,7 @@ import { UserDropdown } from '@/components/layout/UserDropdown';
 import { PageContainer } from '@/components/layout/PageContainer';
 import { cn } from '@/components/ui/cn';
 import { isActivePath } from '@/components/layout/nav';
+import { formatBadgeCount, usePendingWorkflowCount } from './usePendingWorkflowCount';
 
 const ADMIN_NAV = [
   { label: 'ダッシュボード', href: '/admin' },
@@ -20,7 +21,7 @@ const ADMIN_NAV = [
   { label: 'お問い合わせ', href: '/admin/inquiries' },
 ] as const;
 
-function AdminNav({ pathname, className }: { pathname: string; className?: string }) {
+function AdminNav({ pathname, pendingCount, className }: { pathname: string; pendingCount: number; className?: string }) {
   return (
     <nav aria-label="管理画面ナビゲーション" className={cn('flex h-full items-center gap-4 md:gap-6', className)}>
       {ADMIN_NAV.map((item) => {
@@ -36,6 +37,15 @@ function AdminNav({ pathname, className }: { pathname: string; className?: strin
             )}
           >
             {item.label}
+            {/* 審査中の件数（共通 uiコンポーネント フロント 仕様書 §2.10） */}
+            {item.href === '/admin/workflows' && pendingCount > 0 && (
+              <span
+                aria-label={`未処理 ${pendingCount} 件`}
+                className="ml-[6px] inline-flex h-[18px] min-w-[20px] items-center justify-center rounded-[9px] bg-brand-primary px-[6px] text-sm font-semibold leading-none text-white"
+              >
+                {formatBadgeCount(pendingCount)}
+              </span>
+            )}
             {active && <span aria-hidden className="absolute inset-x-0 bottom-0 h-[2px] bg-text-primary" />}
           </Link>
         );
@@ -46,6 +56,8 @@ function AdminNav({ pathname, className }: { pathname: string; className?: strin
 
 export function AdminFrame({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  // 管理画面は管理者しか開けない（app/admin/layout.tsx で判定済み）
+  const pendingCount = usePendingWorkflowCount(true);
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -57,7 +69,7 @@ export function AdminFrame({ children }: { children: React.ReactNode }) {
             </Link>
             {/* PCはロゴ横にナビを並べる。モバイルはヘッダー下の2段目（下記）に折り返す
                 （ナビ項目・ユーザー名の長さに関わらず390px幅で詰まらないようにするため） */}
-            <AdminNav pathname={pathname} className="hidden md:flex" />
+            <AdminNav pathname={pathname} pendingCount={pendingCount} className="hidden md:flex" />
           </div>
           <div className="flex shrink-0 items-center gap-4">
             <Link href="/" className="hidden whitespace-nowrap text-md text-text-tertiary transition-colors duration-[120ms] hover:text-text-primary md:inline">
@@ -68,7 +80,7 @@ export function AdminFrame({ children }: { children: React.ReactNode }) {
         </div>
         <div className="border-t border-border-divider md:hidden">
           <PageContainer>
-            <AdminNav pathname={pathname} className="h-11" />
+            <AdminNav pathname={pathname} pendingCount={pendingCount} className="h-11" />
           </PageContainer>
         </div>
       </header>

@@ -11,6 +11,9 @@
  *   既存のゲームタイトルで足りる場合は「既存のゲームタイトルから選ぶ」で選んでから通常どおり承認する。
  *   ゲームタイトルの登録後に再生リストの登録だけ失敗して画面を開き直した場合は、同じ名前のゲームタイトルを自動で選ぶ
  *   （ゲームタイトルを二重に登録させない）。
+ * - 動画一覧（GET /api/admin/workflows/[id]/videos）を画面内に出し、YouTube へ移らずに中身を確かめられる（§14.4 v11.0）。
+ * - 却下は定型の見送り理由（PROPOSAL_REJECT_REASONS）が必須で、自由記述は内部メモ（§14.4）。提案者には API が審査結果を通知する。
+ * - 提案に楽天ブックスの商品（proposalData.newGameRakuten）や機種（newGamePlatforms）があれば、登録モーダルにそれを入れて開く（§14.4）。
  */
 'use client';
 
@@ -25,6 +28,7 @@ import { ExternalLinkIcon, PencilIcon } from '@/components/ui/icons';
 import { PlaylistSummary } from '@/components/playlists/PlaylistSummary';
 import { GameSelectModal, type GameOption } from '@/components/playlists/GameSelectModal';
 import { GameCreateModal } from '@/components/games/GameCreateModal';
+import { ProposalVideoList } from './ProposalVideoList';
 import {
   callWorkflowApi,
   isPendingStatus,
@@ -37,6 +41,7 @@ import {
   type DecisionAction,
   type WorkflowStatus,
 } from './shared';
+import { PROPOSAL_REJECT_REASONS, proposalRejectReasonLabel, type ProposalRakutenItem } from '@/lib/proposal-shared';
 
 const APPROVE_ERRORS: Record<string, string> = {
   already_registered: 'この再生リストはすでに登録されています。提案は却下してください',
@@ -55,6 +60,8 @@ export function PlaylistProposalDetail({ workflowId, data }: { workflowId: strin
   /** 新しいゲームタイトルとして提案された名前（既存のゲームタイトルを選んだ提案では null） */
   const newGameTitle = (proposal.newGameTitle as string | undefined) ?? null;
   const newGameNote = (proposal.newGameNote as string | undefined) ?? null;
+  const newGamePlatforms = (proposal.newGamePlatforms as string[] | undefined) ?? [];
+  const newGameRakuten = (proposal.newGameRakuten as ProposalRakutenItem | null | undefined) ?? null;
 
   const [channelRegistered, setChannelRegistered] = useState<boolean | null>(null);
   const [channelDescription, setChannelDescription] = useState('');
@@ -107,6 +114,7 @@ export function PlaylistProposalDetail({ workflowId, data }: { workflowId: strin
               id: d.id,
               title: (d.data().title as string) ?? '',
               packageImageUrl: (d.data().packageImageUrl as string | undefined) ?? null,
+              aliases: (d.data().aliases as string[] | undefined) ?? [],
             }))
             .sort((a, b) => a.title.localeCompare(b.title, 'ja')),
         ),
@@ -114,7 +122,11 @@ export function PlaylistProposalDetail({ workflowId, data }: { workflowId: strin
       .catch((e) => console.error('games の読み込みに失敗', e));
   }
 
-  async function handleDecision(action: DecisionAction, comment: string | null, gameId: string = game.id): Promise<boolean> {
+  async function handleDecision(
+    action: DecisionAction,
+    comment: string | null,
+    { gameId = game.id, rejectReasonCode = null }: { gameId?: string; rejectReasonCode?: string | null } = {},
+  ): Promise<boolean> {
     setApproveError(null);
     setDeciding(true);
     try {
@@ -123,7 +135,7 @@ export function PlaylistProposalDetail({ workflowId, data }: { workflowId: strin
         comment,
         ...(action === 'approve'
           ? { gameId, channelDescription: channelRegistered === false ? channelDescription : undefined }
-          : {}),
+          : { rejectReasonCode }),
       });
       toast({ type: 'success', message: action === 'approve' ? '承認し、再生リストを登録しました' : '却下しました' });
       return true;
@@ -188,9 +200,24 @@ export function PlaylistProposalDetail({ workflowId, data }: { workflowId: strin
           {newGameTitle && (
             <div className="flex flex-col gap-1 rounded-[8px] bg-bg-hover px-3 py-2">
               <p className="text-base text-text-primary">新しいゲームタイトルとして提案: {newGameTitle}</p>
+              {newGamePlatforms.length > 0 && <p className="text-base text-text-secondary">機種: {newGamePlatforms.join('、')}</p>}
+              {newGameRakuten && (
+                <p className="text-base text-text-secondary">
+                  楽天ブックスの候補から選択:{' '}
+                  <a
+                    href={newGameRakuten.itemUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline underline-offset-[3px] hover:text-text-primary"
+                  >
+                    {newGameRakuten.title}
+                  </a>
+                </p>
+              )}
               {newGameNote && <p className="whitespace-pre-wrap text-base text-text-secondary">備考: {newGameNote}</p>}
             </div>
           )}
+          {pending && <ProposalVideoList workflowId={workflowId} />}
           {pending && gameChanged && newGameTitle && (
             <p className="text-md text-text-muted">
               {autoSelectedExisting && game.title === newGameTitle
@@ -220,7 +247,10 @@ export function PlaylistProposalDetail({ workflowId, data }: { workflowId: strin
               登録した再生リストを見る
             </LinkButton>
           )}
-          <WorkflowDecisionNote history={data.step2History} />
+          {status === 'rejected' && proposalRejectReasonLabel(proposal.rejectReasonCode) && (
+            <p className="text-base text-text-secondary">見送り理由（提案者に表示）: {proposalRejectReasonLabel(proposal.rejectReasonCode)}</p>
+          )}
+          <WorkflowDecisionNote history={data.step2History} rejectLabel="内部メモ" />
           {approveError && pending && (
             <p role="alert" className="text-md text-input-error">
               {approveError}
@@ -260,16 +290,19 @@ export function PlaylistProposalDetail({ workflowId, data }: { workflowId: strin
         open={createOpen}
         onOpenChange={setCreateOpen}
         defaultTitle={newGameTitle ?? ''}
+        prefill={{ platforms: newGamePlatforms, rakuten: newGameRakuten ? { ...newGameRakuten, jan: '', label: '', salesDate: '' } : null }}
         createCopy={{
           title: 'ゲームタイトルを登録して承認',
           submitLabel: 'ゲームタイトルと再生リストを登録して承認',
-          notice: 'ゲームタイトルを登録すると、続けてこの再生リストをそのゲームタイトルで登録し、提案を承認します。',
+          notice: newGameRakuten
+            ? '提案者が選んだ楽天ブックスの商品で自動セットしています。タイトル名は版・機種の表記を削った名前なので、元の商品名と見比べて確認してください。登録すると、続けてこの再生リストを登録し、提案を承認します。'
+            : 'ゲームタイトルを登録すると、続けてこの再生リストをそのゲームタイトルで登録し、提案を承認します。',
         }}
         onCreated={(g) => {
           // 登録したゲームタイトルを選んだ状態にしてから、続けて再生リストを登録して承認する。
           // 再生リストの登録だけ失敗した場合も、このゲームタイトルが選ばれたまま審査中に残る
           setSelectedGame({ id: g.id, title: g.title });
-          void handleDecision('approve', null, g.id);
+          void handleDecision('approve', null, { gameId: g.id });
         }}
       />
 
@@ -284,10 +317,11 @@ export function PlaylistProposalDetail({ workflowId, data }: { workflowId: strin
         onClose={() => setConfirmAction(null)}
         title={{ approve: '提案を承認しますか?', reject: '提案を却下しますか?' }}
         description={{
-          approve: `承認すると、この再生リストを「${game.title}」で登録して公開します。`,
-          reject: '却下すると、再生リストは登録されません。提案者には通知しません。',
+          approve: `承認すると、この再生リストを「${game.title}」で登録して公開し、提案者に通知します。`,
+          reject: '却下すると、再生リストは登録されません。提案者には選んだ見送り理由を通知します。',
         }}
-        onSubmit={handleDecision}
+        onSubmit={(action, comment, rejectReasonCode) => handleDecision(action, comment, { rejectReasonCode })}
+        rejectReasons={PROPOSAL_REJECT_REASONS}
       />
     </>
   );

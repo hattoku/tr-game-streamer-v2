@@ -25,7 +25,7 @@
  */
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { collection, getDocs } from 'firebase/firestore';
 import { db, auth } from '@/lib/firebase';
 import { Modal } from '@/components/ui/Modal';
@@ -37,30 +37,9 @@ import { CheckIcon, SearchIcon } from '@/components/ui/icons';
 import type { GameOption } from '@/components/playlists/GameSelectModal';
 import type { RakutenGameItem, RakutenGameSearchResult, RakutenGenreInfo } from '@/lib/rakuten';
 import { normalizeRakutenBooksItemUrl, normalizeRakutenGameTitle, toMasterThemeName } from '@/lib/rakuten-shared';
+import { MAX_GAME_ALIASES, PLATFORM_OPTIONS, parseAliases } from '@/lib/game-shared';
 
-// 楽天ブックスのゲーム機種一覧（表記も楽天の`hardware`値に合わせ、商品情報からの自動セットが
-// そのまま照合できるようにする）＋テストデータで実績のあるSteam。メーカー別に並べて探しやすくする。
-// 自由入力ではなく固定候補にして手入力表記のブレを防ぐ（2026-09-22、5機種から拡充）
-const PLATFORM_OPTIONS = [
-  'Nintendo Switch',
-  'Nintendo Switch 2',
-  'Wii U',
-  'Wii',
-  'ニンテンドー3DS',
-  'ニンテンドーDS',
-  'PS5',
-  'PS4',
-  'PS3',
-  'PS2',
-  'PS Vita',
-  'PSP',
-  'Xbox Series X',
-  'Xbox One',
-  'Xbox 360',
-  'Steam',
-  'おもちゃ',
-  'その他',
-];
+// 機種の固定候補（楽天ブックスの機種一覧＋Steam）。一般ユーザーの提案フォームと共有するため lib/game-shared.ts に置く
 const PLATFORM_SELECT_OPTIONS = PLATFORM_OPTIONS.map((p) => ({ value: p, label: p }));
 
 interface MasterOption {
@@ -72,6 +51,7 @@ interface MasterOption {
 export interface GameFormInitial {
   id: string;
   title: string;
+  aliases: string[];
   genreId: string | null;
   themeIds: string[];
   platforms: string[];
@@ -90,6 +70,11 @@ interface GameCreateModalProps {
   defaultTitle?: string;
   /** 新規登録が成功したとき */
   onCreated?: (game: GameOption) => void;
+  /**
+   * 新規登録モードで最初から入れておく機種と楽天ブックスの商品（再生リスト登録提案の承認から開くとき。
+   * 管理 審査ワークフロー仕様書 §14.4）。楽天の商品は検索で選んだときと同じく画像・商品ページURL・機種・ジャンル・テーマを自動セットする
+   */
+  prefill?: { platforms?: string[]; rakuten?: RakutenGameSearchResult | null };
   /** 新規登録モードの見出し・送信ボタン・冒頭の案内を差し替える（提案の承認から開き、登録後に続けて承認するとき） */
   createCopy?: { title: string; submitLabel: string; notice: string };
   /** 編集の保存が成功したとき */
@@ -110,7 +95,7 @@ async function getIdToken(): Promise<string> {
   return auth.currentUser.getIdToken();
 }
 
-export function GameCreateModal({ open, onOpenChange, initial, defaultTitle, onCreated, onUpdated, createCopy }: GameCreateModalProps) {
+export function GameCreateModal({ open, onOpenChange, initial, defaultTitle, prefill, onCreated, onUpdated, createCopy }: GameCreateModalProps) {
   const { toast } = useToast();
   const isEdit = !!initial;
 
@@ -119,6 +104,8 @@ export function GameCreateModal({ open, onOpenChange, initial, defaultTitle, onC
 
   const [title, setTitle] = useState('');
   const [titleError, setTitleError] = useState<string | null>(null);
+  // 別名（検索用）。カンマ・改行区切りの1つの入力欄で持ち、送信時に配列にする
+  const [aliasesText, setAliasesText] = useState('');
   const [genreId, setGenreId] = useState('');
   const [themeIds, setThemeIds] = useState<Set<string>>(new Set());
   const [platforms, setPlatforms] = useState<Set<string>>(new Set());
@@ -144,17 +131,22 @@ export function GameCreateModal({ open, onOpenChange, initial, defaultTitle, onC
   // モーダルを開くたびにフォームをリセットする（TagEditModalと同じ
   // 「propが変わったらstateを調整する」パターン。effect内のsetStateより1テンポ早い）。
   // 編集モードでは initial の値で初期化する（楽天URL・画像URLも各欄にそのまま見える）
+  const prefillGenreAppliedRef = useRef(false);
   const [wasOpen, setWasOpen] = useState(open);
   if (open !== wasOpen) {
     setWasOpen(open);
     if (open) {
-      setTitle(initial?.title ?? defaultTitle ?? '');
+      const prefillRakuten = !initial ? (prefill?.rakuten ?? null) : null;
+      setTitle(initial?.title ?? (defaultTitle || (prefillRakuten ? normalizeRakutenGameTitle(prefillRakuten.title) : '')));
       setTitleError(null);
+      setAliasesText((initial?.aliases ?? []).join(', '));
       setGenreId(initial?.genreId ?? '');
       setThemeIds(new Set(initial?.themeIds ?? []));
-      setPlatforms(new Set(initial?.platforms ?? []));
-      setPackageImageUrl(initial?.packageImageUrl ?? '');
-      setRakutenUrl(initial?.rakutenUrl ?? '');
+      const initialPlatforms = initial?.platforms ?? (prefill?.platforms ?? []).filter((p) => PLATFORM_OPTIONS.includes(p));
+      if (prefillRakuten && PLATFORM_OPTIONS.includes(prefillRakuten.hardware.trim())) initialPlatforms.push(prefillRakuten.hardware.trim());
+      setPlatforms(new Set(initialPlatforms));
+      setPackageImageUrl(initial?.packageImageUrl ?? prefillRakuten?.imageUrl ?? '');
+      setRakutenUrl(initial?.rakutenUrl ?? prefillRakuten?.itemUrl ?? '');
       setDescription(initial?.description ?? '');
       setIsAiGeneratedDescription(initial?.isAiGeneratedDescription ?? false);
       // 検索欄はタイトル欄と連動しないため、編集モードでも毎回空欄で開く
@@ -163,11 +155,34 @@ export function GameCreateModal({ open, onOpenChange, initial, defaultTitle, onC
       setRakutenSearched(false);
       setRakutenError(null);
       setRakutenResults([]);
-      setSelectedRakuten(null);
+      setSelectedRakuten(prefillRakuten ? { title: prefillRakuten.title, imageUrl: prefillRakuten.imageUrl } : null);
       setRakutenItemFetching(false);
       setRakutenItemError(null);
+      prefillGenreAppliedRef.current = false;
     }
   }
+
+  // 提案から開いたときの楽天の商品のジャンル・テーマは、マスタ（genres/themes）が揃ってから一度だけ解決して入れる
+  const prefillBooksGenreId = !initial ? (prefill?.rakuten?.booksGenreId ?? '') : '';
+  useEffect(() => {
+    if (!open || !prefillBooksGenreId || genres.length === 0 || prefillGenreAppliedRef.current) return;
+    prefillGenreAppliedRef.current = true;
+    (async () => {
+      try {
+        const idToken = await getIdToken();
+        const res = await fetch(`/api/admin/games/rakuten-genre?booksGenreId=${encodeURIComponent(prefillBooksGenreId)}`, {
+          headers: { Authorization: `Bearer ${idToken}` },
+        });
+        if (!res.ok) return;
+        const body = await res.json();
+        applyRakutenGenre(body.genre ?? null);
+      } catch (e) {
+        console.error('楽天ブックスジャンル解決に失敗', e);
+      }
+    })();
+    // applyRakutenGenre は描画ごとに作り直される関数のため依存に含めない（開くたびに一度だけ）
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, prefillBooksGenreId, genres.length]);
 
   useEffect(() => {
     if (!open || genres.length > 0) return;
@@ -325,6 +340,7 @@ export function GameCreateModal({ open, onOpenChange, initial, defaultTitle, onC
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
         body: JSON.stringify({
           title: trimmedTitle,
+          aliases: parseAliases(aliasesText),
           genreId: genreId || null,
           themeIds: [...themeIds],
           platforms: [...platforms],
@@ -487,6 +503,13 @@ export function GameCreateModal({ open, onOpenChange, initial, defaultTitle, onC
           )}
         </Field>
 
+        <Field
+          label="別名（検索用・任意）"
+          hint={`略称や表記ゆれをカンマか改行で区切って入力（例: スマブラ）。最大${MAX_GAME_ALIASES}件。再生リスト提案のゲームタイトル検索で見つかるようになります`}
+        >
+          {(props) => <Input {...props} value={aliasesText} onChange={(e) => setAliasesText(e.target.value)} disabled={submitting} />}
+        </Field>
+
         <Field label="ジャンル">
           <SelectMenu
             value={genreId}
@@ -563,7 +586,10 @@ function RakutenItemPreview({ item, action }: { item: { title: string; imageUrl:
       ) : (
         <div className="h-[64px] w-[48px] shrink-0 rounded-[4px] bg-bg-btn" />
       )}
-      <p className="line-clamp-2 flex-1 text-sm text-text-primary">{item.title}</p>
+      <div className="min-w-0 flex-1">
+        <p className="text-xs text-text-tertiary">楽天ブックスの商品名</p>
+        <p className="line-clamp-2 text-sm text-text-primary">{item.title}</p>
+      </div>
       {action}
     </div>
   );

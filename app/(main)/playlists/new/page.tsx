@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { collection, doc, getDoc, getDocs } from 'firebase/firestore';
 import { db, auth } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
@@ -15,7 +15,11 @@ import { cn } from '@/components/ui/cn';
 import { GameSelectModal, type GameOption } from '@/components/playlists/GameSelectModal';
 import { GameCreateModal } from '@/components/games/GameCreateModal';
 import { PlaylistSummary } from '@/components/playlists/PlaylistSummary';
-import { MAX_GAME_PROPOSAL_NOTE_LENGTH, MAX_GAME_TITLE_LENGTH } from '@/lib/proposal-shared';
+import { ProposalSteps } from '@/components/playlists/ProposalSteps';
+import { MultiSelectMenu } from '@/components/ui/DropdownMenu';
+import { MAX_GAME_PROPOSAL_NOTE_LENGTH, MAX_GAME_TITLE_LENGTH, type ProposalRakutenItem } from '@/lib/proposal-shared';
+import { PLATFORM_OPTIONS, findSimilarGames } from '@/lib/game-shared';
+import { normalizeRakutenGameTitle } from '@/lib/rakuten-shared';
 
 // 「再生リストを追加する」。
 // document/specification/page/ページ 再生リストを追加する 仕様書.md §2.1（1カラム）、§4.1（URL入力・確認エリア）、
@@ -30,7 +34,10 @@ import { MAX_GAME_PROPOSAL_NOTE_LENGTH, MAX_GAME_TITLE_LENGTH } from '@/lib/prop
 // 案内エリアを表示し、プレビューした再生リストのチャンネルが流入元と一致しなければ登録不可にする（§5.2、
 // サーバー側 register・propose でも `sourceChannelId` で再検証）。`?url=`（管理画面のゲームタイトル登録提案の承認後
 // 「この再生リストも登録する」から）は再生リストURLを入れてプレビューまで行う。
-// 未ログインは /login へ（§1.2）。
+// 未ログインは /login へ（§1.2）。ログイン後にこの画面へ戻すため `?next=` を付ける（§9.3）。
+// 一般ユーザー向けの作り込み（§9 v4.0）: 見出し「再生リストを提案する」と3段のステップ表示、送信ボタン上の注記、
+// ゲームタイトル選択での楽天ブックスの候補、新しいゲームタイトルの機種（任意）と似た名前の登録済みゲームタイトルの案内、
+// 完了画面のステップ表示と提案履歴への導線。
 
 interface PreviewResult {
   playlist: {
@@ -69,6 +76,16 @@ function isPlaylistUrl(url: string): boolean {
   }
 }
 
+/** 一般ユーザーが新しいゲームタイトルとして入力している内容（§4.2.2・§9.2）。rakuten は楽天ブックスの候補から選んだ場合の商品 */
+interface NewGameInput {
+  title: string;
+  note: string;
+  platforms: string[];
+  rakuten: ProposalRakutenItem | null;
+}
+
+const PLATFORM_SELECT_OPTIONS = PLATFORM_OPTIONS.map((p) => ({ value: p, label: p }));
+
 async function getIdToken(): Promise<string> {
   if (!auth.currentUser) throw new Error('not signed in');
   return auth.currentUser.getIdToken();
@@ -99,6 +116,7 @@ const PROPOSE_ERRORS: Record<string, { inline: string; toast: string }> = {
 export default function NewPlaylistPage() {
   const { user, role, loading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const { toast } = useToast();
 
@@ -113,7 +131,7 @@ export default function NewPlaylistPage() {
   const [gameModalOpen, setGameModalOpen] = useState(false);
   const [gameCreateModalOpen, setGameCreateModalOpen] = useState(false);
   // 一般ユーザーが候補に無いゲームタイトルを新しく入力している状態（§4.2.2）。null なら通常の選択
-  const [newGame, setNewGame] = useState<{ title: string; note: string } | null>(null);
+  const [newGame, setNewGame] = useState<NewGameInput | null>(null);
   const [newGameTitleError, setNewGameTitleError] = useState<string | null>(null);
   const [gameError, setGameError] = useState<string | null>(null);
 
@@ -140,10 +158,12 @@ export default function NewPlaylistPage() {
   // クエリが外れた／変わった直後に古いチャンネルを見せないよう、取得済みの id とクエリが一致するときだけ使う
   const sourceChannel = sourceChannelId && fetchedChannel?.id === sourceChannelId ? fetchedChannel : null;
 
-  // 未ログインはログインページへ（§1.2）
+  // 未ログインはログインページへ（§1.2）。ログイン後にクエリ込みでこの画面へ戻す（§9.3）
   useEffect(() => {
-    if (!loading && !user) router.replace('/login');
-  }, [loading, user, router]);
+    if (loading || user) return;
+    const query = searchParams.toString();
+    router.replace(`/login?next=${encodeURIComponent(query ? `${pathname}?${query}` : pathname)}`);
+  }, [loading, user, router, pathname, searchParams]);
 
   useEffect(() => {
     if (!user) return;
@@ -155,6 +175,7 @@ export default function NewPlaylistPage() {
               id: d.id,
               title: (d.data().title as string) ?? '',
               packageImageUrl: (d.data().packageImageUrl as string | undefined) ?? null,
+              aliases: (d.data().aliases as string[] | undefined) ?? [],
             }))
             .sort((a, b) => a.title.localeCompare(b.title, 'ja')),
         );
@@ -263,6 +284,8 @@ export default function NewPlaylistPage() {
   const newGameTitle = newGame?.title.trim() ?? '';
   const newGameReady =
     !!newGame && !!newGameTitle && newGameTitle.length <= MAX_GAME_TITLE_LENGTH && newGame.note.trim().length <= MAX_GAME_PROPOSAL_NOTE_LENGTH;
+  // 新しいゲームタイトル名に似た登録済みゲームタイトル（§9.2）
+  const similarGames = newGame && !isAdmin ? findSimilarGames(newGameTitle, games) : [];
   const canSubmit = constraintsOk && (!!selectedGame || (!isAdmin && newGameReady)) && !submitting;
 
   async function handleSubmit() {
@@ -282,7 +305,9 @@ export default function NewPlaylistPage() {
         body: JSON.stringify({
           playlistUrl: playlistUrl.trim(),
           gameId: selectedGame?.id,
-          ...(newGame && !selectedGame ? { newGameTitle, newGameNote: newGame.note.trim() } : {}),
+          ...(newGame && !selectedGame
+            ? { newGameTitle, newGameNote: newGame.note.trim(), newGamePlatforms: newGame.platforms, newGameRakuten: newGame.rakuten }
+            : {}),
           channelDescription: isAdmin && !preview?.channelAlreadyRegistered ? channelDescription : undefined,
           sourceChannelId: sourceChannelId ?? undefined,
         }),
@@ -330,12 +355,17 @@ export default function NewPlaylistPage() {
   if (completion && !isAdmin) {
     return (
       <div className="mx-auto max-w-[720px]">
-        {/* 仕様の「📨」は管理者向け完了画面（✅）と同じくアイコンで描く */}
-        <SectionHeading className="mb-2 flex items-center gap-2">
+        {/* 仕様の「📨」は管理者向け完了画面（✅）と同じくアイコンで描く。審査待ちであることをステップ表示で見せる（§9.1） */}
+        <SectionHeading className="mb-4 flex items-center gap-2">
           <CheckIcon size={22} className="shrink-0 text-toast-success" />
-          提案を受け付けました
+          提案を送りました（確認待ち）
         </SectionHeading>
-        <p className="mb-5 text-base text-text-secondary">ありがとうございます！提案内容を確認後、プレミテに掲載します。</p>
+        <Card className="mb-4">
+          <ProposalSteps current={2} hereLabel />
+          <p className="mt-4 text-base text-text-secondary">
+            ありがとうございます！今は運営の確認待ちです。確認が済むとさがすに表示されます。結果は通知と提案履歴でお知らせします。
+          </p>
+        </Card>
         <Card>
           <PlaylistSummary
             title={completion.title}
@@ -347,12 +377,15 @@ export default function NewPlaylistPage() {
           />
         </Card>
         <div className="mt-5 flex flex-wrap gap-3">
-          <LinkButton href="/playlists" variant="primary">
-            再生リストを探す
+          <LinkButton href="/playlists/proposals" variant="primary">
+            提案履歴を見る
           </LinkButton>
           <Button variant="secondary" onClick={resetForm}>
             続けて提案する
           </Button>
+          <LinkButton href="/playlists" variant="ghost">
+            再生リストを探す
+          </LinkButton>
         </div>
       </div>
     );
@@ -392,7 +425,18 @@ export default function NewPlaylistPage() {
 
   return (
     <div className="mx-auto max-w-[720px]">
-      <SectionHeading className="mb-5">再生リストを追加する</SectionHeading>
+      {isAdmin ? (
+        <SectionHeading className="mb-5">再生リストを追加する</SectionHeading>
+      ) : (
+        <>
+          <SectionHeading className="mb-4">再生リストを提案する</SectionHeading>
+          {/* 提案はすぐには公開されないことを、送る前から流れで見せる（§9.1） */}
+          <Card className="mb-4">
+            <ProposalSteps current={1} />
+            <p className="mt-3 text-md text-text-muted">運営が確認してから公開します。</p>
+          </Card>
+        </>
+      )}
 
       {/* チャンネル詳細ページから流入時の案内エリア（§3.3） */}
       {sourceChannel && (
@@ -519,6 +563,24 @@ export default function NewPlaylistPage() {
                   一覧から選び直す
                 </Button>
               </div>
+              {/* 楽天ブックスの候補から選んだ商品（§9.2）。審査時の登録に使う。外すと自由入力として送る */}
+              {newGame.rakuten && (
+                <div className="flex items-center gap-3 rounded-[8px] border border-border-card bg-bg-input p-2">
+                  {newGame.rakuten.imageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={newGame.rakuten.imageUrl} alt="" className="h-[64px] w-[48px] shrink-0 rounded-[4px] object-cover" />
+                  ) : (
+                    <div className="h-[64px] w-[48px] shrink-0 rounded-[4px] bg-bg-btn" />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs text-text-tertiary">楽天ブックスの商品</p>
+                    <p className="line-clamp-2 text-sm text-text-primary">{newGame.rakuten.title}</p>
+                  </div>
+                  <Button variant="ghost" size="sm" onClick={() => setNewGame({ ...newGame, rakuten: null })} disabled={submitting}>
+                    外す
+                  </Button>
+                </div>
+              )}
               <Field
                 label={`ゲームタイトル名 *（${newGameTitle.length}/${MAX_GAME_TITLE_LENGTH}）`}
                 error={
@@ -541,9 +603,50 @@ export default function NewPlaylistPage() {
                   />
                 )}
               </Field>
+              {/* 似た名前の登録済みゲームタイトル（§9.2）。押すとそのゲームタイトルを選んだ状態に切り替える */}
+              {similarGames.length > 0 && (
+                <div className="flex flex-col gap-2 rounded-[8px] bg-bg-hover px-3 py-2">
+                  <p className="text-md text-text-secondary">登録済みのこちらではありませんか？</p>
+                  <div className="flex flex-wrap gap-2">
+                    {similarGames.map((g) => (
+                      <Button
+                        key={g.id}
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => {
+                          setSelectedGame(g);
+                          setGameError(null);
+                          setNewGame(null);
+                          setNewGameTitleError(null);
+                        }}
+                        disabled={submitting}
+                      >
+                        {g.title}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="flex flex-col gap-2">
+                <p className="text-md text-text-tertiary">機種（任意・複数選択可）</p>
+                <MultiSelectMenu
+                  values={new Set(newGame.platforms)}
+                  onToggle={(p) =>
+                    setNewGame({
+                      ...newGame,
+                      platforms: newGame.platforms.includes(p) ? newGame.platforms.filter((x) => x !== p) : [...newGame.platforms, p],
+                    })
+                  }
+                  options={PLATFORM_SELECT_OPTIONS}
+                  placeholder={newGame.platforms.length > 0 ? newGame.platforms.join('、') : '分かれば選んでください'}
+                  filterPlaceholder="機種名で絞り込み"
+                  aria-label="機種"
+                  disabled={submitting}
+                />
+              </div>
               <Field
                 label={`備考（${newGame.note.trim().length}/${MAX_GAME_PROPOSAL_NOTE_LENGTH}）`}
-                hint="発売機種・シリーズ情報など補足があれば記入してください"
+                hint="シリーズ情報など補足があれば記入してください"
                 error={
                   newGame.note.trim().length > MAX_GAME_PROPOSAL_NOTE_LENGTH ? `${MAX_GAME_PROPOSAL_NOTE_LENGTH}文字以内で入力してください` : null
                 }
@@ -596,7 +699,8 @@ export default function NewPlaylistPage() {
             </p>
           )}
 
-          <div className="flex justify-end">
+          <div className="flex flex-col items-end gap-2">
+            {!isAdmin && <p className="text-md text-text-muted">送信後、運営の確認が済むまで公開されません</p>}
             <Button variant="primary" onClick={handleSubmit} disabled={!canSubmit} loading={submitting}>
               {isAdmin ? '登録する' : '提案する'}
             </Button>
@@ -624,9 +728,37 @@ export default function NewPlaylistPage() {
                 setSelectedGame(null);
                 setGameError(null);
                 setNewGameTitleError(null);
-                // 検索欄が空なら入力中のタイトル名・備考を残す
-                setNewGame((prev) => ({ title: query || prev?.title || '', note: prev?.note ?? '' }));
+                // 検索欄が空なら入力中の内容を残す。検索語で入れ直した場合、前に選んだ楽天の商品は外す
+                setNewGame((prev) =>
+                  query
+                    ? { title: query, note: prev?.note ?? '', platforms: prev?.platforms ?? [], rakuten: null }
+                    : (prev ?? { title: '', note: '', platforms: [], rakuten: null }),
+                );
                 // gameId クエリの事前選択が、ゲームタイトル一覧の読み込み後に入力を上書きしないようにする
+                setAppliedGameIdParam(gameIdParam);
+              }
+        }
+        onPickRakuten={
+          isAdmin
+            ? undefined
+            : (item) => {
+                // 楽天ブックスの候補（§9.2）: 版・機種の表記を削った名前と、その商品の機種を入れた新しいゲームタイトルにする
+                setSelectedGame(null);
+                setGameError(null);
+                setNewGameTitleError(null);
+                const hardware = item.hardware.trim();
+                setNewGame((prev) => ({
+                  title: normalizeRakutenGameTitle(item.title).slice(0, MAX_GAME_TITLE_LENGTH),
+                  note: prev?.note ?? '',
+                  platforms: PLATFORM_OPTIONS.includes(hardware) ? [hardware] : [],
+                  rakuten: {
+                    itemUrl: item.itemUrl,
+                    title: item.title,
+                    imageUrl: item.imageUrl,
+                    hardware,
+                    booksGenreId: item.booksGenreId,
+                  },
+                }));
                 setAppliedGameIdParam(gameIdParam);
               }
         }
