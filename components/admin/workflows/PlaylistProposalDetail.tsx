@@ -8,12 +8,14 @@
  * - チャンネルが未登録なら、管理者の直接登録と同じく説明文（任意・手入力）を書ける。
  * - 提案者がゲームタイトルを候補から選べず新しいゲームタイトル名を入力した提案（proposalData.gameId が null、§14.3 v10.1）は、
  *   「ゲームタイトルを登録して承認」で GameCreateModal（タイトル名入り）を開き、登録できたらそのまま再生リストも登録して承認する。
- *   既存のゲームタイトルで足りる場合は「ゲームタイトルを選ぶ」で選んでから通常どおり承認する。
+ *   既存のゲームタイトルで足りる場合は「既存のゲームタイトルから選ぶ」で選んでから通常どおり承認する。
+ *   ゲームタイトルの登録後に再生リストの登録だけ失敗して画面を開き直した場合は、同じ名前のゲームタイトルを自動で選ぶ
+ *   （ゲームタイトルを二重に登録させない）。
  */
 'use client';
 
 import { useEffect, useState } from 'react';
-import { collection, doc, getDoc, getDocs, type DocumentData } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, limit, query, where, type DocumentData } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Button, LinkButton } from '@/components/ui/Button';
 import { Card, CardDivider } from '@/components/ui/Card';
@@ -62,6 +64,10 @@ export function PlaylistProposalDetail({ workflowId, data }: { workflowId: strin
   const [confirmAction, setConfirmAction] = useState<DecisionAction | null>(null);
   const [approveError, setApproveError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  /** 承認・却下の API 実行中（ボタンの二重押し防止） */
+  const [deciding, setDeciding] = useState(false);
+  /** 提案された新しいゲームタイトルが登録済みだったため自動で選んだ */
+  const [autoSelectedExisting, setAutoSelectedExisting] = useState(false);
 
   const game = selectedGame ?? proposedGame;
   const gameChanged = game.id !== proposedGame.id;
@@ -74,6 +80,21 @@ export function PlaylistProposalDetail({ workflowId, data }: { workflowId: strin
       .then((snap) => setChannelRegistered(snap.exists()))
       .catch(() => setChannelRegistered(true));
   }, [pending, proposal.channelId]);
+
+  // 「ゲームタイトルを登録して承認」でゲームタイトルだけ登録でき、再生リストの登録に失敗したまま開き直した場合など、
+  // 提案された名前のゲームタイトルがすでにあればそれを選んでおく
+  const proposedGameId = proposal.gameId as string | null | undefined;
+  useEffect(() => {
+    if (!pending || proposedGameId || !newGameTitle) return;
+    getDocs(query(collection(db, 'games'), where('title', '==', newGameTitle), limit(1)))
+      .then((snap) => {
+        const existing = snap.docs[0];
+        if (!existing) return;
+        setSelectedGame((prev) => prev ?? { id: existing.id, title: (existing.data().title as string) ?? newGameTitle });
+        setAutoSelectedExisting(true);
+      })
+      .catch((e) => console.error('games の読み込みに失敗', e));
+  }, [pending, proposedGameId, newGameTitle]);
 
   function openGameModal() {
     setGameModalOpen(true);
@@ -95,6 +116,7 @@ export function PlaylistProposalDetail({ workflowId, data }: { workflowId: strin
 
   async function handleDecision(action: DecisionAction, comment: string | null, gameId: string = game.id): Promise<boolean> {
     setApproveError(null);
+    setDeciding(true);
     try {
       await callWorkflowApi(workflowId, {
         action,
@@ -114,6 +136,8 @@ export function PlaylistProposalDetail({ workflowId, data }: { workflowId: strin
       }
       toast({ type: 'error', message: '処理に失敗しました。時間をおいて再試行してください' });
       return false;
+    } finally {
+      setDeciding(false);
     }
   }
 
@@ -168,7 +192,12 @@ export function PlaylistProposalDetail({ workflowId, data }: { workflowId: strin
             </div>
           )}
           {pending && gameChanged && newGameTitle && (
-            <p className="text-md text-text-muted">承認すると「{game.title}」で登録します。</p>
+            <p className="text-md text-text-muted">
+              {autoSelectedExisting && game.title === newGameTitle
+                ? `「${game.title}」はゲームタイトルとして登録済みのため、これを選んでいます。`
+                : ''}
+              承認すると「{game.title}」で登録します。
+            </p>
           )}
           {pending && gameChanged && !newGameTitle && (
             <p className="text-md text-text-muted">
@@ -209,9 +238,14 @@ export function PlaylistProposalDetail({ workflowId, data }: { workflowId: strin
               onReject={() => setConfirmAction('reject')}
               onApprove={() => setCreateOpen(true)}
               approveLabel="ゲームタイトルを登録して承認"
+              disabled={deciding}
             />
           ) : (
-            <WorkflowDecisionButtons onReject={() => setConfirmAction('reject')} onApprove={() => setConfirmAction('approve')} />
+            <WorkflowDecisionButtons
+              onReject={() => setConfirmAction('reject')}
+              onApprove={() => setConfirmAction('approve')}
+              disabled={deciding}
+            />
           ))}
       </Card>
 

@@ -513,11 +513,7 @@ export default function NewPlaylistPage() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => {
-                    setNewGame(null);
-                    setNewGameTitleError(null);
-                    setGameModalOpen(true);
-                  }}
+                  onClick={() => setGameModalOpen(true)}
                   disabled={submitting}
                 >
                   一覧から選び直す
@@ -612,7 +608,14 @@ export default function NewPlaylistPage() {
         open={gameModalOpen}
         onOpenChange={setGameModalOpen}
         games={games}
-        onSelect={setSelectedGame}
+        onSelect={(game) => {
+          // 新しいゲームタイトルを入力中に一覧から選んだ場合は、入力を捨てて選択に切り替える
+          // （モーダルを閉じただけなら入力は残す）
+          setSelectedGame(game);
+          setGameError(null);
+          setNewGame(null);
+          setNewGameTitleError(null);
+        }}
         onAddNew={isAdmin ? () => setGameCreateModalOpen(true) : undefined}
         onEnterNew={
           isAdmin
@@ -621,7 +624,10 @@ export default function NewPlaylistPage() {
                 setSelectedGame(null);
                 setGameError(null);
                 setNewGameTitleError(null);
-                setNewGame({ title: query, note: '' });
+                // 検索欄が空なら入力中のタイトル名・備考を残す
+                setNewGame((prev) => ({ title: query || prev?.title || '', note: prev?.note ?? '' }));
+                // gameId クエリの事前選択が、ゲームタイトル一覧の読み込み後に入力を上書きしないようにする
+                setAppliedGameIdParam(gameIdParam);
               }
         }
       />

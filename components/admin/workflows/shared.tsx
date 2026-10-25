@@ -154,19 +154,22 @@ export function WorkflowDecisionButtons({
   onReject,
   onApprove,
   approveLabel = '承認する',
+  disabled = false,
 }: {
   onReject: () => void;
   onApprove: () => void;
   approveLabel?: string;
+  /** 承認処理の実行中など、押させたくない間は true */
+  disabled?: boolean;
 }) {
   return (
     <>
       <CardDivider />
       <div className="flex flex-wrap justify-end gap-3">
-        <Button variant="secondary" onClick={onReject}>
+        <Button variant="secondary" onClick={onReject} disabled={disabled}>
           却下する
         </Button>
-        <Button variant="primary" onClick={onApprove}>
+        <Button variant="primary" onClick={onApprove} disabled={disabled}>
           {approveLabel}
         </Button>
       </div>
