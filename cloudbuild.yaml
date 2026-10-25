@@ -15,7 +15,8 @@ steps:
 images:
   - '$_IMAGE_URL'
 
-# テストモードウィジェット（UI仕様書 §7）を有効にする場合のみ、デプロイ時に _TEST_MODE=true を渡す。既定は無効
+# テストモードウィジェット（UI仕様書 §7）を有効にする場合のみ、デプロイ時に _TEST_MODE=true を渡す。既定は無効。
+# deploy.sh / deploy.ps1 / scripts/deploy-stg-cloud.sh は stg のときだけ true を渡す（E2Eテスト用に stg では常時有効）
 # _RAKUTEN_AFFILIATE_IDは.env.localのRAKUTEN_AFFILIATE_IDからdeploy.sh/deploy.ps1が渡す。未設定時は
 # 空文字（lib/rakuten-affiliate.tsがアフィリエイトタグなしのURLにフォールバックする）
 substitutions:

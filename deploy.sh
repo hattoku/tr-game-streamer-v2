@@ -54,9 +54,14 @@ fi
 # 実行時環境変数ではなくDockerビルド引数として渡す（cloudbuild.yaml/Dockerfile参照）
 RAKUTEN_AFFILIATE_ID=$(grep '^RAKUTEN_AFFILIATE_ID=' "$SCRIPT_DIR/.env.local" | cut -d '=' -f2-)
 
+# テストモード（UI仕様書 §7）は stg でのみ常時有効にする（E2Eテストがテスト用会員でログインするため）。
+# 本番では渡さない（渡しても lib/app-env.ts が無効化する）
+TEST_MODE=""
+if [ "$ENV" = "stg" ]; then TEST_MODE="true"; fi
+
 # 1. ビルドとプッシュ
 echo "Building and pushing Docker image..."
-gcloud builds submit --config cloudbuild.yaml --substitutions "_IMAGE_URL=$IMAGE_URL,_APP_ENV=$ENV,_RAKUTEN_AFFILIATE_ID=$RAKUTEN_AFFILIATE_ID" . --project "$PROJECT_ID"
+gcloud builds submit --config cloudbuild.yaml --substitutions "_IMAGE_URL=$IMAGE_URL,_APP_ENV=$ENV,_RAKUTEN_AFFILIATE_ID=$RAKUTEN_AFFILIATE_ID,_TEST_MODE=$TEST_MODE" . --project "$PROJECT_ID"
 
 # 2. Firestore ルール・インデックスをデプロイ
 # 新コードが依存するルール/インデックスを、Cloud Run に新リビジョンが載る前に反映しておく。

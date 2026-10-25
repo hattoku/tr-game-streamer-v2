@@ -59,9 +59,13 @@ $RakutenAccessKey = ($RakutenAccessKeyLine -split '=', 2)[1]
 $RakutenAffiliateIdLine = Get-Content $EnvLocalPath | Where-Object { $_ -match '^RAKUTEN_AFFILIATE_ID=' }
 $RakutenAffiliateId = if ($RakutenAffiliateIdLine) { ($RakutenAffiliateIdLine -split '=', 2)[1] } else { '' }
 
+# テストモード（UI仕様書 §7）は stg でのみ常時有効にする（E2Eテストがテスト用会員でログインするため）。
+# 本番では渡さない（渡しても lib/app-env.ts が無効化する）
+$TestMode = if ($Env -eq "stg") { "true" } else { "" }
+
 # 1. ビルドとプッシュ
 Write-Host "Building and pushing Docker image..." -ForegroundColor Green
-gcloud builds submit --config cloudbuild.yaml --substitutions "_IMAGE_URL=$ImageUrl,_APP_ENV=$Env,_RAKUTEN_AFFILIATE_ID=$RakutenAffiliateId" . --project "$ProjectId"
+gcloud builds submit --config cloudbuild.yaml --substitutions "_IMAGE_URL=$ImageUrl,_APP_ENV=$Env,_RAKUTEN_AFFILIATE_ID=$RakutenAffiliateId,_TEST_MODE=$TestMode" . --project "$ProjectId"
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR: Docker image build failed (exit code $LASTEXITCODE). Aborting deploy." -ForegroundColor Red
     exit $LASTEXITCODE
