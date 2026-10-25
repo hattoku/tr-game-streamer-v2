@@ -117,7 +117,7 @@ export function GameProposalModal({ open, onOpenChange, defaultPlaylistUrl, onBa
         done ? (
           <span className="flex items-center gap-2">
             <CheckIcon size={22} className="shrink-0 text-toast-success" />
-            提案を受け付けました
+            ゲームタイトルの提案を受け付けました
           </span>
         ) : (
           'ゲームタイトルの追加を提案する'
@@ -131,7 +131,7 @@ export function GameProposalModal({ open, onOpenChange, defaultPlaylistUrl, onBa
             <br />
             内容を確認後、ゲームタイトルの登録を検討します。
             <br />
-            登録後は再生リストの提案が可能になります。
+            一緒に送っていただいた再生リストも、ゲームタイトルの登録とあわせて掲載を検討します。
           </p>
           <div className="flex justify-end">
             <Button variant="primary" onClick={() => onOpenChange(false)}>
