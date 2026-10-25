@@ -90,6 +90,8 @@ interface GameCreateModalProps {
   defaultTitle?: string;
   /** 新規登録が成功したとき */
   onCreated?: (game: GameOption) => void;
+  /** 新規登録モードの見出し・送信ボタン・冒頭の案内を差し替える（提案の承認から開き、登録後に続けて承認するとき） */
+  createCopy?: { title: string; submitLabel: string; notice: string };
   /** 編集の保存が成功したとき */
   onUpdated?: () => void;
 }
@@ -108,7 +110,7 @@ async function getIdToken(): Promise<string> {
   return auth.currentUser.getIdToken();
 }
 
-export function GameCreateModal({ open, onOpenChange, initial, defaultTitle, onCreated, onUpdated }: GameCreateModalProps) {
+export function GameCreateModal({ open, onOpenChange, initial, defaultTitle, onCreated, onUpdated, createCopy }: GameCreateModalProps) {
   const { toast } = useToast();
   const isEdit = !!initial;
 
@@ -362,8 +364,9 @@ export function GameCreateModal({ open, onOpenChange, initial, defaultTitle, onC
   const rakutenItemValid = normalizeRakutenBooksItemUrl(rakutenUrl) !== null;
 
   return (
-    <Modal open={open} onOpenChange={onOpenChange} title={isEdit ? 'ゲームタイトルを編集する' : 'ゲームタイトルを登録する'} maxWidthClassName="max-w-[560px]">
+    <Modal open={open} onOpenChange={onOpenChange} title={isEdit ? 'ゲームタイトルを編集する' : (createCopy?.title ?? 'ゲームタイトルを登録する')} maxWidthClassName="max-w-[560px]">
       <div className="flex flex-col gap-4">
+        {!isEdit && createCopy && <p className="text-base text-text-secondary">{createCopy.notice}</p>}
         {/* 検索・URL取得のどちらも同じ自動セットにつながるため、1つの枠にまとめて説明文を共有する
             （2026-09-22、ユーザー指摘: 説明文がURL欄だけにかかるように見えていた） */}
         <div className="flex flex-col gap-3 rounded-[8px] border border-border-card p-3">
@@ -541,7 +544,7 @@ export function GameCreateModal({ open, onOpenChange, initial, defaultTitle, onC
             キャンセル
           </Button>
           <Button variant="primary" onClick={handleSubmit} loading={submitting}>
-            {isEdit ? '保存する' : '登録する'}
+            {isEdit ? '保存する' : (createCopy?.submitLabel ?? '登録する')}
           </Button>
         </div>
       </div>

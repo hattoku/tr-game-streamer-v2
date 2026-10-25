@@ -232,6 +232,13 @@ export function PlaylistProposalDetail({ workflowId, data }: { workflowId: strin
 
         <WorkflowMemo workflowId={workflowId} operatorMemo={(data.operatorMemo as string) ?? null} />
 
+        {pending && needsGame && (
+          <p role="note" className="text-md text-input-error">
+            ゲームタイトル「{newGameTitle}」はまだ登録されていないため、このままでは承認できません。
+            「ゲームタイトルを登録して承認」でゲームタイトルを登録すると、続けて再生リストも登録して承認します。
+            既存のゲームタイトルで足りる場合は「既存のゲームタイトルから選ぶ」で選んでください。
+          </p>
+        )}
         {pending &&
           (needsGame ? (
             <WorkflowDecisionButtons
@@ -253,6 +260,11 @@ export function PlaylistProposalDetail({ workflowId, data }: { workflowId: strin
         open={createOpen}
         onOpenChange={setCreateOpen}
         defaultTitle={newGameTitle ?? ''}
+        createCopy={{
+          title: 'ゲームタイトルを登録して承認',
+          submitLabel: 'ゲームタイトルと再生リストを登録して承認',
+          notice: 'ゲームタイトルを登録すると、続けてこの再生リストをそのゲームタイトルで登録し、提案を承認します。',
+        }}
         onCreated={(g) => {
           // 登録したゲームタイトルを選んだ状態にしてから、続けて再生リストを登録して承認する。
           // 再生リストの登録だけ失敗した場合も、このゲームタイトルが選ばれたまま審査中に残る
