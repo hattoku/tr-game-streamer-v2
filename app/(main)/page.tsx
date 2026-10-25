@@ -8,6 +8,8 @@
  * ログイン後に別途取得する（`useMylistEntries`、`components/top/MylistSection.tsx`内部）。
  * マイリストの取得は公開再生リスト等の取得完了を待たず、認証確定時点で並行して開始する
  * （読み込み中の時間が長いほどタブ切替等で通信が止まる事象に巻き込まれやすいため）。
+ * ログイン済みは注目の再生リストから完走済みを除くため（§6.4）、完走済みの再生リストIDも並行して取得し、
+ * 取得するまで注目セクションの位置はスケルトンにする（失敗・タイムアウト時は除外なしで表示）。
  */
 'use client';
 
@@ -24,6 +26,7 @@ import { NewArrivalsSection } from '@/components/top/NewArrivalsSection';
 import { TagPickupSections } from '@/components/top/TagPickupSections';
 import { NewCollectionsSection } from '@/components/top/NewCollectionsSection';
 import { fetchPublicCollections, type CollectionData } from '@/lib/collections';
+import { fetchCompletedPlaylistIds } from '@/lib/mylist-entries';
 import { Skeleton } from '@/components/ui/Skeleton';
 
 interface Genre {
@@ -31,12 +34,18 @@ interface Genre {
   name: string;
 }
 
+/** 完走済みIDの取得がこれを超えたら除外なしで注目セクションを出す（取得はその後も待ち、届いたら反映する） */
+const COMPLETED_TIMEOUT_MS = 15_000;
+const NO_EXCLUDES = new Set<string>();
+
 export default function HomePage() {
   const { user, loading: authLoading } = useAuth();
   const [playlists, setPlaylists] = useState<PlaylistSummary[] | null>(null);
   const [tags, setTags] = useState<Map<string, TagInfo> | null>(null);
   const [genres, setGenres] = useState<Genre[] | null>(null);
   const [collections, setCollections] = useState<CollectionData[]>([]);
+  const [completed, setCompleted] = useState<{ uid: string; ids: Set<string> } | null>(null);
+  const uid = user?.uid ?? null;
 
   useEffect(() => {
     Promise.all([fetchPublicPlaylists(), fetchTagsMap(), getDocs(collection(db, 'genres'))]).then(
@@ -51,6 +60,24 @@ export default function HomePage() {
       .catch(() => setCollections([]));
   }, []);
 
+  useEffect(() => {
+    if (!uid) return;
+    let active = true;
+    const fallback = () => {
+      if (active) setCompleted((c) => (c?.uid === uid ? c : { uid, ids: new Set() }));
+    };
+    const timer = setTimeout(fallback, COMPLETED_TIMEOUT_MS);
+    fetchCompletedPlaylistIds(uid).then((ids) => {
+      if (active) setCompleted({ uid, ids });
+    }, fallback);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [uid]);
+  // 未ログインは除外なし。ログイン済みは当該ユーザーの完走済みIDが揃うまで注目セクションを待たせる
+  const completedIds = uid ? (completed?.uid === uid ? completed.ids : null) : NO_EXCLUDES;
+
   const dataReady = playlists !== null && tags !== null && genres !== null;
   if (authLoading || (!user && !dataReady)) {
     return <TopSkeleton />;
@@ -64,7 +91,11 @@ export default function HomePage() {
       {user && <MylistSection />}
       {dataReady ? (
         <>
-          <FeaturedSection playlists={playlists} genres={genres} />
+          {completedIds ? (
+            <FeaturedSection playlists={playlists} genres={genres} excludePlaylistIds={completedIds} />
+          ) : (
+            <SectionSkeleton />
+          )}
           {user && <NewArrivalsSection playlists={playlists} />}
           <NewCollectionsSection collections={collections} playlists={playlists} />
           <TagPickupSections playlists={playlists} tags={tags} />
