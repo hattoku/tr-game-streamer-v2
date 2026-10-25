@@ -75,12 +75,12 @@
   --color-overlay: rgba(0, 0, 0, 0.6);
   --color-surface-border: rgba(255, 255, 255, 0.12);
 
-  /* §14.1 管理画面ヘッダー（サービス画面との取り違え防止のアンバー配色） */
-  --color-admin-accent: #f0a500;
-  --color-admin-accent-text: #f5c04a;
-  --color-admin-header-bg: #241a06;
-  --color-admin-border: rgba(240, 165, 0, 0.25);
-  --color-admin-on-accent: #1a1200;
+  /* §14.1 管理画面ヘッダー（サービス画面との取り違え防止のパープル配色） */
+  --color-admin-accent: #a06ef5;
+  --color-admin-accent-text: #c4a3fa;
+  --color-admin-header-bg: #1c1030;
+  --color-admin-border: rgba(160, 110, 245, 0.28);
+  --color-admin-on-accent: #12061f;
 
   /* §16 奥行き・演出: 影 */
   --shadow-card: 0 6px 18px rgba(0, 0, 0, 0.45);
