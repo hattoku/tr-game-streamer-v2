@@ -3,7 +3,8 @@
  * ロゴ＋タグライン／サービス・サポートのリンク群／利用規約・プライバシーポリシー・コピーライト。
  * 認証ページ・初期設定フローでは表示しない（(auth) レイアウトには含めない）。
  * モバイル（767px以下）でも表示しない。同じリンク群と©はハンバーガーメニュー（MobileMenu）が担う（§3.5）。
- * 管理者（owner/operator）ログイン時のみ「サービス」グループに「再生リストを追加する」を追加する。
+ * ログイン時のみ「サービス」グループに「再生リストを追加する」を追加する（管理者は登録、一般ユーザーは提案。
+ * フェーズ7ステップ7-4で管理者限定を解除）。
  */
 'use client';
 
@@ -30,9 +31,8 @@ function LinkGroup({ title, items }: { title: string; items: NavItem[] }) {
 }
 
 export function Footer() {
-  const { role } = useAuth();
-  const isAdmin = role === 'owner' || role === 'operator';
-  const serviceNav = isAdmin
+  const { user } = useAuth();
+  const serviceNav = user
     ? [...FOOTER_SERVICE_NAV, { label: '再生リストを追加する', href: '/playlists/new' }]
     : FOOTER_SERVICE_NAV;
 

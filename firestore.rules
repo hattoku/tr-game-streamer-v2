@@ -210,9 +210,12 @@ service cloud.firestore {
     match /workflows/{workflowId} {
       allow read: if isAdmin() || (isSignedIn() && resource.data.submittedBy == request.auth.uid);
 
+      // クライアントから直接作れるのは通報（ReportModal）だけ。提案（playlist_register・game_title_register）は
+      // 内容をサーバー側で検証するため API（POST /api/playlists/propose・/api/games/propose、Admin SDK）経由のみ（7-4）
       allow create: if isSignedIn()
         && request.resource.data.submittedBy == request.auth.uid
-        && request.resource.data.status == 'reviewing_lv1';
+        && request.resource.data.status == 'reviewing_lv1'
+        && request.resource.data.type == 'review_report';
 
       // STEP1/STEP2の審査進行・履歴追記は管理者操作（AIによる一次判定はCloud Functions=Admin SDK経由）。
       allow update, delete: if isAdmin();

@@ -2,9 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/api-auth';
 import { adminDb } from '@/lib/firebase-admin';
 import { recalculatePlaylistScore } from '@/lib/review-score';
+import { registerPlaylist } from '@/lib/playlist-registration';
+import { GAME_PROPOSAL_TYPE, PLAYLIST_PROPOSAL_TYPE } from '@/lib/proposal-shared';
 
-// 審査ワークフロー（通報）の承認・却下・運営メモ更新API（管理_審査ワークフロー仕様書 §9, §11）。
-// フェーズ6ステップ3の決定により対象typeは`review_report`のみ（提案系typeは投稿経路が無いため今回は扱わない）。
+// 審査ワークフローの承認・却下・運営メモ更新API（管理_審査ワークフロー仕様書 §9, §11）。
+// 対象typeは`review_report`（通報、フェーズ6ステップ3）と、提案系の`playlist_register`・`game_title_register`
+// （フェーズ7ステップ7-4）。ゲームタイトル編集提案（`game_title_edit`）は投稿経路が無いため扱わない。
+// - 再生リスト登録提案の承認: /api/playlists/register と同じ登録処理（lib/playlist-registration.ts）を実行する。
+//   `gameId` を渡すと提案のゲームタイトルを差し替えて登録し、editHistory に記録する（§10.1 の最小版、2026-10-25 ユーザー決定）。
+//   未登録チャンネルの説明文は `channelDescription`（任意）。登録に失敗したら審査中のまま残す。
+// - ゲームタイトル登録提案の承認: 管理者が先に GameCreateModal（POST /api/admin/games）で登録し、その `createdGameId` を渡す。
 // operator/owner共通のためロール別の分岐は無い（requireAdminのみで判定）。
 // STEP1/STEP2の二段階フローは実装しないため、承認・却下の記録は常にstep2Historyへ追記する
 // （step1Historyは使わない。AI運営者・ジャンル別担当アサインが未実装のため）。
@@ -20,7 +27,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     return NextResponse.json({ error: 'not_found' }, { status: 404 });
   }
   const workflow = workflowSnap.data()!;
-  if (workflow.type !== 'review_report') {
+  if (workflow.type !== 'review_report' && workflow.type !== PLAYLIST_PROPOSAL_TYPE && workflow.type !== GAME_PROPOSAL_TYPE) {
     return NextResponse.json({ error: 'unsupported_type' }, { status: 400 });
   }
 
@@ -46,6 +53,56 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   }
   if (action === 'reject' && !comment) {
     return NextResponse.json({ error: 'reject_reason_required' }, { status: 400 });
+  }
+
+  const historyEntry = {
+    executedAt: now,
+    operatorId: uid,
+    isAI: false,
+    action: action === 'approve' ? 'approved' : 'rejected',
+    comment,
+  };
+
+  if (workflow.type === PLAYLIST_PROPOSAL_TYPE || workflow.type === GAME_PROPOSAL_TYPE) {
+    const updates: Record<string, unknown> = {};
+    if (action === 'approve' && workflow.type === PLAYLIST_PROPOSAL_TYPE) {
+      const proposal = workflow.proposalData ?? {};
+      const originalGameId = proposal.gameId as string;
+      const gameId = typeof body.gameId === 'string' && body.gameId ? body.gameId : originalGameId;
+      const result = await registerPlaylist({
+        playlistUrl: proposal.playlistUrl as string,
+        gameId,
+        channelDescription: body.channelDescription,
+        registeredBy: uid,
+        proposedBy: workflow.submittedBy as string,
+      });
+      if ('error' in result) {
+        return NextResponse.json({ error: result.error, message: result.message }, { status: result.status });
+      }
+      updates['proposalData.registeredPlaylistId'] = result.playlistId;
+      if (gameId !== originalGameId) {
+        updates['proposalData.approvedGameId'] = gameId;
+        updates['proposalData.approvedGameName'] = result.gameName;
+        updates.editHistory = [
+          ...(workflow.editHistory ?? []),
+          { editedAt: now, operatorId: uid, field: 'gameId', from: originalGameId, to: gameId },
+        ];
+      }
+    }
+    if (action === 'approve' && workflow.type === GAME_PROPOSAL_TYPE) {
+      const createdGameId = typeof body.createdGameId === 'string' ? body.createdGameId : '';
+      if (!createdGameId || !(await adminDb.collection('games').doc(createdGameId).get()).exists) {
+        return NextResponse.json({ error: 'game_not_found' }, { status: 404 });
+      }
+      updates['proposalData.createdGameId'] = createdGameId;
+    }
+    await workflowRef.update({
+      ...updates,
+      status: action === 'approve' ? 'approved' : 'rejected',
+      step2History: [...(workflow.step2History ?? []), historyEntry],
+      updatedAt: now,
+    });
+    return NextResponse.json({ ok: true });
   }
 
   const reviewId = workflow.reportData?.reviewId as string | undefined;
@@ -86,10 +143,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   await workflowRef.update({
     ...(hiddenReviewSnapshot ? { 'reportData.hiddenReviewSnapshot': hiddenReviewSnapshot } : {}),
     status: action === 'approve' ? 'approved' : 'rejected',
-    step2History: [
-      ...(workflow.step2History ?? []),
-      { executedAt: now, operatorId: uid, isAI: false, action: action === 'approve' ? 'approved' : 'rejected', comment },
-    ],
+    step2History: [...(workflow.step2History ?? []), historyEntry],
     updatedAt: now,
   });
 

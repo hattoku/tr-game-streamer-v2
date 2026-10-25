@@ -1,13 +1,12 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { collection, doc, getDoc, getDocs } from 'firebase/firestore';
 import { db, auth } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button, LinkButton } from '@/components/ui/Button';
 import { Card, CardChildArea, SectionHeading } from '@/components/ui/Card';
-import { EmptyState } from '@/components/ui/EmptyState';
 import { Field, INPUT_CLASS, Input, Textarea } from '@/components/ui/Input';
 import { Skeleton, SkeletonText } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
@@ -15,18 +14,22 @@ import { AlertIcon, CheckIcon, ChevronDownIcon, InfoIcon, XIcon } from '@/compon
 import { cn } from '@/components/ui/cn';
 import { GameSelectModal, type GameOption } from '@/components/playlists/GameSelectModal';
 import { GameCreateModal } from '@/components/games/GameCreateModal';
+import { GameProposalModal } from '@/components/playlists/GameProposalModal';
 import { PlaylistSummary } from '@/components/playlists/PlaylistSummary';
 
-// 「再生リストを追加する」（管理者専用の最小版）。
+// 「再生リストを追加する」。
 // document/specification/page/ページ 再生リストを追加する 仕様書.md §2.1（1カラム）、§4.1（URL入力・確認エリア）、
-// §4.2（ゲームタイトル選択モーダル）、§4.3（送信ボタン）、§6.1（管理者向け完了画面）、§7（インライン＋トースト）。
+// §4.2（ゲームタイトル選択モーダル）、§4.3（送信ボタン）、§6（完了画面）、§7（インライン＋トースト）。
 // フェーズ2.5ステップ7でデザイン適用（wiki/sources/2026-09-12-login-and-register-design-plan.md）。
-// スコープ外（フェーズ3以降。wiki/sources/2026-09-10-phase2-plan.md）:
-// - 一般ユーザーの提案フロー（§5.4・§6.2）・ゲームタイトル追加提案モーダル（§4.2.2）・AI説明文自動生成（§4.1.4）
+// 管理者は「登録する」（/api/playlists/register で即登録、§6.1）、一般ユーザーは「提案する」
+// （/api/playlists/propose で `workflows` に保存、§5.4・§6.2。フェーズ7ステップ7-4）。一般ユーザーには
+// 未登録チャンネルの説明文欄を出さず（承認時に管理者が書く）、ゲームタイトル選択モーダルのフッターは
+// ゲームタイトル追加提案モーダル（§4.2.2）を開く。AI説明文自動生成（§4.1.4）はスコープ外。
 // 流入元対応: `?gameId=`（ゲーム詳細から、§3.2）はゲームタイトルを事前選択、`?channelId=`（チャンネル詳細から、§3.3）は
 // 案内エリアを表示し、プレビューした再生リストのチャンネルが流入元と一致しなければ登録不可にする（§5.2、
-// サーバー側 register/route.ts でも `sourceChannelId` で再検証）。
-// 未ログインは /login へ（§1.2）。一般ユーザーには「管理者のみ」の空状態を出す（提案フローができるまで）。
+// サーバー側 register・propose でも `sourceChannelId` で再検証）。`?url=`（管理画面のゲームタイトル登録提案の承認後
+// 「この再生リストも登録する」から）は再生リストURLを入れてプレビューまで行う。
+// 未ログインは /login へ（§1.2）。
 
 interface PreviewResult {
   playlist: {
@@ -40,10 +43,13 @@ interface PreviewResult {
   channelMatches: boolean;
   channelAlreadyRegistered: boolean;
   playlistAlreadyRegistered: boolean;
+  /** 審査中の提案がある（§7.2）。一般ユーザーは提案不可、管理者は案内のみ */
+  pendingProposal: boolean;
 }
 
 interface CompletionResult {
-  playlistId: string;
+  /** 管理者の登録時のみ（提案はまだ公開されていないため無い。§6.2 注意） */
+  playlistId?: string;
   title: string;
   thumbnailUrl: string;
   channelName: string;
@@ -82,6 +88,12 @@ const REGISTER_ERRORS: Record<string, { inline: string; toast: string }> = {
   game_not_found: { inline: 'ゲームタイトルが見つかりませんでした', toast: '送信に失敗しました。時間をおいて再試行してください' },
   default: { inline: '', toast: '送信に失敗しました。時間をおいて再試行してください' },
 };
+// §7.2 一般ユーザー固有エラー（審査中の提案あり・登録済みは同じ文言）
+const ALREADY_PROPOSED_ERROR = { inline: 'この再生リストはすでに提案済み、または登録済みです', toast: '提案済みの再生リストです' };
+const PROPOSE_ERRORS: Record<string, { inline: string; toast: string }> = {
+  ...REGISTER_ERRORS,
+  already_proposed: ALREADY_PROPOSED_ERROR,
+};
 
 export default function NewPlaylistPage() {
   const { user, role, loading } = useAuth();
@@ -89,7 +101,7 @@ export default function NewPlaylistPage() {
   const searchParams = useSearchParams();
   const { toast } = useToast();
 
-  const [playlistUrl, setPlaylistUrl] = useState('');
+  const [playlistUrl, setPlaylistUrl] = useState(() => searchParams.get('url') ?? '');
   const [previewedUrl, setPreviewedUrl] = useState('');
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -99,6 +111,7 @@ export default function NewPlaylistPage() {
   const [selectedGame, setSelectedGame] = useState<GameOption | null>(null);
   const [gameModalOpen, setGameModalOpen] = useState(false);
   const [gameCreateModalOpen, setGameCreateModalOpen] = useState(false);
+  const [gameProposalModalOpen, setGameProposalModalOpen] = useState(false);
   const [gameError, setGameError] = useState<string | null>(null);
 
   const [channelDescription, setChannelDescription] = useState('');
@@ -130,7 +143,7 @@ export default function NewPlaylistPage() {
   }, [loading, user, router]);
 
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!user) return;
     getDocs(collection(db, 'games'))
       .then((snapshot) => {
         setGames(
@@ -144,7 +157,7 @@ export default function NewPlaylistPage() {
         );
       })
       .catch((e) => console.error('games の読み込みに失敗', e));
-  }, [isAdmin]);
+  }, [user]);
 
   // ゲームタイトル詳細ページ「再生リストを追加する」からの遷移時、gameIdクエリで
   // あらかじめゲームタイトルを選択済みにする（ページ ゲームタイトル 詳細仕様書 §4.4）。
@@ -161,7 +174,10 @@ export default function NewPlaylistPage() {
   }
 
   async function handleUrlBlur() {
-    const url = playlistUrl.trim();
+    await runPreview(playlistUrl.trim());
+  }
+
+  async function runPreview(url: string) {
     if (!url) {
       setPreview(null);
       setPreviewedUrl('');
@@ -202,6 +218,8 @@ export default function NewPlaylistPage() {
       // チェック順序（§5.2）: 公開状態 → チャンネル一致 → 登録済み → 流入元チャンネル一致
       if (!result.playlist.isPublic) toast({ type: 'error', message: '公開されていない再生リストです' });
       else if (!result.channelMatches) toast({ type: 'error', message: '登録できない再生リストです' });
+      else if (!isAdmin && (result.playlistAlreadyRegistered || result.pendingProposal))
+        toast({ type: 'error', message: ALREADY_PROPOSED_ERROR.toast });
       else if (result.playlistAlreadyRegistered) toast({ type: 'error', message: '登録済みの再生リストです' });
       else if (sourceChannelId && result.channel.youtubeChannelId !== sourceChannelId) {
         setUrlError(CHANNEL_MISMATCH_ERROR.inline);
@@ -215,9 +233,30 @@ export default function NewPlaylistPage() {
     }
   }
 
+  // `?url=` で流入したときは blur を待たずにプレビューする（ログイン状態が分かってから一度だけ）
+  const autoPreviewedRef = useRef(false);
+  useEffect(() => {
+    const urlParam = searchParams.get('url');
+    if (!user || autoPreviewedRef.current || !urlParam) return;
+    autoPreviewedRef.current = true;
+    // 非同期 IIFE にして、effect 本体で同期的に setState しない形にする（react-hooks/set-state-in-effect）
+    (async () => {
+      await runPreview(urlParam.trim());
+    })();
+    // runPreview は描画ごとに作り直される関数のため依存に含めない（一度だけ走らせる）
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, searchParams]);
+
   const sourceChannelMismatch = !!preview && !!sourceChannelId && preview.channel.youtubeChannelId !== sourceChannelId;
+  // 一般ユーザーは審査中の提案がある再生リストも提案できない（§7.2）。管理者は案内だけ出して登録はできる
+  const alreadyProposed = !isAdmin && !!preview && (preview.playlistAlreadyRegistered || preview.pendingProposal);
   const constraintsOk =
-    !!preview && preview.playlist.isPublic && preview.channelMatches && !preview.playlistAlreadyRegistered && !sourceChannelMismatch;
+    !!preview &&
+    preview.playlist.isPublic &&
+    preview.channelMatches &&
+    !preview.playlistAlreadyRegistered &&
+    !alreadyProposed &&
+    !sourceChannelMismatch;
   const canSubmit = constraintsOk && !!selectedGame && !submitting;
 
   async function handleSubmit() {
@@ -231,25 +270,26 @@ export default function NewPlaylistPage() {
     setSubmitError(null);
     try {
       const idToken = await getIdToken();
-      const res = await fetch('/api/playlists/register', {
+      const res = await fetch(isAdmin ? '/api/playlists/register' : '/api/playlists/propose', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
         body: JSON.stringify({
           playlistUrl: playlistUrl.trim(),
           gameId: selectedGame.id,
-          channelDescription: preview?.channelAlreadyRegistered ? undefined : channelDescription,
+          channelDescription: isAdmin && !preview?.channelAlreadyRegistered ? channelDescription : undefined,
           sourceChannelId: sourceChannelId ?? undefined,
         }),
       });
       const body = await res.json();
       if (!res.ok) {
-        const msg = REGISTER_ERRORS[body.error as string] ?? REGISTER_ERRORS.default;
+        const errors = isAdmin ? REGISTER_ERRORS : PROPOSE_ERRORS;
+        const msg = errors[body.error as string] ?? errors.default;
         setSubmitError(msg.inline || null);
         toast({ type: 'error', message: msg.toast });
         return;
       }
       setCompletion(body as CompletionResult);
-      toast({ type: 'success', message: '再生リストを登録しました' });
+      toast({ type: 'success', message: isAdmin ? '再生リストを登録しました' : '提案を送信しました' });
     } catch {
       toast({ type: 'error', message: REGISTER_ERRORS.default.toast });
     } finally {
@@ -271,20 +311,30 @@ export default function NewPlaylistPage() {
 
   if (loading || !user) return <NewPlaylistSkeleton />;
 
-  if (!isAdmin) {
+  // 提案受付の完了画面（§6.2）: 同一ページ内で切り替える。まだ公開されていないため「再生リストを見る」は出さない
+  if (completion && !isAdmin) {
     return (
       <div className="mx-auto max-w-[720px]">
-        <SectionHeading className="mb-5">再生リストを追加する</SectionHeading>
-        <EmptyState
-          icon={<AlertIcon />}
-          title="このページは管理者のみ利用できます"
-          description="一般ユーザー向けの再生リスト提案機能は準備中です"
-          action={
-            <LinkButton href="/" variant="secondary">
-              TOPへ戻る
-            </LinkButton>
-          }
-        />
+        <SectionHeading className="mb-2">📨 提案を受け付けました</SectionHeading>
+        <p className="mb-5 text-base text-text-secondary">ありがとうございます！提案内容を確認後、プレミテに掲載します。</p>
+        <Card>
+          <PlaylistSummary
+            title={completion.title}
+            thumbnailUrl={completion.thumbnailUrl}
+            channelName={completion.channelName}
+            channelIconUrl={completion.channelIconUrl}
+            videoCount={completion.videoCount}
+            gameName={completion.gameName}
+          />
+        </Card>
+        <div className="mt-5 flex flex-wrap gap-3">
+          <LinkButton href="/playlists" variant="primary">
+            再生リストを探す
+          </LinkButton>
+          <Button variant="secondary" onClick={resetForm}>
+            続けて提案する
+          </Button>
+        </div>
       </div>
     );
   }
@@ -395,7 +445,16 @@ export default function NewPlaylistPage() {
                     ) : (
                       <CheckLine state="ng">チャンネルが作成した再生リストではないため登録できません</CheckLine>
                     ))}
-                  {preview.playlistAlreadyRegistered && <CheckLine state="ng">この再生リストはすでに登録されています</CheckLine>}
+                  {alreadyProposed ? (
+                    <CheckLine state="ng">{ALREADY_PROPOSED_ERROR.inline}</CheckLine>
+                  ) : (
+                    preview.playlistAlreadyRegistered && <CheckLine state="ng">この再生リストはすでに登録されています</CheckLine>
+                  )}
+                  {isAdmin && preview.pendingProposal && !preview.playlistAlreadyRegistered && (
+                    <CheckLine state="info">
+                      この再生リストには審査中の提案があります。ここで登録した場合、その提案は審査画面で却下してください。
+                    </CheckLine>
+                  )}
                   {sourceChannelMismatch && <CheckLine state="ng">{CHANNEL_MISMATCH_ERROR.inline}</CheckLine>}
                   {showChannelState &&
                     (preview.channelAlreadyRegistered ? (
@@ -404,7 +463,7 @@ export default function NewPlaylistPage() {
                       <CheckLine state="info">未登録のチャンネルです。再生リスト登録と同時に新規チャンネルとして登録します。</CheckLine>
                     ))}
                 </ul>
-                {showChannelState && !preview.channelAlreadyRegistered && (
+                {isAdmin && showChannelState && !preview.channelAlreadyRegistered && (
                   <Field
                     label="チャンネルの説明文（任意・手入力）"
                     hint="AIによる自動生成は準備中のため、必要なら手入力してください"
@@ -464,7 +523,7 @@ export default function NewPlaylistPage() {
 
           <div className="flex justify-end">
             <Button variant="primary" onClick={handleSubmit} disabled={!canSubmit} loading={submitting}>
-              登録する
+              {isAdmin ? '登録する' : '提案する'}
             </Button>
           </div>
         </div>
@@ -475,7 +534,13 @@ export default function NewPlaylistPage() {
         onOpenChange={setGameModalOpen}
         games={games}
         onSelect={setSelectedGame}
-        onAddNew={() => setGameCreateModalOpen(true)}
+        onAddNew={isAdmin ? () => setGameCreateModalOpen(true) : undefined}
+        onPropose={isAdmin ? undefined : () => setGameProposalModalOpen(true)}
+      />
+      <GameProposalModal
+        open={gameProposalModalOpen}
+        onOpenChange={setGameProposalModalOpen}
+        defaultPlaylistUrl={playlistUrl.trim()}
       />
       <GameCreateModal
         open={gameCreateModalOpen}

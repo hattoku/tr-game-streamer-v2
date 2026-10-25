@@ -86,6 +86,8 @@ interface GameCreateModalProps {
   onOpenChange: (open: boolean) => void;
   /** 指定すると編集モード（PATCH）。省略時は新規登録（POST） */
   initial?: GameFormInitial;
+  /** 新規登録モードでタイトル名欄に最初から入れておく値（ゲームタイトル登録提案の承認から開くとき） */
+  defaultTitle?: string;
   /** 新規登録が成功したとき */
   onCreated?: (game: GameOption) => void;
   /** 編集の保存が成功したとき */
@@ -106,7 +108,7 @@ async function getIdToken(): Promise<string> {
   return auth.currentUser.getIdToken();
 }
 
-export function GameCreateModal({ open, onOpenChange, initial, onCreated, onUpdated }: GameCreateModalProps) {
+export function GameCreateModal({ open, onOpenChange, initial, defaultTitle, onCreated, onUpdated }: GameCreateModalProps) {
   const { toast } = useToast();
   const isEdit = !!initial;
 
@@ -144,7 +146,7 @@ export function GameCreateModal({ open, onOpenChange, initial, onCreated, onUpda
   if (open !== wasOpen) {
     setWasOpen(open);
     if (open) {
-      setTitle(initial?.title ?? '');
+      setTitle(initial?.title ?? defaultTitle ?? '');
       setTitleError(null);
       setGenreId(initial?.genreId ?? '');
       setThemeIds(new Set(initial?.themeIds ?? []));

@@ -2,9 +2,10 @@
  * ゲームタイトル選択モーダル（ページ 再生リストを追加する 仕様書 §4.2.1）。
  * 検索欄でインクリメンタル絞り込み、行クリックで選択して閉じる。
  * 候補のサムネイルは games.packageImageUrl（楽天ブックスの縦長パッケージ画像。無ければプレースホルダー）。
- * フッターの「ゲームタイトルの登録を提案する」（§4.2.2）は一般ユーザー向けの機能のため出さない
- * （§4.2.2 対象ユーザー）。代わりに`onAddNew`が渡された場合のみ、管理者専用の直接登録導線
- * （GameCreateModal、フェーズ4.5ステップ2）として、フッターに案内文＋secondaryボタンを表示する。
+ * フッターは案内文「お探しのゲームタイトルが見つかりませんか？」＋secondaryボタン。
+ * 一般ユーザーには`onPropose`で「ゲームタイトルの登録を提案する」（§4.2.2 提案モーダル、フェーズ7ステップ7-4）、
+ * 管理者には`onAddNew`で「新しいゲームタイトルを登録する」（GameCreateModal、フェーズ4.5ステップ2）を出す。
+ * どちらも渡されなければフッターは出さない。
  */
 'use client';
 
@@ -27,9 +28,12 @@ interface GameSelectModalProps {
   onSelect: (game: GameOption) => void;
   /** 管理者専用の直接登録モーダルを開く。渡された場合のみフッターリンクを表示する */
   onAddNew?: () => void;
+  /** 一般ユーザー向けのゲームタイトル追加提案モーダルを開く。onAddNew とはどちらか一方を渡す */
+  onPropose?: () => void;
 }
 
-export function GameSelectModal({ open, onOpenChange, games, onSelect, onAddNew }: GameSelectModalProps) {
+export function GameSelectModal({ open, onOpenChange, games, onSelect, onAddNew, onPropose }: GameSelectModalProps) {
+  const footerAction = onAddNew ?? onPropose;
   const [search, setSearch] = useState('');
 
   const filtered = useMemo(() => {
@@ -87,19 +91,19 @@ export function GameSelectModal({ open, onOpenChange, games, onSelect, onAddNew 
           </ul>
         )}
 
-        {onAddNew && (
+        {footerAction && (
           <div className="flex flex-col gap-3 border-t border-border-divider pt-4 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-base text-text-muted">お探しのゲームタイトルが見つかりませんか？</p>
             <Button
               variant="secondary"
               onClick={() => {
                 handleOpenChange(false);
-                onAddNew();
+                footerAction();
               }}
               className="w-full sm:w-auto"
             >
               <PlusIcon size={14} />
-              新しいゲームタイトルを登録する
+              {onAddNew ? '新しいゲームタイトルを登録する' : 'ゲームタイトルの登録を提案する'}
             </Button>
           </div>
         )}

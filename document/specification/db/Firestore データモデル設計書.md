@@ -1,6 +1,6 @@
 # プレミテ Firestore データモデル設計書
 
-**バージョン**: v1.21  
+**バージョン**: v1.22  
 **作成日**: 2026年3月30日（更新）  
 **対象**: 開発チーム  
 **関連ドキュメント**: プレミテ企画書 / プレミテ_技術スタック仕様書 / 各機能仕様書
@@ -192,6 +192,7 @@ Firestoreはテーブル結合（JOIN）ができないため、一覧表示や�
 | `latestVideoPublishedAt` | Timestamp? | — | 最新動画の公開日時（新着順ソート用） |
 | `registeredAt` | Timestamp | ✅ | プレミテへの登録日時 |
 | `registeredBy` | string | ✅ | 登録した管理者のuserId |
+| `proposedBy` | string? | — | 一般ユーザーの提案を承認して登録した場合の提案者のuserId（管理者の直接登録は null。v1.22） |
 | `isPublic` | boolean | ✅ | 公開フラグ（`false` = 論理削除） |
 | `score` | number? | — | 信頼度加重平均スコア（5点満点、レビュー0件の場合は `null`） |
 | `reviewCount` | number | ✅ | レビュー数（集計キャッシュ、デフォルト：0） |
@@ -485,7 +486,7 @@ YouTubeチャンネルの情報。
 | `submittedBy` | string | ✅ | 起票したユーザーのuserId |
 | `genreId` | string? | — | 関連ジャンルID（STEP1審査者特定に使用） |
 | `step1AssignedOperatorIds` | string[] | ✅ | STEP1にアサインされた運営者のuserIdリスト |
-| `proposalData` | map? | — | 提案データ（種別により異なる） |
+| `proposalData` | map? | — | 提案データ（種別により異なる。下記「`proposalData` の構造」） |
 | `reportData` | map? | — | 通報データ（種別により異なる）。`review_report` は `targetType`・`reviewId`・`playlistId`・`reason`・`detail` を持ち、承認時に `hiddenReviewSnapshot`（承認時点のレビュー内容: `userId`・`userDisplayName`・`starRating`・`comment`・`hasSpoiler`・`postedAt`・`updatedAt`）を追記する（管理 審査ワークフロー仕様書 §3.1） |
 | `step1History` | map[] | ✅ | STEP1の審査履歴（配列） |
 | `step1Errors` | map[] | ✅ | AI審査エラー記録（配列） |
@@ -494,6 +495,15 @@ YouTubeチャンネルの情報。
 | `operatorMemo` | string? | — | 運営メモ |
 | `submittedAt` | Timestamp | ✅ | 提出日時 |
 | `updatedAt` | Timestamp | ✅ | 最終更新日時 |
+
+**`proposalData` の構造**（v1.22、フェーズ7ステップ7-4。提案は API Route（Admin SDK）からのみ作成し、クライアントからの `workflows` 作成は `review_report` に限る）
+
+| 種別 | フィールド |
+|------|-----------|
+| `playlist_register` | `playlistUrl`・`youtubePlaylistId`・`title`・`thumbnailUrl`・`itemCount`・`channelId`・`channelName`・`channelIconUrl`（提案時点の YouTube の情報）・`gameId`・`gameName`。承認時に `registeredPlaylistId`、ゲームタイトルを差し替えて承認した場合は `approvedGameId`・`approvedGameName` を追記 |
+| `game_title_register` | `playlistUrl`・`gameTitle`・`note`（null 可）。承認時に `createdGameId`（登録したゲームタイトルのID）を追記 |
+
+**`editHistory` 要素の構造**（v1.22 時点では再生リスト登録提案のゲームタイトル差し替えのみ）: `editedAt`（Timestamp）・`operatorId`・`field`（`"gameId"`）・`from`・`to`
 
 **`step1History` 要素の構造**
 
@@ -929,3 +939,4 @@ ai_operators ──── (1) users
 | v1.19 | 2026-10-14 | フェーズ7ステップ7-3-1（お問い合わせ）。3.17 `inquiries` をフォーム仕様に合わせて改訂（`subject` 削除、`body`・`relatedUrls` 追加、`status` を4状態に、`userName` をゲスト null 可に）、書き込み経路（API Route のみ）を明記。6章のルール方針に追記 |
 | v1.20 | 2026-10-24 | 通報承認時のレビュー処理を論理削除に変更（管理 審査ワークフロー仕様書 v9.0 §3.1）。`reviews` に `isHidden`・`hiddenAt`・`hiddenByWorkflowId` を追加。`workflows.reportData.hiddenReviewSnapshot` に承認時点のレビュー内容を退避する |
 | v1.21 | 2026-10-24 | フェーズ7ステップ7-3-2（お問い合わせ履歴）。§3.17 `inquiries` に `lastAdminMessageAt`・`userLastReadAt`・`awaitingAdminReply` を追加し、送信者本人の読み取りを API 経由に変更。§3.30 `notifications` に `inquiry_reply` 種別と `inquiryId` を追加 |
+| v1.22 | 2026-10-25 | フェーズ7ステップ7-4（一般ユーザーの提案フロー）。§3.15 `workflows` に `proposalData`（`playlist_register`・`game_title_register`）と `editHistory` の構造を定義し、提案の作成を API 経由に限定。`playlists.proposedBy` を追加 |
