@@ -119,6 +119,7 @@ document/
 | 関連仕様書を更新した後 | 更新した関連仕様書の変更箇所 |
 
 > **NG パターン**: 仕様書を更新したのにテストしない。仕様書とコードの整合性は、確認して初めて保証される。
+
 ---
 
 ## 4. E2Eテスト（自動テスト）
@@ -141,6 +142,8 @@ E2E を実行（クラウド: npm run test:e2e:stg）
 - 実行には、クラウド環境の環境変数 `GCP_SA_KEY_STG_B64`（stg 用サービスアカウント。Firestore の読み書きに `roles/datastore.user` が必要）と `STAGING_GATE_PASSWORD`（stg ゲートのパスワード）が要る
 - stg はテストモードが常時有効（共通 uiコンポーネント フロント 仕様書 §7.1）。テストはテストモードウィジェットでテスト用会員（一般ユーザー・管理者）としてログインする
 - 失敗したテストのスクリーンショットとトレースは `test-results/` に残る
+- **同時に2つ実行しない**。実行の前後の後始末は、テスト用会員の `[E2E]` データをすべて消すため、別の実行のデータまで消して偽の失敗になる
+- ローカル（PowerShell）から実行する場合は、`$env:E2E_BASE_URL`（stg の URL）・`$env:STAGING_GATE_PASSWORD`・`$env:GOOGLE_APPLICATION_CREDENTIALS`（stg の Firestore を読み書きできる認証情報の JSON）を設定して `npx playwright install chromium` のあと `npx playwright test` を実行する
 
 ### テストの書き方
 

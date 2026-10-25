@@ -1,5 +1,5 @@
 // E2Eテストの接続先と認証情報。接続先は stg に限る（本番のデータを書き換えないため）。
-// 値は scripts/run-e2e-stg.sh が環境変数で渡す。
+// 値は scripts/run-e2e-stg.sh が環境変数で渡す。stg の Cloud Run の URL が変わったら ALLOWED_HOSTS も直す。
 
 /** テストデータの目印。テストで作るお問い合わせ・返信などの本文は必ずこれで始め、後始末の対象を見分ける */
 export const E2E_MARK = '[E2E]';
@@ -13,8 +13,14 @@ export const TEST_USER_EMAILS = {
   admin: 'test-admin@puremite.test',
 } as const;
 
-// 本番のホスト。ここに一致する接続先では起動しない
-const PROD_HOSTS = new Set(['puremite.net', 'www.puremite.net', 'tr-game-streamer.web.app', 'tr-game-streamer.firebaseapp.com']);
+// 接続を許す stg のホスト（Cloud Run・Firebase Hosting）とローカル。これ以外（本番を含む）では起動しない
+const ALLOWED_HOSTS = new Set([
+  'puremite-xyfxq6hesa-an.a.run.app',
+  'tr-game-streamer-stg.web.app',
+  'tr-game-streamer-stg.firebaseapp.com',
+  'localhost',
+  '127.0.0.1',
+]);
 
 export function resolveBaseUrl(): string {
   const raw = process.env.E2E_BASE_URL;
@@ -22,8 +28,8 @@ export function resolveBaseUrl(): string {
     throw new Error('E2E_BASE_URL が未設定です。scripts/run-e2e-stg.sh から実行してください');
   }
   const url = new URL(raw);
-  if (PROD_HOSTS.has(url.hostname)) {
-    throw new Error(`E2E_BASE_URL が本番（${url.hostname}）を指しています。E2Eテストは stg にのみ実行できます`);
+  if (!ALLOWED_HOSTS.has(url.hostname)) {
+    throw new Error(`E2E_BASE_URL（${url.hostname}）は stg ではありません。E2Eテストは stg にのみ実行できます（許可するホストは e2e/support/env.ts）`);
   }
   return url.origin;
 }

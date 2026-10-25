@@ -1345,8 +1345,9 @@ Firebase Hostingの設定のみの反映。**正式公開でnoindex/Basic認証�
        30字で切り詰め・前後空白の除去・キャンセルで破棄）、保存後のヘッダー名追随、レビュー一覧・まとめ詳細の名前の一括更新と
        プロフィールへの遷移、公開設定OFFで未ログインAPIの mylist/reviews が null（本人は表示）、トークン無しの PATCH が 401、
        390/768/1440px で横スクロール無しを確認。テストユーザーの名前・自己紹介・公開設定は元に戻した。
-     - **注意**: `deploy.ps1` はテストモード（`_TEST_MODE`）を渡さないため、stg で Playwright 確認をするときは `gcloud builds submit` に
-       `_TEST_MODE=true` を足してビルドし直し、`gcloud run deploy --image` で載せる（今回もこの手順。stg は現在テストモード有効）。
+     - ~~**注意**: `deploy.ps1` はテストモード（`_TEST_MODE`）を渡さないため、stg で Playwright 確認をするときは `gcloud builds submit` に
+       `_TEST_MODE=true` を足してビルドし直し、`gcloud run deploy --image` で載せる~~ → 2026-10-25 以降、stg へのデプロイは常にテストモード有効
+       （UI仕様書 §7.1 v1.20。E2E テストは `.agent/rules/development_flow.md` §4）。
 
 ### フェーズ6.5: 自己ユーザーテスト期間（再）— 2026-09-23〜10-07に前倒し実施
 

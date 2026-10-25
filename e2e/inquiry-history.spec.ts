@@ -14,7 +14,7 @@ test('お問い合わせの送信から再オープンまで', async ({ userPage
 
   await test.step('一般ユーザーが送信すると、履歴一覧に「未対応」で出る', async () => {
     await userPage.goto('/contact');
-    await userPage.getByRole('button', { name: '選択してください' }).click();
+    await userPage.getByRole('button', { name: 'お問い合わせ種別（必須）' }).click();
     await userPage.getByRole('menuitemradio', { name: 'その他' }).click();
     await userPage.getByLabel('お問い合わせ内容（必須）').fill(body);
     await userPage.getByRole('button', { name: '送信する' }).click();
@@ -91,7 +91,8 @@ test('お問い合わせの送信から再オープンまで', async ({ userPage
 
   await test.step('API は本人以外に 404・未ログインに 401 を返し、対応メモを含めない', async () => {
     const userToken = await captureIdToken(userPage, '/contact/history');
-    const adminToken = await captureIdToken(adminPage, '/admin');
+    // 管理画面のダッシュボードは開いただけでは API を呼ばないため、管理者もユーザー側の履歴ページで取得する
+    const adminToken = await captureIdToken(adminPage, '/contact/history');
     const api = userPage.request;
 
     const own = await api.get(`/api/inquiries/${inquiryId}`, { headers: { Authorization: `Bearer ${userToken}` } });
