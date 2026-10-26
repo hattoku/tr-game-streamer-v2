@@ -4,10 +4,11 @@
  *
  * チャンネル起点の探索で集めた再生リスト候補をチャンネルごとにまとめて表示し、チェックボックスでまとめて
  * 承認（登録）・却下する。ゲームタイトルは保存時の推定に加え、表示時点のゲームタイトル一覧でも推定し直す
- * （候補保存後に登録されたゲームにも当たるように。§3.4）。推定できないものは GameSelectModal で選ぶか、
- * 楽天ブックスを自動検索した状態の GameCreateModal でその場で登録する（§3.5）。
+ * （候補保存後に登録されたゲームにも当たるように。§3.4）。推定できないものは、候補の gameQuery を初期値にした
+ * ゲーム名の入力欄を出し、承認時にその名前でゲームタイトルを用意する（既存と一致すればそれ、無ければ新規登録。
+ * v2.1 §3.5・§4.3）。既存から選ぶ GameSelectModal・楽天を自動検索した GameCreateModal も引き続き使える。
  * 付与するタグ＝探索対象チャンネルのタグ＋タイトル由来のタグ（運営者タグのみ）。行ごとに×で外せる。
- * 承認は50件ずつAPIに送り、進捗を下部バーに表示する（§4）。
+ * 承認は20件ずつAPIに送り、進捗を下部バーに表示する（§4）。
  */
 'use client';
 
@@ -17,6 +18,7 @@ import { collection, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Card, SectionHeading } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
 import { SelectMenu } from '@/components/ui/DropdownMenu';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { SkeletonText } from '@/components/ui/Skeleton';
@@ -27,7 +29,7 @@ import { cn } from '@/components/ui/cn';
 import { GameSelectModal, type GameOption } from '@/components/playlists/GameSelectModal';
 import { GameCreateModal } from '@/components/games/GameCreateModal';
 import { fetchTagsMap, type TagInfo } from '@/lib/tags';
-import { guessGame } from '@/lib/exploration-rules';
+import { guessGame, normalizeForMatch } from '@/lib/exploration-rules';
 import { COLLECTION_DAILY_QUOTA_LIMIT } from '@/lib/collection-quota-shared';
 import {
   fetchCandidates,
@@ -43,7 +45,9 @@ import {
   type ExplorationChannel,
 } from '@/lib/collection-admin';
 
-const APPROVE_CHUNK = 50;
+// 新しいゲームの登録で楽天ブックスを1件1秒ほどかけて引くため、1回のリクエストは少なめにして進捗を細かく出す
+const APPROVE_CHUNK = 20;
+const MAX_GAME_TITLE_LENGTH = 100;
 
 type GameFilter = 'all' | 'guessed' | 'none';
 
@@ -55,6 +59,7 @@ const APPROVE_ERROR_LABEL: Record<string, string> = {
   channel_not_found: 'チャンネル情報を取得できませんでした',
   not_pending: '既に処理済みです',
   register_failed: '登録に失敗しました',
+  game_create_failed: 'ゲームタイトルの登録に失敗しました',
 };
 
 const STATUS_TABS: Array<{ value: CandidateStatus; label: string }> = [
@@ -77,6 +82,8 @@ export default function AdminCollectionPage() {
   const [gameFilter, setGameFilter] = useState<GameFilter>('all');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [gameOverrides, setGameOverrides] = useState<Map<string, GameOption>>(new Map());
+  // 推定なしの候補で、承認時に用意するゲーム名を書き換えたもの（既定は候補の gameQuery）
+  const [newGameTitles, setNewGameTitles] = useState<Map<string, string>>(new Map());
   const [removedTags, setRemovedTags] = useState<Map<string, Set<string>>>(new Map());
   const [rowErrors, setRowErrors] = useState<Map<string, string>>(new Map());
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -130,6 +137,12 @@ export default function AdminCollectionPage() {
     return gameOverrides.get(c.id) ?? (c.guessedGameId ? gamesById.get(c.guessedGameId) : undefined) ?? guessGame(c.playlistTitle, games);
   }
 
+  /** 推定なしの候補で、承認時に用意するゲーム名（照合・新規登録に使えない名前なら null） */
+  function newGameTitleFor(c: CollectionCandidate): string | null {
+    const title = (newGameTitles.get(c.id) ?? c.gameQuery).trim();
+    return title && title.length <= MAX_GAME_TITLE_LENGTH && normalizeForMatch(title) ? title : null;
+  }
+
   function tagIdsFor(c: CollectionCandidate): string[] {
     const channelTags = channels.get(c.explorationChannelId)?.tagIds ?? [];
     const removed = removedTags.get(c.id);
@@ -177,9 +190,21 @@ export default function AdminCollectionPage() {
     });
   }
 
-  /** 承認できる（＝ゲームが決まっている）候補のみ。却下済みタブでは全件 */
+  /** 承認できる（＝ゲームが決まっているか、用意するゲーム名がある）候補のみ。却下済みタブでは全件 */
   function selectable(c: CollectionCandidate): boolean {
-    return status === 'rejected' || (status === 'pending' && !!gameFor(c));
+    return status === 'rejected' || (status === 'pending' && (!!gameFor(c) || !!newGameTitleFor(c)));
+  }
+
+  function changeNewGameTitle(c: CollectionCandidate, title: string) {
+    setNewGameTitles((prev) => new Map(prev).set(c.id, title));
+    const valid = title.trim() && title.trim().length <= MAX_GAME_TITLE_LENGTH && normalizeForMatch(title);
+    if (!valid) {
+      setSelected((prev) => {
+        const next = new Set(prev);
+        next.delete(c.id);
+        return next;
+      });
+    }
   }
 
   function toggleGroup(items: CollectionCandidate[]) {
@@ -225,21 +250,38 @@ export default function AdminCollectionPage() {
   }
 
   async function handleApprove() {
-    const targets = (candidates ?? []).filter((c) => selected.has(c.id) && gameFor(c));
+    const targets = (candidates ?? []).filter((c) => selected.has(c.id) && (gameFor(c) || newGameTitleFor(c)));
     if (targets.length === 0) return;
-    if (!window.confirm(`${targets.length}件を登録します。よろしいですか？`)) return;
+    const newGameCount = new Set(targets.filter((c) => !gameFor(c)).map((c) => normalizeForMatch(newGameTitleFor(c)!))).size;
+    if (
+      !window.confirm(
+        `${targets.length}件を登録します。${newGameCount > 0 ? `ゲームタイトルが未登録のもの（最大${newGameCount}件）は、表示している名前で新しく登録します。` : ''}よろしいですか？`,
+      )
+    ) {
+      return;
+    }
 
     setProgress({ done: 0, total: targets.length });
     const errors = new Map<string, string>();
     let okCount = 0;
     let stopped = false;
+    const createdGames: GameOption[] = [];
     try {
       for (let i = 0; i < targets.length; i += APPROVE_CHUNK) {
         const chunk = targets.slice(i, i + APPROVE_CHUNK);
-        const res = await postAdminApi<{ results?: Array<{ playlistId: string; ok: boolean; error?: string }>; error?: string; remaining?: number }>(
-          '/api/admin/collection/candidates',
-          { action: 'approve', items: chunk.map((c) => ({ playlistId: c.id, gameId: gameFor(c)!.id, tagIds: tagIdsFor(c) })) },
-        );
+        const res = await postAdminApi<{
+          results?: Array<{ playlistId: string; ok: boolean; error?: string; createdGame?: { id: string; title: string } }>;
+          error?: string;
+          remaining?: number;
+        }>('/api/admin/collection/candidates', {
+          action: 'approve',
+          items: chunk.map((c) => {
+            const game = gameFor(c);
+            return game
+              ? { playlistId: c.id, gameId: game.id, tagIds: tagIdsFor(c) }
+              : { playlistId: c.id, newGameTitle: newGameTitleFor(c), tagIds: tagIdsFor(c) };
+          }),
+        });
         if (res.status === 429) {
           toast({ type: 'error', message: quotaExceededMessage(res.body.remaining) });
           stopped = true;
@@ -251,6 +293,7 @@ export default function AdminCollectionPage() {
           break;
         }
         for (const r of res.body.results) {
+          if (r.createdGame) createdGames.push({ id: r.createdGame.id, title: r.createdGame.title, packageImageUrl: null });
           if (r.ok) okCount++;
           else errors.set(r.playlistId, APPROVE_ERROR_LABEL[r.error ?? ''] ?? '登録に失敗しました');
         }
@@ -260,8 +303,16 @@ export default function AdminCollectionPage() {
       toast({ type: 'error', message: '通信エラーが発生しました。時間をおいて再試行してください' });
       stopped = true;
     }
+    if (createdGames.length > 0) {
+      // 登録したゲームは、残りの候補の推定にもすぐ使う
+      setGames((prev) => [...prev, ...createdGames].sort((a, b) => a.title.localeCompare(b.title, 'ja')));
+    }
     if (!stopped || okCount > 0) {
-      toast({ type: errors.size > 0 ? 'error' : 'success', message: `${okCount}件を登録しました${errors.size > 0 ? `（失敗 ${errors.size}件）` : ''}` });
+      const created = createdGames.length > 0 ? `、ゲームタイトルを${createdGames.length}件追加` : '';
+      toast({
+        type: errors.size > 0 ? 'error' : 'success',
+        message: `${okCount}件を登録しました${created}${errors.size > 0 ? `（失敗 ${errors.size}件）` : ''}`,
+      });
     }
     setRowErrors(errors);
     setSelected(new Set([...errors.keys()].filter((id) => selected.has(id))));
@@ -348,6 +399,12 @@ export default function AdminCollectionPage() {
         )}
       </div>
 
+      {status === 'pending' && (
+        <p className="text-md text-text-tertiary">
+          ゲームが推定できなかった候補は、「新規」の欄の名前でゲームタイトルを登録してから承認します（同じ名前のゲームタイトルがあればそれを使い、楽天ブックスで見つかれば画像なども入れます）。ゲームではない再生リストはチェックを外すか却下してください。
+        </p>
+      )}
+
       {candidates === null ? (
         <Card>
           <SkeletonText lines={5} />
@@ -385,7 +442,7 @@ export default function AdminCollectionPage() {
                   {status !== 'registered' && (
                     <label className="inline-flex items-center gap-2 text-md text-text-tertiary">
                       <input type="checkbox" className="size-4" checked={allOn} disabled={selectableIds.length === 0 || busy} onChange={() => toggleGroup(group.items)} />
-                      {status === 'pending' ? 'ゲームが決まっているものを全選択' : '全選択'}
+                      全選択
                     </label>
                   )}
                 </div>
@@ -436,11 +493,18 @@ export default function AdminCollectionPage() {
                                     </button>
                                   ) : (
                                     <>
-                                      <span className="text-text-muted">推定なし</span>
-                                      <Button variant="secondary" size="sm" onClick={() => setGameSelectFor(c)} disabled={busy}>
-                                        選ぶ
+                                      <span className="rounded-[4px] bg-bg-hover px-2 py-[2px] text-sm text-text-secondary">新規</span>
+                                      <Input
+                                        aria-label={`${c.playlistTitle}のゲーム名`}
+                                        value={newGameTitles.get(c.id) ?? c.gameQuery}
+                                        maxLength={MAX_GAME_TITLE_LENGTH}
+                                        onChange={(e) => changeNewGameTitle(c, e.target.value)}
+                                        disabled={busy}
+                                        className="w-56 max-w-full py-1! text-md!"
+                                      />
+                                      <Button variant="ghost" size="sm" onClick={() => setGameSelectFor(c)} disabled={busy}>
+                                        既存から選ぶ
                                       </Button>
-                                      <span className="text-sm text-text-muted">ゲームを選ぶと承認できます</span>
                                     </>
                                   )}
                                 </p>
