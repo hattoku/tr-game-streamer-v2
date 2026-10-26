@@ -14,3 +14,8 @@ node_modules
 
 # Next.js が dev/build のたびに自動生成・書き換えするため追跡しない
 next-env.d.ts
+
+# E2Eテスト（Playwright）の実行結果とログイン状態（e2e/support/auth.ts）
+/test-results/
+/playwright-report/
+/e2e/.auth/
