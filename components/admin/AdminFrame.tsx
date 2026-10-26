@@ -20,6 +20,7 @@ const ADMIN_NAV = [
   { label: 'ダッシュボード', href: '/admin' },
   { label: '審査ワークフロー', href: '/admin/workflows' },
   { label: 'お問い合わせ', href: '/admin/inquiries' },
+  { label: 'コンテンツ収集', href: '/admin/collection' },
 ] as const;
 
 function AdminNav({ pathname, className }: { pathname: string; className?: string }) {

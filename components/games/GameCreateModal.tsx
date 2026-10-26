@@ -90,6 +90,11 @@ interface GameCreateModalProps {
   onCreated?: (game: GameOption) => void;
   /** 編集の保存が成功したとき */
   onUpdated?: () => void;
+  /**
+   * 新規登録時に、楽天ブックス検索欄とタイトル名欄に入れておく語句。渡すと開いた時点で自動で検索する
+   * （収集候補のゲーム推定なしから開く場合。管理 AI運営者向け収集候補レビューUI仕様書 v2.0 §3.5）
+   */
+  initialQuery?: string;
 }
 
 // ジャンル・テーマの候補順: 五十音順だが「その他」だけは受け皿として末尾に置く
@@ -106,7 +111,25 @@ async function getIdToken(): Promise<string> {
   return auth.currentUser.getIdToken();
 }
 
-export function GameCreateModal({ open, onOpenChange, initial, onCreated, onUpdated }: GameCreateModalProps) {
+type RakutenSearchOutcome = { results: RakutenGameSearchResult[] } | { error: string };
+
+async function searchRakuten(q: string): Promise<RakutenSearchOutcome> {
+  try {
+    const idToken = await getIdToken();
+    const res = await fetch(`/api/admin/games/rakuten-search?title=${encodeURIComponent(q)}`, {
+      headers: { Authorization: `Bearer ${idToken}` },
+    });
+    const body = await res.json();
+    if (!res.ok) {
+      return { error: '検索に失敗しました。時間をおいて再試行するか、楽天ブックス商品ページURLを貼って取得してください' };
+    }
+    return { results: body.results ?? [] };
+  } catch {
+    return { error: '通信エラーが発生しました' };
+  }
+}
+
+export function GameCreateModal({ open, onOpenChange, initial, onCreated, onUpdated, initialQuery }: GameCreateModalProps) {
   const { toast } = useToast();
   const isEdit = !!initial;
 
@@ -136,6 +159,7 @@ export function GameCreateModal({ open, onOpenChange, initial, onCreated, onUpda
   const [rakutenSearched, setRakutenSearched] = useState(false);
   const [rakutenError, setRakutenError] = useState<string | null>(null);
   const [rakutenResults, setRakutenResults] = useState<RakutenGameSearchResult[]>([]);
+  const [autoSearchQuery, setAutoSearchQuery] = useState<string | null>(null);
 
   // モーダルを開くたびにフォームをリセットする（TagEditModalと同じ
   // 「propが変わったらstateを調整する」パターン。effect内のsetStateより1テンポ早い）。
@@ -144,7 +168,7 @@ export function GameCreateModal({ open, onOpenChange, initial, onCreated, onUpda
   if (open !== wasOpen) {
     setWasOpen(open);
     if (open) {
-      setTitle(initial?.title ?? '');
+      setTitle(initial?.title ?? initialQuery ?? '');
       setTitleError(null);
       setGenreId(initial?.genreId ?? '');
       setThemeIds(new Set(initial?.themeIds ?? []));
@@ -153,9 +177,11 @@ export function GameCreateModal({ open, onOpenChange, initial, onCreated, onUpda
       setRakutenUrl(initial?.rakutenUrl ?? '');
       setDescription(initial?.description ?? '');
       setIsAiGeneratedDescription(initial?.isAiGeneratedDescription ?? false);
-      // 検索欄はタイトル欄と連動しないため、編集モードでも毎回空欄で開く
-      setRakutenQuery('');
-      setRakutenSearching(false);
+      // 検索欄はタイトル欄と連動しないため、編集モードでも毎回空欄で開く（initialQuery 指定時のみ埋める）
+      setRakutenQuery(initial ? '' : (initialQuery ?? ''));
+      const autoQuery = !initial && initialQuery?.trim() ? initialQuery.trim() : null;
+      setAutoSearchQuery(autoQuery);
+      setRakutenSearching(!!autoQuery);
       setRakutenSearched(false);
       setRakutenError(null);
       setRakutenResults([]);
@@ -193,6 +219,14 @@ export function GameCreateModal({ open, onOpenChange, initial, onCreated, onUpda
     });
   }
 
+  // 検索結果を反映する（手動の検索ボタン・initialQuery による自動検索で共通）
+  function applyRakutenSearchOutcome(outcome: RakutenSearchOutcome) {
+    if ('error' in outcome) setRakutenError(outcome.error);
+    else setRakutenResults(outcome.results);
+    setRakutenSearching(false);
+    setRakutenSearched(true);
+  }
+
   async function handleRakutenSearch() {
     const q = rakutenQuery.trim();
     if (!q) return;
@@ -200,24 +234,23 @@ export function GameCreateModal({ open, onOpenChange, initial, onCreated, onUpda
     setRakutenError(null);
     setRakutenResults([]);
     setSelectedRakuten(null);
-    try {
-      const idToken = await getIdToken();
-      const res = await fetch(`/api/admin/games/rakuten-search?title=${encodeURIComponent(q)}`, {
-        headers: { Authorization: `Bearer ${idToken}` },
-      });
-      const body = await res.json();
-      if (!res.ok) {
-        setRakutenError('検索に失敗しました。時間をおいて再試行するか、楽天ブックス商品ページURLを貼って取得してください');
-        return;
-      }
-      setRakutenResults(body.results ?? []);
-    } catch {
-      setRakutenError('通信エラーが発生しました');
-    } finally {
-      setRakutenSearching(false);
-      setRakutenSearched(true);
-    }
+    applyRakutenSearchOutcome(await searchRakuten(q));
   }
+
+  // initialQuery 指定で開いたときの自動検索。開いた時点（描画中のリセット）で autoSearchQuery と検索中表示を
+  // セットし、ここでは結果の反映だけを行う（effect 本体で同期的に setState しないため）
+  useEffect(() => {
+    if (!autoSearchQuery) return;
+    let cancelled = false;
+    searchRakuten(autoSearchQuery).then((outcome) => {
+      if (cancelled) return;
+      applyRakutenSearchOutcome(outcome);
+      setAutoSearchQuery(null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [autoSearchQuery]);
 
   // 楽天の商品情報をフォームに反映する（商品ページURLの取得・タイトル検索の候補選択で共通）。
   // 管理者が既に入力・選択した値は上書きしない（タイトル・ジャンルは空のときだけ、テーマ・機種は追加のみ）

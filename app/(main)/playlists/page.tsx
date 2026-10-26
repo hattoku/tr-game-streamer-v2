@@ -17,7 +17,7 @@
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { fetchPublicPlaylists, PlaylistCardGrid, sortPlaylists, type PlaylistSort, type PlaylistSummary } from '@/components/playlists/PlaylistGrid';
-import { fetchTagsMap, type TagInfo } from '@/lib/tags';
+import { fetchTagsMap, isListedTag, type TagInfo } from '@/lib/tags';
 import { Card, SectionHeading } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -59,7 +59,7 @@ export default function PlaylistsPage() {
   useEffect(() => {
     Promise.all([fetchPublicPlaylists(), fetchTagsMap()]).then(([list, tagsMap]) => {
       setPlaylists(list);
-      setTags([...tagsMap.values()].filter((t) => t.usagePlaylistCount > 0).sort((a, b) => a.name.localeCompare(b.name, 'ja')));
+      setTags([...tagsMap.values()].filter((t) => isListedTag(t, 'playlist')).sort((a, b) => a.name.localeCompare(b.name, 'ja')));
     });
   }, []);
 

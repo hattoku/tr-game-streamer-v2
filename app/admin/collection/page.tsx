@@ -1,0 +1,533 @@
+/**
+ * 収集候補（/admin/collection）。管理 AI運営者向け収集候補レビューUI仕様書 v2.0 §3〜§5、
+ * 管理_Ai運営者 コンテンツ収集機能仕様書 v3.0 §3。
+ *
+ * チャンネル起点の探索で集めた再生リスト候補をチャンネルごとにまとめて表示し、チェックボックスでまとめて
+ * 承認（登録）・却下する。ゲームタイトルは保存時の推定に加え、表示時点のゲームタイトル一覧でも推定し直す
+ * （候補保存後に登録されたゲームにも当たるように。§3.4）。推定できないものは GameSelectModal で選ぶか、
+ * 楽天ブックスを自動検索した状態の GameCreateModal でその場で登録する（§3.5）。
+ * 付与するタグ＝探索対象チャンネルのタグ＋タイトル由来のタグ（運営者タグのみ）。行ごとに×で外せる。
+ * 承認は50件ずつAPIに送り、進捗を下部バーに表示する（§4）。
+ */
+'use client';
+
+import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { collection, getDocs } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { Card, SectionHeading } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
+import { SelectMenu } from '@/components/ui/DropdownMenu';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { SkeletonText } from '@/components/ui/Skeleton';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/Tabs';
+import { useToast } from '@/components/ui/Toast';
+import { ChevronRightIcon, InventoryIcon, XIcon } from '@/components/ui/icons';
+import { cn } from '@/components/ui/cn';
+import { GameSelectModal, type GameOption } from '@/components/playlists/GameSelectModal';
+import { GameCreateModal } from '@/components/games/GameCreateModal';
+import { fetchTagsMap, type TagInfo } from '@/lib/tags';
+import { guessGame } from '@/lib/exploration-rules';
+import { COLLECTION_DAILY_QUOTA_LIMIT } from '@/lib/collection-quota-shared';
+import {
+  fetchCandidates,
+  fetchCollectionQuotaUsedToday,
+  fetchExplorationChannels,
+  fetchLastCollectionBatch,
+  formatDateTime,
+  postAdminApi,
+  quotaExceededMessage,
+  type CandidateStatus,
+  type CollectionBatchLog,
+  type CollectionCandidate,
+  type ExplorationChannel,
+} from '@/lib/collection-admin';
+
+const APPROVE_CHUNK = 50;
+
+type GameFilter = 'all' | 'guessed' | 'none';
+
+const APPROVE_ERROR_LABEL: Record<string, string> = {
+  not_public: 'YouTubeで非公開になっていたため却下しました',
+  playlist_not_found: 'YouTubeで削除されていたため却下しました',
+  game_not_found: 'ゲームタイトルが見つかりません',
+  youtube_api_error: 'YouTube APIの呼び出しに失敗しました',
+  channel_not_found: 'チャンネル情報を取得できませんでした',
+  not_pending: '既に処理済みです',
+  register_failed: '登録に失敗しました',
+};
+
+const STATUS_TABS: Array<{ value: CandidateStatus; label: string }> = [
+  { value: 'pending', label: '未処理' },
+  { value: 'registered', label: '登録済み' },
+  { value: 'rejected', label: '却下済み' },
+];
+
+export default function AdminCollectionPage() {
+  const { toast } = useToast();
+  const [status, setStatus] = useState<CandidateStatus>('pending');
+  const [candidates, setCandidates] = useState<CollectionCandidate[] | null>(null);
+  const [games, setGames] = useState<GameOption[]>([]);
+  const [tagsMap, setTagsMap] = useState<Map<string, TagInfo>>(new Map());
+  const [channels, setChannels] = useState<Map<string, ExplorationChannel>>(new Map());
+  const [lastBatch, setLastBatch] = useState<CollectionBatchLog | null>(null);
+  const [quotaUsed, setQuotaUsed] = useState<number | null>(null);
+
+  const [channelFilter, setChannelFilter] = useState('all');
+  const [gameFilter, setGameFilter] = useState<GameFilter>('all');
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [gameOverrides, setGameOverrides] = useState<Map<string, GameOption>>(new Map());
+  const [removedTags, setRemovedTags] = useState<Map<string, Set<string>>>(new Map());
+  const [rowErrors, setRowErrors] = useState<Map<string, string>>(new Map());
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+
+  const [gameSelectFor, setGameSelectFor] = useState<CollectionCandidate | null>(null);
+  const [gameCreateFor, setGameCreateFor] = useState<CollectionCandidate | null>(null);
+  const [exploring, setExploring] = useState(false);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const [rejecting, setRejecting] = useState(false);
+
+  async function loadCandidates(next: CandidateStatus) {
+    const list = await fetchCandidates(next);
+    setCandidates(list);
+  }
+
+  async function loadMeta() {
+    const [channelList, batch, used] = await Promise.all([fetchExplorationChannels(), fetchLastCollectionBatch(), fetchCollectionQuotaUsedToday()]);
+    setChannels(new Map(channelList.map((c) => [c.id, c])));
+    setLastBatch(batch);
+    setQuotaUsed(used);
+  }
+
+  useEffect(() => {
+    // 非同期 IIFE にして、effect 本体で同期的に setState しない形にする（react-hooks/set-state-in-effect）
+    (async () => {
+      const [gamesSnap, map] = await Promise.all([getDocs(collection(db, 'games')), fetchTagsMap(), loadMeta(), loadCandidates('pending')]);
+      setGames(
+        gamesSnap.docs
+          .map((d) => ({ id: d.id, title: (d.data().title as string) ?? '', packageImageUrl: (d.data().packageImageUrl as string) ?? null }))
+          .sort((a, b) => a.title.localeCompare(b.title, 'ja')),
+      );
+      setTagsMap(map);
+    })();
+  }, []);
+
+  function changeStatus(next: CandidateStatus) {
+    setStatus(next);
+    setSelected(new Set());
+    setRowErrors(new Map());
+    setCandidates(null);
+    loadCandidates(next);
+  }
+
+  const gamesById = useMemo(() => new Map(games.map((g) => [g.id, g])), [games]);
+
+  function gameFor(c: CollectionCandidate): GameOption | null {
+    return gameOverrides.get(c.id) ?? (c.guessedGameId ? gamesById.get(c.guessedGameId) : undefined) ?? guessGame(c.playlistTitle, games);
+  }
+
+  function tagIdsFor(c: CollectionCandidate): string[] {
+    const channelTags = channels.get(c.explorationChannelId)?.tagIds ?? [];
+    const removed = removedTags.get(c.id);
+    return [...new Set([...channelTags, ...c.titleTagIds])].filter((id) => tagsMap.has(id) && !removed?.has(id));
+  }
+
+  const filtered = useMemo(() => {
+    if (!candidates) return [];
+    return candidates.filter((c) => {
+      if (channelFilter !== 'all' && c.explorationChannelId !== channelFilter) return false;
+      if (gameFilter !== 'all') {
+        const hasGame = !!(gameOverrides.get(c.id) ?? (c.guessedGameId && gamesById.get(c.guessedGameId)) ?? guessGame(c.playlistTitle, games));
+        if (gameFilter === 'guessed' ? !hasGame : hasGame) return false;
+      }
+      return true;
+    });
+  }, [candidates, channelFilter, gameFilter, gameOverrides, gamesById, games]);
+
+  // チャンネルごとにまとめる（並びはチャンネル名順、チャンネル内は再生リストの作成日時の新しい順）
+  const groups = useMemo(() => {
+    const map = new Map<string, { key: string; title: string; items: CollectionCandidate[] }>();
+    for (const c of filtered) {
+      const group = map.get(c.explorationChannelId) ?? { key: c.explorationChannelId, title: c.channelTitle, items: [] };
+      group.items.push(c);
+      map.set(c.explorationChannelId, group);
+    }
+    return [...map.values()].sort((a, b) => a.title.localeCompare(b.title, 'ja'));
+  }, [filtered]);
+
+  const channelOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    candidates?.forEach((c) => seen.set(c.explorationChannelId, c.channelTitle));
+    return [
+      { value: 'all', label: 'すべてのチャンネル' },
+      ...[...seen.entries()].sort((a, b) => a[1].localeCompare(b[1], 'ja')).map(([value, label]) => ({ value, label })),
+    ];
+  }, [candidates]);
+
+  function toggleSelected(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  /** 承認できる（＝ゲームが決まっている）候補のみ。却下済みタブでは全件 */
+  function selectable(c: CollectionCandidate): boolean {
+    return status === 'rejected' || (status === 'pending' && !!gameFor(c));
+  }
+
+  function toggleGroup(items: CollectionCandidate[]) {
+    const ids = items.filter(selectable).map((c) => c.id);
+    const allOn = ids.length > 0 && ids.every((id) => selected.has(id));
+    setSelected((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => (allOn ? next.delete(id) : next.add(id)));
+      return next;
+    });
+  }
+
+  function removeTag(candidateId: string, tagId: string) {
+    setRemovedTags((prev) => {
+      const next = new Map(prev);
+      next.set(candidateId, new Set([...(prev.get(candidateId) ?? []), tagId]));
+      return next;
+    });
+  }
+
+  function setGame(candidateId: string, game: GameOption) {
+    setGameOverrides((prev) => new Map(prev).set(candidateId, game));
+    setSelected((prev) => new Set(prev).add(candidateId));
+  }
+
+  async function handleExplore() {
+    setExploring(true);
+    try {
+      const res = await postAdminApi('/api/admin/collection/explore', {});
+      if (res.status === 429) {
+        toast({ type: 'error', message: quotaExceededMessage(res.body.remaining) });
+      } else if (!res.ok) {
+        toast({ type: 'error', message: '探索に失敗しました' });
+      } else {
+        toast({ type: 'success', message: `チャンネル${res.body.processedChannels}件を探索し、新しい候補を${res.body.candidatesFound}件追加しました` });
+      }
+      await Promise.all([loadMeta(), status === 'pending' ? loadCandidates('pending') : Promise.resolve()]);
+    } catch {
+      toast({ type: 'error', message: '通信エラーが発生しました。時間をおいて再試行してください' });
+    } finally {
+      setExploring(false);
+    }
+  }
+
+  async function handleApprove() {
+    const targets = (candidates ?? []).filter((c) => selected.has(c.id) && gameFor(c));
+    if (targets.length === 0) return;
+    if (!window.confirm(`${targets.length}件を登録します。よろしいですか？`)) return;
+
+    setProgress({ done: 0, total: targets.length });
+    const errors = new Map<string, string>();
+    let okCount = 0;
+    let stopped = false;
+    try {
+      for (let i = 0; i < targets.length; i += APPROVE_CHUNK) {
+        const chunk = targets.slice(i, i + APPROVE_CHUNK);
+        const res = await postAdminApi<{ results?: Array<{ playlistId: string; ok: boolean; error?: string }>; error?: string; remaining?: number }>(
+          '/api/admin/collection/candidates',
+          { action: 'approve', items: chunk.map((c) => ({ playlistId: c.id, gameId: gameFor(c)!.id, tagIds: tagIdsFor(c) })) },
+        );
+        if (res.status === 429) {
+          toast({ type: 'error', message: quotaExceededMessage(res.body.remaining) });
+          stopped = true;
+          break;
+        }
+        if (!res.ok || !res.body.results) {
+          toast({ type: 'error', message: '登録に失敗しました' });
+          stopped = true;
+          break;
+        }
+        for (const r of res.body.results) {
+          if (r.ok) okCount++;
+          else errors.set(r.playlistId, APPROVE_ERROR_LABEL[r.error ?? ''] ?? '登録に失敗しました');
+        }
+        setProgress({ done: Math.min(i + chunk.length, targets.length), total: targets.length });
+      }
+    } catch {
+      toast({ type: 'error', message: '通信エラーが発生しました。時間をおいて再試行してください' });
+      stopped = true;
+    }
+    if (!stopped || okCount > 0) {
+      toast({ type: errors.size > 0 ? 'error' : 'success', message: `${okCount}件を登録しました${errors.size > 0 ? `（失敗 ${errors.size}件）` : ''}` });
+    }
+    setRowErrors(errors);
+    setSelected(new Set([...errors.keys()].filter((id) => selected.has(id))));
+    setProgress(null);
+    await Promise.all([loadCandidates('pending'), loadMeta()]);
+  }
+
+  async function handleStatusChange(action: 'reject' | 'restore') {
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    const label = action === 'reject' ? '却下' : '未処理に戻す';
+    if (!window.confirm(`${ids.length}件を${label}します。よろしいですか？`)) return;
+    setRejecting(true);
+    try {
+      const res = await postAdminApi('/api/admin/collection/candidates', { action, playlistIds: ids });
+      if (!res.ok) {
+        toast({ type: 'error', message: `${label}に失敗しました` });
+      } else {
+        toast({ type: 'success', message: `${res.body.updated}件を${label}しました` });
+        setSelected(new Set());
+        await loadCandidates(status);
+      }
+    } catch {
+      toast({ type: 'error', message: '通信エラーが発生しました。時間をおいて再試行してください' });
+    } finally {
+      setRejecting(false);
+    }
+  }
+
+  const busy = exploring || progress !== null || rejecting;
+
+  return (
+    <div className="flex flex-col gap-5 pb-24">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <SectionHeading>コンテンツ収集</SectionHeading>
+        <Link href="/admin/collection/channels" className="inline-flex items-center gap-1 text-md text-text-tertiary hover:text-text-primary">
+          探索対象チャンネル
+          <ChevronRightIcon size={14} />
+        </Link>
+      </div>
+
+      <Card className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-col gap-1 text-md text-text-tertiary">
+          <p>
+            最終探索: {lastBatch ? `${formatDateTime(lastBatch.executedAt)}（${lastBatch.trigger === 'cron' ? '週1自動' : '手動'}、新規候補 ${lastBatch.candidatesFound}件）` : 'まだありません'}
+          </p>
+          <p>
+            本日のYouTube API消費（コンテンツ収集分）: {quotaUsed ?? '-'} / {COLLECTION_DAILY_QUOTA_LIMIT.toLocaleString('ja-JP')} ユニット
+          </p>
+        </div>
+        <Button variant="secondary" onClick={handleExplore} loading={exploring} disabled={busy}>
+          探索を実行
+        </Button>
+      </Card>
+
+      <Tabs value={status} onValueChange={(v) => changeStatus(v as CandidateStatus)}>
+        <TabsList aria-label="状態で絞り込み">
+          {STATUS_TABS.map((t) => (
+            <TabsTrigger key={t.value} value={t.value} count={t.value === status && candidates ? candidates.length : undefined}>
+              {t.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
+
+      <div className="flex flex-wrap gap-2">
+        <SelectMenu value={channelFilter} onValueChange={setChannelFilter} options={channelOptions} aria-label="チャンネルで絞り込み" />
+        {status === 'pending' && (
+          <SelectMenu<GameFilter>
+            value={gameFilter}
+            onValueChange={setGameFilter}
+            prefix="ゲーム推定:"
+            aria-label="ゲーム推定で絞り込み"
+            options={[
+              { value: 'all', label: 'すべて' },
+              { value: 'guessed', label: '推定あり' },
+              { value: 'none', label: '推定なし' },
+            ]}
+          />
+        )}
+      </div>
+
+      {candidates === null ? (
+        <Card>
+          <SkeletonText lines={5} />
+        </Card>
+      ) : groups.length === 0 ? (
+        <EmptyState
+          icon={<InventoryIcon />}
+          title="候補はありません"
+          description={status === 'pending' ? '探索対象チャンネルを登録して「探索を実行」すると、ここに候補が並びます' : undefined}
+        />
+      ) : (
+        <div className="flex flex-col gap-6">
+          {groups.map((group) => {
+            const selectableIds = group.items.filter(selectable).map((c) => c.id);
+            const allOn = selectableIds.length > 0 && selectableIds.every((id) => selected.has(id));
+            const isCollapsed = collapsed.has(group.key);
+            return (
+              <section key={group.key} className="flex flex-col gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-surface-border pb-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setCollapsed((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(group.key)) next.delete(group.key);
+                        else next.add(group.key);
+                        return next;
+                      })
+                    }
+                    aria-expanded={!isCollapsed}
+                    className="text-left text-lg font-medium text-text-primary"
+                  >
+                    {group.title}（{group.items.length}件）
+                  </button>
+                  {status !== 'registered' && (
+                    <label className="inline-flex items-center gap-2 text-md text-text-tertiary">
+                      <input type="checkbox" className="size-4" checked={allOn} disabled={selectableIds.length === 0 || busy} onChange={() => toggleGroup(group.items)} />
+                      {status === 'pending' ? 'ゲームが決まっているものを全選択' : '全選択'}
+                    </label>
+                  )}
+                </div>
+
+                {!isCollapsed && (
+                  <ul className="flex flex-col gap-2">
+                    {group.items.map((c) => {
+                      const game = gameFor(c);
+                      const tagIds = tagIdsFor(c);
+                      const canSelect = selectable(c);
+                      const error = rowErrors.get(c.id);
+                      return (
+                        <li key={c.id}>
+                          <Card className={cn('flex gap-3', selected.has(c.id) && 'border-border-active')}>
+                            {status !== 'registered' && (
+                              <input
+                                type="checkbox"
+                                className="mt-1 size-4 shrink-0"
+                                aria-label={`${c.playlistTitle}を選択`}
+                                checked={selected.has(c.id)}
+                                disabled={!canSelect || busy}
+                                onChange={() => toggleSelected(c.id)}
+                              />
+                            )}
+                            <a
+                              href={`https://www.youtube.com/playlist?list=${c.id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="relative aspect-video w-28 shrink-0 overflow-hidden rounded-[6px] bg-bg-hover md:w-40"
+                              aria-label={`${c.playlistTitle}をYouTubeで開く`}
+                            >
+                              {c.thumbnailUrl && (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={c.thumbnailUrl} alt="" className="absolute inset-0 size-full object-cover" loading="lazy" />
+                              )}
+                            </a>
+                            <div className="flex min-w-0 flex-1 flex-col gap-1">
+                              <p className="text-base text-text-primary">{c.playlistTitle}</p>
+                              <p className="text-md text-text-tertiary">
+                                {c.videoCount}本 ・ 作成 {formatDateTime(c.playlistPublishedAt)}
+                              </p>
+                              {status === 'pending' ? (
+                                <p className="flex flex-wrap items-center gap-2 text-md">
+                                  <span className="text-text-tertiary">ゲーム:</span>
+                                  {game ? (
+                                    <button type="button" className="text-text-primary underline-offset-2 hover:underline" onClick={() => setGameSelectFor(c)} disabled={busy}>
+                                      {game.title}
+                                    </button>
+                                  ) : (
+                                    <>
+                                      <span className="text-text-muted">推定なし</span>
+                                      <Button variant="secondary" size="sm" onClick={() => setGameSelectFor(c)} disabled={busy}>
+                                        選ぶ
+                                      </Button>
+                                    </>
+                                  )}
+                                </p>
+                              ) : (
+                                c.reviewComment && <p className="text-md text-text-muted">理由: {APPROVE_ERROR_LABEL[c.reviewComment] ?? c.reviewComment}</p>
+                              )}
+                              {status === 'registered' && (
+                                <Link href={`/playlists/${c.id}`} className="text-md text-text-tertiary hover:text-text-primary">
+                                  登録した再生リストを見る
+                                </Link>
+                              )}
+                              {status === 'pending' && tagIds.length > 0 && (
+                                <div className="flex flex-wrap gap-1">
+                                  {tagIds.map((id) => (
+                                    <span key={id} className="inline-flex items-center gap-1 rounded-[4px] bg-bg-hover px-2 py-[2px] text-sm text-text-secondary">
+                                      {tagsMap.get(id)?.name}
+                                      <button
+                                        type="button"
+                                        aria-label={`${tagsMap.get(id)?.name}を外す`}
+                                        onClick={() => removeTag(c.id, id)}
+                                        className="text-text-muted hover:text-text-primary"
+                                        disabled={busy}
+                                      >
+                                        <XIcon size={10} />
+                                      </button>
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                              {error && (
+                                <p role="alert" className="text-md text-input-error">
+                                  {error}
+                                </p>
+                              )}
+                            </div>
+                          </Card>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </section>
+            );
+          })}
+        </div>
+      )}
+
+      {status !== 'registered' && (
+        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-surface-border bg-bg-base/95 backdrop-blur">
+          <div className="mx-auto flex w-full max-w-[1400px] flex-wrap items-center justify-between gap-3 px-4 py-3 md:px-6">
+            <p className="text-base text-text-secondary">
+              {progress ? `登録中… ${progress.done} / ${progress.total} 件` : `選択中 ${selected.size}件`}
+            </p>
+            <div className="flex gap-2">
+              {status === 'pending' ? (
+                <>
+                  <Button variant="ghost" onClick={() => handleStatusChange('reject')} disabled={selected.size === 0 || busy} loading={rejecting}>
+                    選択を却下
+                  </Button>
+                  <Button variant="primary" onClick={handleApprove} disabled={selected.size === 0 || busy} loading={progress !== null}>
+                    選択を承認して登録
+                  </Button>
+                </>
+              ) : (
+                <Button variant="secondary" onClick={() => handleStatusChange('restore')} disabled={selected.size === 0 || busy} loading={rejecting}>
+                  選択を未処理に戻す
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <GameSelectModal
+        open={gameSelectFor !== null}
+        onOpenChange={(open) => !open && setGameSelectFor(null)}
+        games={games}
+        onSelect={(g) => {
+          if (gameSelectFor) setGame(gameSelectFor.id, g);
+          setGameSelectFor(null);
+        }}
+        onAddNew={() => {
+          setGameCreateFor(gameSelectFor);
+          setGameSelectFor(null);
+        }}
+      />
+      <GameCreateModal
+        open={gameCreateFor !== null}
+        onOpenChange={(open) => !open && setGameCreateFor(null)}
+        initialQuery={gameCreateFor?.gameQuery}
+        onCreated={(g) => {
+          setGames((prev) => [...prev, g].sort((a, b) => a.title.localeCompare(b.title, 'ja')));
+          if (gameCreateFor) setGame(gameCreateFor.id, g);
+          setGameCreateFor(null);
+        }}
+      />
+    </div>
+  );
+}

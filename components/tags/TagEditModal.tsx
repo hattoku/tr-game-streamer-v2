@@ -3,6 +3,9 @@
  * 再生リスト詳細（PlaylistInfoCard）とゲームタイトル詳細の両方から呼び出す共通部品。
  * §8.2どおり、モーダル内はローカルな下書き編集とし、「保存する」で確定するまで
  * サーバーへは反映しない（キャンセルで破棄）。
+ * 運営者タグの一覧（§8.5、2026-10-26）: 入力前から運営者タグをカテゴリ別のチップで並べ、タップで付け外しできる。
+ * カテゴリは scripts/data/tags.mjs（各「初期登録データ一覧.md」の構成）を使い、どのカテゴリにも無い運営者タグは
+ * 「その他」にまとめる。タグの種類を無闇に増やさないため一覧を主とし、新規作成の入力欄はその下の補助に置く。
  * サジェスト（§8.4）: 1文字以上でタグマスタの前方一致候補を最大5件、五十音順で表示。
  * 既に付与済み・追加予定のタグは候補から除外する。マスタに無い語句もそのまま追加できる。
  */
@@ -15,7 +18,9 @@ import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { useToast } from '@/components/ui/Toast';
-import { LockIcon, XIcon } from '@/components/ui/icons';
+import { Chip } from '@/components/ui/Chip';
+import { ChevronDownIcon, ChevronUpIcon, LockIcon, XIcon } from '@/components/ui/icons';
+import { COLLAPSED_CATEGORIES, groupOperatorTags } from '@/lib/tag-categories';
 
 const MAX_SUGGESTIONS = 5;
 
@@ -41,6 +46,7 @@ export function TagEditModal({ open, onOpenChange, targetType, targetId, tags }:
   const [inputError, setInputError] = useState<string | null>(null);
   const [allTags, setAllTags] = useState<TagInfo[]>([]);
   const [saving, setSaving] = useState(false);
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
 
   // モーダルを開くたびに下書きを現在の状態にリセットする。「propが変わったらstateを調整する」
   // パターンは描画中に直接setStateする（effect内でのsetStateは1テンポ余分な再描画を招く。
@@ -53,6 +59,7 @@ export function TagEditModal({ open, onOpenChange, targetType, targetId, tags }:
       setPendingAdds([]);
       setInput('');
       setInputError(null);
+      setExpandedCategories(new Set());
     }
   }
 
@@ -68,6 +75,41 @@ export function TagEditModal({ open, onOpenChange, targetType, targetId, tags }:
     () => new Set([...editableTags.map((t) => t.name.toLowerCase()), ...pendingAdds.map((n) => n.toLowerCase())]),
     [editableTags, pendingAdds],
   );
+
+  const categoryGroups = useMemo(() => groupOperatorTags(allTags, targetType), [allTags, targetType]);
+
+  const fixedNames = useMemo(() => new Set(fixedTags.map((t) => t.name.toLowerCase())), [fixedTags]);
+
+  // 一覧のチップのタップ: 付いていれば外し、付いていなければ付ける（外した既存タグは「付け直す」扱いで戻す）
+  function toggleListedTag(tag: TagInfo) {
+    const key = tag.name.toLowerCase();
+    if (fixedNames.has(key)) return;
+    const pending = pendingAdds.find((n) => n.toLowerCase() === key);
+    if (pending) {
+      removePendingAdd(pending);
+      return;
+    }
+    const original = tags.find((t) => !t.fixed && t.id === tag.id);
+    if (original) {
+      setKeptIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(original.id)) next.delete(original.id);
+        else next.add(original.id);
+        return next;
+      });
+      return;
+    }
+    addTagName(tag.name);
+  }
+
+  function toggleCategory(category: string) {
+    setExpandedCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(category)) next.delete(category);
+      else next.add(category);
+      return next;
+    });
+  }
 
   const suggestions = useMemo(() => {
     const q = input.trim().toLowerCase();
@@ -190,7 +232,49 @@ export function TagEditModal({ open, onOpenChange, targetType, targetId, tags }:
           )}
         </div>
 
+        {categoryGroups.length > 0 && (
+          <div className="flex max-h-[45dvh] flex-col gap-3 overflow-y-auto border-t border-surface-border pt-3">
+            {categoryGroups.map((group) => {
+              const collapsible = COLLAPSED_CATEGORIES.has(group.category);
+              const expanded = !collapsible || expandedCategories.has(group.category);
+              return (
+                <section key={group.category} className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-medium text-text-tertiary">{group.category}</h3>
+                    {collapsible && (
+                      <button
+                        type="button"
+                        onClick={() => toggleCategory(group.category)}
+                        aria-expanded={expanded}
+                        className="inline-flex items-center gap-1 text-sm text-text-muted hover:text-text-primary"
+                      >
+                        {expanded ? 'たたむ' : `すべて表示（${group.tags.length}件）`}
+                        {expanded ? <ChevronUpIcon size={12} /> : <ChevronDownIcon size={12} />}
+                      </button>
+                    )}
+                  </div>
+                  {expanded && (
+                    <div className="flex flex-wrap gap-2">
+                      {group.tags.map((t) => {
+                        const key = t.name.toLowerCase();
+                        const fixed = fixedNames.has(key);
+                        return (
+                          <Chip key={t.id} active={fixed || existingNames.has(key)} disabled={fixed} onClick={() => toggleListedTag(t)}>
+                            {fixed && <LockIcon size={11} />}
+                            {t.name}
+                          </Chip>
+                        );
+                      })}
+                    </div>
+                  )}
+                </section>
+              );
+            })}
+          </div>
+        )}
+
         <div className="relative flex flex-col gap-1">
+          <p className="text-sm text-text-muted">一覧にないタグを入力</p>
           <div className="flex gap-2">
             <Input
               value={input}
@@ -199,8 +283,8 @@ export function TagEditModal({ open, onOpenChange, targetType, targetId, tags }:
                 setInputError(null);
               }}
               onKeyDown={handleInputKeyDown}
-              placeholder="タグを追加"
-              aria-label="タグを追加"
+              placeholder="タグ名を入力"
+              aria-label="一覧にないタグを入力"
               aria-invalid={!!inputError}
             />
             <Button variant="secondary" onClick={() => addTagName(input)} disabled={!input.trim()}>

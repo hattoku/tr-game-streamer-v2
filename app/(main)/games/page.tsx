@@ -16,7 +16,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { fetchTagsMap, resolveTags, type TagInfo } from '@/lib/tags';
+import { fetchTagsMap, isListedTag, resolveTags, type TagInfo } from '@/lib/tags';
 import { fetchGameVideoCounts } from '@/lib/playlist-aggregates';
 import { GameCard, type GameCardData } from '@/components/games/GameCard';
 import { Card, SectionHeading } from '@/components/ui/Card';
@@ -79,7 +79,7 @@ export default function GamesPage() {
           .sort((a, b) => a.name.localeCompare(b.name, 'ja')),
       );
       setTags(
-        [...tagsMap.values()].filter((t) => t.usageGameCount > 0).sort((a, b) => a.name.localeCompare(b.name, 'ja')),
+        [...tagsMap.values()].filter((t) => isListedTag(t, 'game')).sort((a, b) => a.name.localeCompare(b.name, 'ja')),
       );
       setGames(
         gamesSnap.docs.map((d) => {
