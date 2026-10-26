@@ -98,10 +98,10 @@ export async function POST(request: NextRequest) {
       let result;
       try {
         result = await registerPlaylist({
-          playlistId: item.playlistId,
+          playlistUrl: `https://www.youtube.com/playlist?list=${item.playlistId}`,
           gameId: item.gameId,
           registeredBy: auth.uid,
-          referenceUrl: `https://www.youtube.com/playlist?list=${item.playlistId}`,
+          proposedBy: null,
           fixedTagIds: tagIds,
         });
       } catch (e) {
@@ -110,7 +110,8 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      if (result.ok || result.error === 'already_registered') {
+      const error = 'error' in result ? result.error : null;
+      if (!error || error === 'already_registered') {
         // 別経路で登録済みだった場合も、候補としては片付いたので成功扱い（§4.2）
         await candidateRef.update({
           status: 'registered',
@@ -119,17 +120,17 @@ export async function POST(request: NextRequest) {
           registeredPlaylistId: item.playlistId,
         });
         results.push({ playlistId: item.playlistId, ok: true });
-      } else if (result.error === 'not_public' || result.error === 'playlist_not_found') {
+      } else if (error === 'not_public' || error === 'playlist_not_found') {
         // YouTube 側で非公開・削除になっていた候補は自動で却下する（§4.2）
         await candidateRef.update({
           status: 'rejected',
           reviewedAt: new Date(),
           reviewedBy: auth.uid,
-          reviewComment: result.error,
+          reviewComment: error,
         });
-        results.push({ playlistId: item.playlistId, ok: false, error: result.error });
+        results.push({ playlistId: item.playlistId, ok: false, error });
       } else {
-        results.push({ playlistId: item.playlistId, ok: false, error: result.error });
+        results.push({ playlistId: item.playlistId, ok: false, error });
       }
     }
   } finally {

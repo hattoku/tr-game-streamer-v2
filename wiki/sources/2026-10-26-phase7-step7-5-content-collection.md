@@ -28,7 +28,7 @@ updated: 2026-10-26
 
 - 管理_Ai運営者 コンテンツ収集機能仕様書 v3.0: ジャンル起点の検索からチャンネル起点に全面改訂（§3 探索、§3.3 除外語、§3.4 ゲーム推定、§3.5 タイトル由来タグ、§6 クォータ）
 - 管理 AI運営者向け収集候補レビューUI仕様書 v2.0: `/admin/collection`・`/admin/collection/channels`、一括承認（1リクエスト50件）
-- Firestore データモデル設計書 v1.20: `collection_candidates` を再設計（ドキュメントID＝再生リストID）、`collection_batch_logs`・`collection_quota_logs`、§3.31 `exploration_channels` 新設
+- Firestore データモデル設計書 v1.24: `collection_candidates` を再設計（ドキュメントID＝再生リストID）、`collection_batch_logs`・`collection_quota_logs`、§3.31 `exploration_channels` 新設
 - ゲームタイトル詳細 v2.5 §8.5（運営者タグのカテゴリ一覧）、再生リストを探す v1.9・ゲームタイトルを探す v1.4・TOP v1.12（ユーザータグは使用数3以上）
 
 ## 実装（`7ae3c3f`・`8da8f02`）

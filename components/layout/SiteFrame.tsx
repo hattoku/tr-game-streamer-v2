@@ -5,6 +5,7 @@
  * モバイルではボトムタブバーに本文・フッターが隠れないよう下端に余白を取る（UI仕様書 §2.7）。
  */
 import type { ReactNode } from 'react';
+import { AddPlaylistFab } from './AddPlaylistFab';
 import { BottomTabBar } from './BottomTabBar';
 import { Footer } from './Footer';
 import { Header } from './Header';
@@ -19,6 +20,7 @@ export function SiteFrame({ children }: { children: ReactNode }) {
       <main className="flex-1">
         <PageContainer className="py-6 md:py-8">{children}</PageContainer>
       </main>
+      <AddPlaylistFab />
       <Footer />
       <BottomTabBar />
     </div>

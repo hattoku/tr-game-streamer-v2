@@ -18,6 +18,7 @@ import { Checkbox } from '@/components/ui/Input';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { SelectMenu, DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/DropdownMenu';
 import { MoreIcon, CommentIcon, FavoriteIcon } from '@/components/ui/icons';
+import { StatusBadge } from '@/components/ui/Badge';
 import { UserAvatar } from '@/components/layout/UserDropdown';
 import { LoginRequiredModal } from '@/components/layout/LoginRequiredModal';
 import { ReportModal } from './ReportModal';
@@ -36,6 +37,8 @@ interface ReviewItem {
   helpfulCount: number;
   postedAt: Date | null;
   updatedAt: Date | null;
+  /** 通報承認で非表示（管理 審査ワークフロー仕様書 §3.1）。本人のカードにだけ残して「非表示」を示す */
+  isHidden: boolean;
 }
 
 function formatDate(d: Date | null): string {
@@ -84,6 +87,7 @@ export function ReviewList({
           helpfulCount: data.helpfulCount ?? 0,
           postedAt: data.postedAt?.toDate?.() ?? null,
           updatedAt: data.updatedAt?.toDate?.() ?? null,
+          isHidden: data.isHidden === true,
         };
       });
       // 新着順（投稿日時降順）。postedAt+playlistId の複合indexが無いため取得後にソートする
@@ -137,12 +141,14 @@ export function ReviewList({
   // 一覧に並べるのはコメント付きの投稿のみ。星評価・視聴ステータスのみの投稿は投稿者名を出さず、
   // 視聴ステータスは下の集計サマリー、星評価は再生リストスコアにのみ反映する。
   // 自分の投稿は編集導線のためコメントが無くても一覧に残す
-  const listed = reviews.filter((r) => !!r.comment?.trim() || user?.uid === r.userId);
-  const commentCount = reviews.filter((r) => !!r.comment?.trim()).length;
+  // 通報で非表示のレビューは件数・集計に数えず、一覧にも本人の分しか出さない
+  const visible = reviews.filter((r) => !r.isHidden);
+  const listed = reviews.filter((r) => user?.uid === r.userId || (!r.isHidden && !!r.comment?.trim()));
+  const commentCount = visible.filter((r) => !!r.comment?.trim()).length;
 
   const statusCounts = WATCH_STATUS_ORDER.map((s) => ({
     status: s,
-    count: reviews.filter((r) => r.watchStatus === s).length,
+    count: visible.filter((r) => r.watchStatus === s).length,
   })).filter((c) => c.count > 0);
 
   // ★4 は 4.0〜4.5 のレビューを含める（0.5刻みの評価を1刻みの区分に丸める）
@@ -235,6 +241,7 @@ export function ReviewList({
                   </div>
 
                   <div className="flex flex-wrap items-center gap-3">
+                    {review.isHidden && <StatusBadge>非表示</StatusBadge>}
                     {review.watchStatus && <StatusChip status={review.watchStatus} readOnly />}
                     {review.starRating != null && (
                       <span className="inline-flex items-center gap-2">

@@ -9,6 +9,9 @@
  * - キーワード検索の「デバウンス300ms」（§4.2）はクライアント内メモリ配列のフィルタのため実施しない
  *   （`/games`と同じ判断）。
  *
+ * 見出しの右に「再生リストを追加する」（/playlists/new。管理者は登録・一般ユーザーは提案）を置く（PCのみ。
+ * モバイルは「さがす」4ページ共通の浮きボタン AddPlaylistFab）。
+ *
  * TOPページからの流入（§1.3実装注記）: `?q=`（キーワード）・`?sort=`・`?tag=`を初回表示時にのみ
  * 初期値として読み込む（`/games`の`?tag=`と同じ遅延初期化パターン。以降のURL同期はしない）。
  */
@@ -19,7 +22,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { fetchPublicPlaylists, PlaylistCardGrid, sortPlaylists, type PlaylistSort, type PlaylistSummary } from '@/components/playlists/PlaylistGrid';
 import { fetchTagsMap, isListedTag, type TagInfo } from '@/lib/tags';
 import { Card, SectionHeading } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
+import { Button, LinkButton } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Pagination } from '@/components/ui/Pagination';
@@ -173,7 +176,16 @@ export default function PlaylistsPage() {
 
   return (
     <div>
-      <SectionHeading className="mb-5">再生リストを探す</SectionHeading>
+      {/* 「再生リストを追加する」導線（ページ 再生リストを追加する 仕様書 §1.4。一般ユーザーは提案、フェーズ7ステップ7-4） */}
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <SectionHeading>再生リストを探す</SectionHeading>
+        {/* モバイルは「さがす」共通の浮きボタン（components/layout/AddPlaylistFab.tsx）が担う */}
+        <div className="hidden md:block">
+          <LinkButton href="/playlists/new" variant="secondary" size="sm">
+            再生リストを追加する
+          </LinkButton>
+        </div>
+      </div>
 
       {/* モバイル: アコーディオン形式の検索条件パネル（§7.1〜§7.3） */}
       <div className="mb-5 md:hidden">

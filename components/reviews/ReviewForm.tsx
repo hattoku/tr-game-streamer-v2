@@ -298,6 +298,14 @@ export function ReviewForm({ playlistId, user, mylist, onMylistChange, writeRequ
       <div className="flex flex-col gap-4">
         <h2 className="text-xl font-medium text-text-primary">この再生リストに対してレビューする</h2>
 
+        {/* 通報承認で非表示になったレビュー（レビュー投稿機能仕様書「通報により非表示になったレビュー」） */}
+        {saved.isHidden && (
+          <p className="flex items-start gap-1 rounded-[8px] bg-bg-input px-4 py-3 text-md text-text-muted">
+            <InfoIcon size={13} className="mt-[3px] shrink-0" />
+            このレビューは通報により非表示になっています。編集しても非表示のままです。削除すると新しく書き直せます。
+          </p>
+        )}
+
         <div className="flex flex-col gap-2">
           <StarRating
             value={starRating}

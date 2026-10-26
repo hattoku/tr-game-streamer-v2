@@ -208,11 +208,17 @@ service cloud.firestore {
     // workflows — 審査ワークフロー（提案・通報）
     // ---------------------------------------------------------------------
     match /workflows/{workflowId} {
-      allow read: if isAdmin() || (isSignedIn() && resource.data.submittedBy == request.auth.uid);
+      // 本人が直接読めるのは通報（ReportModal の重複チェック）だけ。提案は運営メモ・内部メモ（step2History.comment）を
+      // 含むため、提案者には GET /api/playlists/proposals（表示用の項目だけ）で返す（ページ 再生リストを追加する 仕様書 §9.4）
+      allow read: if isAdmin()
+        || (isSignedIn() && resource.data.submittedBy == request.auth.uid && resource.data.type == 'review_report');
 
+      // クライアントから直接作れるのは通報（ReportModal）だけ。提案（playlist_register・game_title_register）は
+      // 内容をサーバー側で検証するため API（POST /api/playlists/propose、Admin SDK）経由のみ（7-4）
       allow create: if isSignedIn()
         && request.resource.data.submittedBy == request.auth.uid
-        && request.resource.data.status == 'reviewing_lv1';
+        && request.resource.data.status == 'reviewing_lv1'
+        && request.resource.data.type == 'review_report';
 
       // STEP1/STEP2の審査進行・履歴追記は管理者操作（AIによる一次判定はCloud Functions=Admin SDK経由）。
       allow update, delete: if isAdmin();
@@ -232,13 +238,14 @@ service cloud.firestore {
     // アカウントから取る・ステータスの自動遷移をサーバー側で保証するため。送信は POST /api/inquiries、
     // 管理操作は PATCH /api/admin/inquiries/[inquiryId]。削除は行わない（管理 お問い合わせ管理仕様書 §6）。
     // ---------------------------------------------------------------------
+    // 送信者本人は対応メモ（operatorMemo）を見られないよう直接読まず、API（Admin SDK）経由で公開項目だけ受け取る
+    // （管理 お問い合わせ管理仕様書 §1.1、2026-10-24 ユーザー決定）
     match /inquiries/{inquiryId} {
-      allow read: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow read: if isAdmin();
       allow write: if false;
 
       match /messages/{messageId} {
-        allow read: if isAdmin()
-          || (isSignedIn() && get(/databases/$(database)/documents/inquiries/$(inquiryId)).data.userId == request.auth.uid);
+        allow read: if isAdmin();
         allow write: if false;
       }
     }
@@ -259,7 +266,7 @@ service cloud.firestore {
     }
 
     // ユーザー向けサイト内通知（管理者向けadmin_notificationsとは別物）。
-    // 生成は手動再取得API Route（Admin SDK）限定。本人はisReadの更新のみ可。
+    // 生成は API Route（Admin SDK）限定（新着動画の取得、お問い合わせへの返信、提案の審査結果）。本人はisReadの更新のみ可。
     match /notifications/{notificationId} {
       allow read: if isSelf(resource.data.userId) || isAdmin();
       allow update: if isSelf(resource.data.userId) && onlyChangedKeys(['isRead']);
