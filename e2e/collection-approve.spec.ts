@@ -88,7 +88,7 @@ test('§3.4・§3.5 推定なしの候補には、gameQuery を入れた新規�
   expect(snap.data()!.status).toBe('pending');
 });
 
-test('§4.3 新規のゲーム名でまとめて承認すると、同じ名前は1件のゲームタイトルにまとまる', async ({ adminPage }) => {
+test('§4.3 新規のゲーム名で承認しても、再生リストが1件も登録できなければゲームタイトルは残らない', async ({ adminPage }) => {
   test.setTimeout(120_000);
   const channelTitle = uniqueText('チャンネル');
   const explorationChannelId = randomId('e2e-ch-');
@@ -100,16 +100,24 @@ test('§4.3 新規のゲーム名でまとめて承認すると、同じ名前�
 
   await adminPage.goto('/admin/collection');
   await expect(section(adminPage, channelTitle).getByRole('listitem')).toHaveCount(2);
-  await approveAll(adminPage, channelTitle);
+  // 確認ダイアログに、新しく登録するゲーム名が（同じ名前は1件にまとめて）出る
+  let dialogMessage = '';
+  adminPage.once('dialog', (dialog) => {
+    dialogMessage = dialog.message();
+    dialog.accept();
+  });
+  await section(adminPage, channelTitle).getByLabel('全選択').check();
+  await adminPage.getByRole('button', { name: '選択を承認して登録' }).click();
 
-  // 再生リストは YouTube に無いので失敗（自動で却下）するが、ゲームタイトルは1件だけ追加される
-  await expect(adminPage.getByText('ゲームタイトルを1件追加')).toBeVisible({ timeout: 60_000 });
+  // 再生リストは YouTube に無いので2件とも自動で却下され（§4.2）、用意したゲームタイトルは消される
+  await expect(adminPage.getByText(/(^|[^0-9])0件を登録しました（失敗 2件）/).first()).toBeVisible({ timeout: 60_000 });
+  expect(dialogMessage).toContain('2件を登録します');
+  expect(dialogMessage).toContain(`（1件）`);
+  expect(dialogMessage).toContain(`・${gameTitle}`);
+  await expect(adminPage.getByText('ゲームタイトルを1件追加')).toHaveCount(0);
   await expect(section(adminPage, channelTitle)).toHaveCount(0);
 
-  const games = await gamesTitled(gameTitle);
-  expect(games).toHaveLength(1);
-  // 楽天ブックスに無い名前なので、名前だけで登録される
-  expect(games[0].data().packageImageUrl).toBeNull();
+  expect(await gamesTitled(gameTitle)).toHaveLength(0);
   for (const id of ids) {
     const snap = await e2eDb().collection('collection_candidates').doc(id).get();
     expect(snap.data()!.status).toBe('rejected');
@@ -117,24 +125,28 @@ test('§4.3 新規のゲーム名でまとめて承認すると、同じ名前�
   }
 });
 
-test('§4.3-1 既存のゲームタイトルと正規化して一致すれば、新しく作らずそれを使う', async ({ adminPage }) => {
+test('§4.3-1 既存のゲームタイトルのタイトル・別名と正規化して一致すれば、新しく作らずそれを使う', async ({ adminPage }) => {
   test.setTimeout(120_000);
   const base = uniqueText('Existing Game');
   // 既存のゲーム（[E2E] Existing Game 123-abc）と、大文字小文字・空白だけが違う名前
   const variant = base.toLowerCase().replace(/ /g, '');
+  const alias = uniqueText('別名');
   const gameRef = e2eDb().collection('games').doc();
-  await gameRef.set({ title: base, aliases: [], platforms: [], themeIds: [], genreId: null, genreName: null, playlistCount: 0, createdAt: new Date(), updatedAt: new Date() });
+  await gameRef.set({ title: base, aliases: [alias], platforms: [], themeIds: [], genreId: null, genreName: null, playlistCount: 0, createdAt: new Date(), updatedAt: new Date() });
 
   const channelTitle = uniqueText('チャンネル');
-  await seedCandidate({ channelTitle, explorationChannelId: randomId('e2e-ch-'), gameQuery: variant });
+  const explorationChannelId = randomId('e2e-ch-');
+  await seedCandidate({ channelTitle, explorationChannelId, gameQuery: variant });
+  await seedCandidate({ channelTitle, explorationChannelId, gameQuery: alias });
 
   await adminPage.goto('/admin/collection');
   // 画面の再推定は再生リストタイトルで行うため、この候補は推定なし（新規の欄）のまま
-  await expect(section(adminPage, channelTitle).getByRole('textbox')).toHaveValue(variant);
+  await expect(section(adminPage, channelTitle).getByRole('textbox')).toHaveCount(2);
   await approveAll(adminPage, channelTitle);
 
-  await expect(adminPage.getByText(/0件を登録しました/)).toBeVisible({ timeout: 60_000 });
-  await expect(adminPage.getByText('ゲームタイトルを1件追加')).toHaveCount(0);
+  await expect(adminPage.getByText(/(^|[^0-9])0件を登録しました（失敗 2件）/).first()).toBeVisible({ timeout: 60_000 });
   expect(await gamesTitled(variant)).toHaveLength(0);
-  expect(await gamesTitled(base)).toHaveLength(1);
+  expect(await gamesTitled(alias)).toHaveLength(0);
+  // 既存のゲームは消されない（このリクエストで新規登録したものだけが消える対象）
+  expect((await gameRef.get()).exists).toBe(true);
 });

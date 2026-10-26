@@ -8,7 +8,7 @@
  * ゲーム名の入力欄を出し、承認時にその名前でゲームタイトルを用意する（既存と一致すればそれ、無ければ新規登録。
  * v2.1 §3.5・§4.3）。既存から選ぶ GameSelectModal・楽天を自動検索した GameCreateModal も引き続き使える。
  * 付与するタグ＝探索対象チャンネルのタグ＋タイトル由来のタグ（運営者タグのみ）。行ごとに×で外せる。
- * 承認は20件ずつAPIに送り、進捗を下部バーに表示する（§4）。
+ * 承認は20件ずつ（新しいゲーム名を含む候補は5件ずつ）APIに送り、進捗を下部バーに表示する（§4）。
  */
 'use client';
 
@@ -18,6 +18,7 @@ import { collection, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Card, SectionHeading } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { StatusBadge } from '@/components/ui/Badge';
 import { Input } from '@/components/ui/Input';
 import { SelectMenu } from '@/components/ui/DropdownMenu';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -45,8 +46,10 @@ import {
   type ExplorationChannel,
 } from '@/lib/collection-admin';
 
-// 新しいゲームの登録で楽天ブックスを1件1秒ほどかけて引くため、1回のリクエストは少なめにして進捗を細かく出す
+// 1回のリクエストの件数。新しいゲーム名を含む候補は、楽天ブックスの検索に1件2秒ほどかかるため少なくする
+// （Firebase Hosting 経由のリクエストは60秒で打ち切られる。v2.1 §4.2）
 const APPROVE_CHUNK = 20;
+const APPROVE_CHUNK_NEW_GAMES = 5;
 const MAX_GAME_TITLE_LENGTH = 100;
 
 type GameFilter = 'all' | 'guessed' | 'none';
@@ -252,14 +255,32 @@ export default function AdminCollectionPage() {
   async function handleApprove() {
     const targets = (candidates ?? []).filter((c) => selected.has(c.id) && (gameFor(c) || newGameTitleFor(c)));
     if (targets.length === 0) return;
-    const newGameCount = new Set(targets.filter((c) => !gameFor(c)).map((c) => normalizeForMatch(newGameTitleFor(c)!))).size;
-    if (
-      !window.confirm(
-        `${targets.length}件を登録します。${newGameCount > 0 ? `ゲームタイトルが未登録のもの（最大${newGameCount}件）は、表示している名前で新しく登録します。` : ''}よろしいですか？`,
-      )
-    ) {
-      return;
+    const newGameNames = [...new Map(targets.filter((c) => !gameFor(c)).map((c) => [normalizeForMatch(newGameTitleFor(c)!), newGameTitleFor(c)!])).values()];
+    const NAMES_SHOWN = 10;
+    const newGameNotice =
+      newGameNames.length > 0
+        ? `\n\n次のゲーム名は、同じ名前のゲームタイトルが無ければ新しく登録します（${newGameNames.length}件）:\n${newGameNames
+            .slice(0, NAMES_SHOWN)
+            .map((n) => `・${n}`)
+            .join('\n')}${newGameNames.length > NAMES_SHOWN ? `\nほか${newGameNames.length - NAMES_SHOWN}件` : ''}\n\n`
+        : '';
+    if (!window.confirm(`${targets.length}件を登録します。${newGameNotice}よろしいですか？`)) return;
+
+    // 件数で区切りつつ、新しいゲーム名を含む候補は APPROVE_CHUNK_NEW_GAMES 件までにする
+    const chunks: CollectionCandidate[][] = [];
+    let current: CollectionCandidate[] = [];
+    let currentNew = 0;
+    for (const c of targets) {
+      const isNew = !gameFor(c);
+      if (current.length >= APPROVE_CHUNK || (isNew && currentNew >= APPROVE_CHUNK_NEW_GAMES)) {
+        chunks.push(current);
+        current = [];
+        currentNew = 0;
+      }
+      current.push(c);
+      if (isNew) currentNew++;
     }
+    if (current.length > 0) chunks.push(current);
 
     setProgress({ done: 0, total: targets.length });
     const errors = new Map<string, string>();
@@ -267,8 +288,8 @@ export default function AdminCollectionPage() {
     let stopped = false;
     const createdGames: GameOption[] = [];
     try {
-      for (let i = 0; i < targets.length; i += APPROVE_CHUNK) {
-        const chunk = targets.slice(i, i + APPROVE_CHUNK);
+      let done = 0;
+      for (const chunk of chunks) {
         const res = await postAdminApi<{
           results?: Array<{ playlistId: string; ok: boolean; error?: string; createdGame?: { id: string; title: string } }>;
           error?: string;
@@ -297,7 +318,8 @@ export default function AdminCollectionPage() {
           if (r.ok) okCount++;
           else errors.set(r.playlistId, APPROVE_ERROR_LABEL[r.error ?? ''] ?? '登録に失敗しました');
         }
-        setProgress({ done: Math.min(i + chunk.length, targets.length), total: targets.length });
+        done += chunk.length;
+        setProgress({ done, total: targets.length });
       }
     } catch {
       toast({ type: 'error', message: '通信エラーが発生しました。時間をおいて再試行してください' });
@@ -493,14 +515,14 @@ export default function AdminCollectionPage() {
                                     </button>
                                   ) : (
                                     <>
-                                      <span className="rounded-[4px] bg-bg-hover px-2 py-[2px] text-sm text-text-secondary">新規</span>
+                                      <StatusBadge>新規</StatusBadge>
                                       <Input
                                         aria-label={`${c.playlistTitle}のゲーム名`}
                                         value={newGameTitles.get(c.id) ?? c.gameQuery}
                                         maxLength={MAX_GAME_TITLE_LENGTH}
                                         onChange={(e) => changeNewGameTitle(c, e.target.value)}
                                         disabled={busy}
-                                        className="w-56 max-w-full py-1! text-md!"
+                                        className="w-56 max-w-full"
                                       />
                                       <Button variant="ghost" size="sm" onClick={() => setGameSelectFor(c)} disabled={busy}>
                                         既存から選ぶ

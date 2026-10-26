@@ -1,8 +1,9 @@
 // 収集候補の承認で、ゲーム推定なしの候補のゲームタイトルを用意する（サーバー専用）。
 // 管理 AI運営者向け収集候補レビューUI仕様書 v2.1 §4.3、管理_Ai運営者 コンテンツ収集機能仕様書 v3.1 §3.6。
-// 承認画面で確定したゲーム名（既定は候補の gameQuery）で、登録済みのゲームタイトルを正規化して照合し、
-// 無ければ新規登録する。楽天ブックスでタイトルが一致する商品が見つかれば、パッケージ画像・商品ページURL・
+// 承認画面で確定したゲーム名（既定は候補の gameQuery）で、登録済みのゲームタイトル（タイトル・別名）を正規化して
+// 照合し、無ければ新規登録する。楽天ブックスでタイトルが一致する商品が見つかれば、パッケージ画像・商品ページURL・
 // 機種・ジャンル・テーマも入れる（見つからない・失敗したときは名前だけで登録する）。
+// 新規登録したのに、同じリクエストで再生リストを1件も登録できなかったゲームタイトルは discardUnused で消す。
 import { FieldValue } from 'firebase-admin/firestore';
 import { adminDb } from './firebase-admin';
 import { normalizeForMatch } from './exploration-rules';
@@ -19,6 +20,10 @@ const RAKUTEN_INTERVAL_MS = 1100;
 export interface CollectionGameResolver {
   /** ゲーム名から gameId を返す（既存に一致すればそのID、無ければ新規登録したID） */
   resolve(title: string): Promise<{ gameId: string; created: boolean }>;
+  /** 再生リストの登録に成功したことを記録する（このリクエストで新規登録したゲームを残す対象にする） */
+  markUsed(gameId: string): void;
+  /** このリクエストで新規登録し、再生リストが1件も付かなかったゲームタイトルを消し、消したIDを返す */
+  discardUnused(): Promise<string[]>;
 }
 
 /**
@@ -31,14 +36,26 @@ export async function createCollectionGameResolver(): Promise<CollectionGameReso
     adminDb.collection('genres').get(),
     adminDb.collection('themes').get(),
   ]);
+  // タイトルを先に入れ、別名は同じ語のタイトルが無いときだけ使う
   const gameIdByNormalized = new Map<string, string>();
   for (const d of gamesSnap.docs) {
     const key = normalizeForMatch((d.data().title as string) ?? '');
     if (key && !gameIdByNormalized.has(key)) gameIdByNormalized.set(key, d.id);
   }
+  for (const d of gamesSnap.docs) {
+    for (const alias of (d.data().aliases as string[] | undefined) ?? []) {
+      const key = normalizeForMatch(alias);
+      if (key && !gameIdByNormalized.has(key)) gameIdByNormalized.set(key, d.id);
+    }
+  }
   const genreByName = new Map(genresSnap.docs.map((d) => [d.data().name as string, d.id]));
   const themeByName = new Map(themesSnap.docs.map((d) => [d.data().name as string, d.id]));
   let lastRakutenCallAt = 0;
+  // ジャンルの解決結果（楽天のジャンルID→結果）。2回目以降は楽天を呼ばないので間隔待ちもしない
+  const genreCache = new Map<string, Awaited<ReturnType<typeof resolveRakutenGenre>>>();
+  // このリクエストで新規登録したゲーム（ID→ジャンル・テーマ。消すときに件数を戻すため）と、再生リストが付いたゲーム
+  const created = new Map<string, { genreId: string | null; themeIds: string[]; key: string }>();
+  const used = new Set<string>();
 
   async function throttle() {
     const wait = lastRakutenCallAt + RAKUTEN_INTERVAL_MS - Date.now();
@@ -69,8 +86,11 @@ export async function createCollectionGameResolver(): Promise<CollectionGameReso
     let genreName: string | null = null;
     const themeIds: string[] = [];
     if (item?.booksGenreId) {
-      await throttle();
-      const genre = await resolveRakutenGenre(item.booksGenreId);
+      if (!genreCache.has(item.booksGenreId)) {
+        await throttle();
+        genreCache.set(item.booksGenreId, await resolveRakutenGenre(item.booksGenreId));
+      }
+      const genre = genreCache.get(item.booksGenreId);
       if (genre) {
         genreId = genreByName.get(genre.genreName) ?? null;
         genreName = genreId ? genre.genreName : null;
@@ -111,8 +131,27 @@ export async function createCollectionGameResolver(): Promise<CollectionGameReso
     await batch.commit();
 
     gameIdByNormalized.set(key, gameRef.id);
+    created.set(gameRef.id, { genreId, themeIds, key });
     return { gameId: gameRef.id, created: true };
   }
 
-  return { resolve };
+  async function discardUnused(): Promise<string[]> {
+    const unused = [...created.entries()].filter(([id]) => !used.has(id));
+    if (unused.length === 0) return [];
+    const batch = adminDb.batch();
+    for (const [id, game] of unused) {
+      batch.delete(adminDb.collection('games').doc(id));
+      if (game.genreId) {
+        batch.update(adminDb.collection('genres').doc(game.genreId), { gameTitleCount: FieldValue.increment(-1) });
+      }
+      for (const themeId of game.themeIds) {
+        batch.update(adminDb.collection('themes').doc(themeId), { gameTitleCount: FieldValue.increment(-1) });
+      }
+      gameIdByNormalized.delete(game.key);
+    }
+    await batch.commit();
+    return unused.map(([id]) => id);
+  }
+
+  return { resolve, markUsed: (gameId) => used.add(gameId), discardUnused };
 }

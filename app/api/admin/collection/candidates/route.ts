@@ -147,6 +147,8 @@ export async function POST(request: NextRequest) {
           reviewedBy: auth.uid,
           registeredPlaylistId: item.playlistId,
         });
+        // 別経路で登録済みだったときは今回のゲームは付いていないので、使ったことにしない
+        if (!error) gameResolver?.markUsed(gameId);
         results.push({ playlistId: item.playlistId, ok: true, createdGame });
       } else if (error === 'not_public' || error === 'playlist_not_found') {
         // YouTube 側で非公開・削除になっていた候補は自動で却下する（§4.2）
@@ -163,6 +165,17 @@ export async function POST(request: NextRequest) {
     }
   } finally {
     await addCollectionQuotaUsage(getQuotaConsumed());
+    // 再生リストが1件も付かなかった新規のゲームタイトルは、0件のまま一覧に出ないよう消す（§4.3）
+    if (gameResolver) {
+      try {
+        const discarded = new Set(await gameResolver.discardUnused());
+        for (const r of results) {
+          if (r.createdGame && discarded.has(r.createdGame.id)) delete r.createdGame;
+        }
+      } catch (e) {
+        console.error('収集候補の承認で使わなかったゲームタイトルの削除に失敗', e);
+      }
+    }
   }
 
   return NextResponse.json({ results });
