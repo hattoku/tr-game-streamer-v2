@@ -34,10 +34,11 @@ const ADMIN_PAGES: PageCase[] = [
 ];
 
 // 一覧ページから最初の1件をたどって開く詳細ページ（データが無い環境では飛ばす）
+// exclude: 同じ接頭辞を持つ詳細以外のページ（「再生リストを追加する」ボタン等）
 const DETAIL_PAGES = [
-  { list: '/playlists', linkPrefix: '/playlists/' },
-  { list: '/games', linkPrefix: '/games/' },
-  { list: '/channels', linkPrefix: '/channels/' },
+  { list: '/playlists', linkPrefix: '/playlists/', exclude: ['/playlists/new', '/playlists/proposals'] },
+  { list: '/games', linkPrefix: '/games/', exclude: [] },
+  { list: '/channels', linkPrefix: '/channels/', exclude: [] },
 ];
 
 async function expectHealthyPage(page: Page, { path, heading }: PageCase) {
@@ -70,7 +71,9 @@ test.describe('未ログイン', () => {
   for (const d of DETAIL_PAGES) {
     test(`${d.linkPrefix}[id] が開ける`, async ({ guestPage }) => {
       await guestPage.goto(d.list);
-      const link = guestPage.locator(`main a[href^="${d.linkPrefix}"]`).first();
+      // 画面幅によって隠れているリンクがあるため、表示中のものだけを対象にする
+      const notExcluded = d.exclude.map((href) => `:not([href="${href}"])`).join('');
+      const link = guestPage.locator(`main a[href^="${d.linkPrefix}"]${notExcluded}:visible`).first();
       const found = await link.waitFor({ timeout: 15_000 }).then(
         () => true,
         () => false,
