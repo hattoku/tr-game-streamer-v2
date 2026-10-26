@@ -162,21 +162,25 @@ export function WorkflowDecisionButtons({
   onApprove,
   approveLabel = '承認する',
   disabled = false,
+  approveBlockedReason = null,
 }: {
   onReject: () => void;
   onApprove: () => void;
   approveLabel?: string;
   /** 承認処理の実行中など、押させたくない間は true */
   disabled?: boolean;
+  /** 承認だけ押せない理由（却下は押せる）。ボタンの横に出す */
+  approveBlockedReason?: string | null;
 }) {
   return (
     <>
       <CardDivider />
-      <div className="flex flex-wrap justify-end gap-3">
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        {approveBlockedReason && <p className="text-md text-text-tertiary">{approveBlockedReason}</p>}
         <Button variant="secondary" onClick={onReject} disabled={disabled}>
           却下する
         </Button>
-        <Button variant="primary" onClick={onApprove} disabled={disabled}>
+        <Button variant="primary" onClick={onApprove} disabled={disabled || !!approveBlockedReason}>
           {approveLabel}
         </Button>
       </div>
