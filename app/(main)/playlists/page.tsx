@@ -41,6 +41,8 @@ export default function PlaylistsPage() {
 
   const [playlists, setPlaylists] = useState<PlaylistSummary[] | null>(null);
   const [tags, setTags] = useState<TagInfo[]>([]);
+  // 絞り込み条件チップ用。?tag= で一覧に出ないユーザータグが選ばれていても表示・解除できるよう全タグを持つ
+  const [allTags, setAllTags] = useState<Map<string, TagInfo>>(new Map());
 
   // TOPページからの流入用クエリパラメータ（?q=, ?sort=, ?tag=）。初回表示時にのみ読み込む
   const [keyword, setKeyword] = useState(() => searchParams.get('q') ?? '');
@@ -59,6 +61,7 @@ export default function PlaylistsPage() {
   useEffect(() => {
     Promise.all([fetchPublicPlaylists(), fetchTagsMap()]).then(([list, tagsMap]) => {
       setPlaylists(list);
+      setAllTags(tagsMap);
       setTags([...tagsMap.values()].filter((t) => isListedTag(t, 'playlist')).sort((a, b) => a.name.localeCompare(b.name, 'ja')));
     });
   }, []);
@@ -113,8 +116,9 @@ export default function PlaylistsPage() {
   const activeFilterChips = activeFilterCount > 0 && (
     <div className="flex flex-wrap gap-2">
       {keyword.trim() && <FilterChip label={keyword.trim()} onRemove={() => setKeyword('')} />}
-      {tags
-        .filter((t) => selectedTagIds.has(t.id))
+      {[...selectedTagIds]
+        .map((id) => allTags.get(id))
+        .filter((t): t is TagInfo => !!t)
         .map((t) => (
           <FilterChip key={t.id} label={t.name} onRemove={() => toggleTag(t.id)} />
         ))}

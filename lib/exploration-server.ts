@@ -67,86 +67,93 @@ export async function exploreChannels(options: {
     status: 'success',
   };
 
-  for (const channelDoc of channels) {
-    const channel = channelDoc.data()!;
-    let playlists;
-    try {
-      playlists = await fetchChannelPlaylists(channel.youtubeChannelId as string);
-    } catch (e) {
-      summary.errors.push({
-        explorationChannelId: channelDoc.id,
-        message: e instanceof YouTubeApiError ? e.message : 'youtube_api_error',
-      });
-      continue;
-    }
-    summary.processedChannels++;
-    summary.playlistsFetched += playlists.length;
-
-    const passed = playlists.filter((p) => {
-      if (p.itemCount < MIN_VIDEO_COUNT || !p.isPublic || findExcludeWord(p.title)) {
-        summary.skippedByFilter++;
-        return false;
-      }
-      return true;
-    });
-
-    const ids = passed.map((p) => p.youtubePlaylistId);
-    const [registered, candidated] = await Promise.all([
-      existingIds(ids.map((id) => adminDb.collection('playlists').doc(id))),
-      existingIds(ids.map((id) => adminDb.collection('collection_candidates').doc(id))),
-    ]);
-    const fresh = passed.filter((p) => !registered.has(p.youtubePlaylistId) && !candidated.has(p.youtubePlaylistId));
-    summary.skippedExisting += passed.length - fresh.length;
-
-    const BATCH_LIMIT = 400;
-    for (let i = 0; i < fresh.length; i += BATCH_LIMIT) {
-      const batch = adminDb.batch();
-      for (const p of fresh.slice(i, i + BATCH_LIMIT)) {
-        const guessed = guessGame(p.title, games);
-        const titleTagIds = matchTitleTagNames(p.title)
-          .map((name) => operatorTags.get(name))
-          .filter((id): id is string => !!id);
-        batch.set(adminDb.collection('collection_candidates').doc(p.youtubePlaylistId), {
-          playlistId: p.youtubePlaylistId,
-          playlistTitle: p.title,
-          channelId: p.channelId,
-          channelTitle: p.channelTitle,
+  // 途中で想定外のエラー（Firestore の書き込み失敗等）が起きても、そこまでのクォータ消費と実行ログは必ず残す
+  let fatalError: unknown = null;
+  try {
+    for (const channelDoc of channels) {
+      const channel = channelDoc.data()!;
+      let playlists;
+      try {
+        playlists = await fetchChannelPlaylists(channel.youtubeChannelId as string);
+      } catch (e) {
+        summary.errors.push({
           explorationChannelId: channelDoc.id,
-          thumbnailUrl: p.thumbnailUrl,
-          videoCount: p.itemCount,
-          playlistPublishedAt: p.publishedAt ? new Date(p.publishedAt) : null,
-          guessedGameId: guessed?.id ?? null,
-          guessedGameTitle: guessed?.title ?? null,
-          gameQuery: extractGameQuery(p.title),
-          titleTagIds,
-          source: 'channel',
-          status: 'pending',
-          collectedAt: executedAt,
-          reviewedAt: null,
-          reviewedBy: null,
-          reviewComment: null,
-          registeredPlaylistId: null,
+          message: e instanceof YouTubeApiError ? e.message : 'youtube_api_error',
         });
+        continue;
       }
-      await batch.commit();
+      summary.processedChannels++;
+      summary.playlistsFetched += playlists.length;
+
+      const passed = playlists.filter((p) => {
+        if (p.itemCount < MIN_VIDEO_COUNT || !p.isPublic || findExcludeWord(p.title)) {
+          summary.skippedByFilter++;
+          return false;
+        }
+        return true;
+      });
+
+      const ids = passed.map((p) => p.youtubePlaylistId);
+      const [registered, candidated] = await Promise.all([
+        existingIds(ids.map((id) => adminDb.collection('playlists').doc(id))),
+        existingIds(ids.map((id) => adminDb.collection('collection_candidates').doc(id))),
+      ]);
+      const fresh = passed.filter((p) => !registered.has(p.youtubePlaylistId) && !candidated.has(p.youtubePlaylistId));
+      summary.skippedExisting += passed.length - fresh.length;
+
+      const BATCH_LIMIT = 400;
+      for (let i = 0; i < fresh.length; i += BATCH_LIMIT) {
+        const batch = adminDb.batch();
+        for (const p of fresh.slice(i, i + BATCH_LIMIT)) {
+          const guessed = guessGame(p.title, games);
+          const titleTagIds = matchTitleTagNames(p.title)
+            .map((name) => operatorTags.get(name))
+            .filter((id): id is string => !!id);
+          batch.set(adminDb.collection('collection_candidates').doc(p.youtubePlaylistId), {
+            playlistId: p.youtubePlaylistId,
+            playlistTitle: p.title,
+            channelId: p.channelId,
+            channelTitle: p.channelTitle,
+            explorationChannelId: channelDoc.id,
+            thumbnailUrl: p.thumbnailUrl,
+            videoCount: p.itemCount,
+            playlistPublishedAt: p.publishedAt ? new Date(p.publishedAt) : null,
+            guessedGameId: guessed?.id ?? null,
+            guessedGameTitle: guessed?.title ?? null,
+            gameQuery: extractGameQuery(p.title),
+            titleTagIds,
+            source: 'channel',
+            status: 'pending',
+            collectedAt: executedAt,
+            reviewedAt: null,
+            reviewedBy: null,
+            reviewComment: null,
+            registeredPlaylistId: null,
+          });
+        }
+        await batch.commit();
+      }
+      summary.candidatesFound += fresh.length;
+
+      await channelDoc.ref.update({ lastExploredAt: executedAt, lastFoundCount: fresh.length, updatedAt: executedAt });
     }
-    summary.candidatesFound += fresh.length;
-
-    await channelDoc.ref.update({ lastExploredAt: executedAt, lastFoundCount: fresh.length, updatedAt: executedAt });
+  } catch (e) {
+    fatalError = e;
+    summary.errors.push({ explorationChannelId: '', message: e instanceof Error ? e.message : 'unexpected_error' });
+  } finally {
+    summary.quotaConsumed = getQuotaConsumed();
+    await addCollectionQuotaUsage(summary.quotaConsumed);
+    if (summary.errors.length > 0) {
+      summary.status = summary.processedChannels > 0 && !fatalError ? 'partial' : 'error';
+    }
+    await adminDb.collection('collection_batch_logs').add({
+      executedAt,
+      trigger: options.trigger,
+      executedBy: options.executedBy,
+      ...summary,
+    });
   }
-
-  summary.quotaConsumed = getQuotaConsumed();
-  await addCollectionQuotaUsage(summary.quotaConsumed);
-  if (summary.errors.length > 0) {
-    summary.status = summary.processedChannels > 0 ? 'partial' : 'error';
-  }
-
-  await adminDb.collection('collection_batch_logs').add({
-    executedAt,
-    trigger: options.trigger,
-    executedBy: options.executedBy,
-    ...summary,
-  });
+  if (fatalError) throw fatalError;
 
   return summary;
 }

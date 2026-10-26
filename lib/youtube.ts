@@ -7,6 +7,7 @@
 //
 // 呼び出し元はNext.js API Route等のサーバーサイドコードに限定すること
 // （YOUTUBE_API_KEYをブラウザに露出させないため）。
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { YOUTUBE_API_KEY } from './constants';
 
 const API_BASE = 'https://www.googleapis.com/youtube/v3';
@@ -38,14 +39,16 @@ function bestThumbnailUrl(thumbnails: Thumbnails | undefined): string {
 // list系エンドポイント（playlists/channels/playlistItems/videos）は1ユニット、search.list は
 // 100ユニットとして加算する（ENDPOINT_COST）。resetQuotaCounter()/getQuotaConsumed()で1バッチ分を集計する想定
 // （batch_logs.quotaConsumed。Firestore データモデル設計書 3.21節）。
-let quotaCounter = 0;
+// 同時に走るリクエスト（探索の定期実行と手動操作など）で数が混ざらないよう、resetQuotaCounter() は
+// 呼び出し元の非同期コンテキストに専用のカウンタを置く（AsyncLocalStorage.enterWith）。
+const quotaStorage = new AsyncLocalStorage<{ count: number }>();
 
 export function resetQuotaCounter(): void {
-  quotaCounter = 0;
+  quotaStorage.enterWith({ count: 0 });
 }
 
 export function getQuotaConsumed(): number {
-  return quotaCounter;
+  return quotaStorage.getStore()?.count ?? 0;
 }
 
 // search.list だけは1回100ユニット（他のlist系は1ユニット）。AI運営者_YouTube API調査レポート §2
@@ -61,7 +64,8 @@ async function callApi<T>(endpoint: string, params: Record<string, string>): Pro
   }
 
   const res = await fetch(url);
-  quotaCounter += ENDPOINT_COST[endpoint] ?? 1;
+  const quotaStore = quotaStorage.getStore();
+  if (quotaStore) quotaStore.count += ENDPOINT_COST[endpoint] ?? 1;
   const body = await res.json();
   if (!res.ok) {
     const reason = body?.error?.errors?.[0]?.reason;

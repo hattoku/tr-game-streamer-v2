@@ -30,6 +30,21 @@ export async function POST(request: NextRequest) {
     : (await adminDb.collection('exploration_channels').where('status', '==', 'active').count().get()).data().count;
   const quota = await checkCollectionQuota(activeCount);
   if (!quota.ok) {
+    // 定期実行が枠不足で走らなかったことを後から確認できるよう、スキップも実行ログに残す
+    await adminDb.collection('collection_batch_logs').add({
+      executedAt: new Date(),
+      trigger: isCronRequest ? 'cron' : 'manual',
+      executedBy,
+      processedChannels: 0,
+      playlistsFetched: 0,
+      candidatesFound: 0,
+      skippedByFilter: 0,
+      skippedExisting: 0,
+      quotaConsumed: 0,
+      errors: [],
+      status: 'skipped',
+      reason: 'quota_exceeded',
+    });
     return NextResponse.json({ error: 'quota_exceeded', remaining: quota.remaining }, { status: 429 });
   }
 

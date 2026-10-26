@@ -91,8 +91,10 @@ export default function AdminExplorationChannelsPage() {
   const tagGroups = useMemo(() => groupOperatorTags([...tagsMap.values()], 'playlist'), [tagsMap]);
   const remaining = quotaUsed === null ? null : Math.max(0, COLLECTION_DAILY_QUOTA_LIMIT - quotaUsed);
 
-  async function run(key: string, path: string, body: unknown, onOk: (resBody: Record<string, unknown>) => string | null) {
+  /** 管理APIを呼んで結果をトーストで知らせる。成功したら true を返す */
+  async function run(key: string, path: string, body: unknown, onOk: (resBody: Record<string, unknown>) => string | null): Promise<boolean> {
     setBusy(key);
+    let succeeded = false;
     try {
       const res = await postAdminApi(path, body);
       if (res.status === 429) {
@@ -100,6 +102,7 @@ export default function AdminExplorationChannelsPage() {
       } else if (!res.ok) {
         toast({ type: 'error', message: errorMessage(res.body.error) });
       } else {
+        succeeded = true;
         const message = onOk(res.body);
         if (message) toast({ type: 'success', message });
       }
@@ -109,6 +112,7 @@ export default function AdminExplorationChannelsPage() {
     } finally {
       setBusy(null);
     }
+    return succeeded;
   }
 
   function errorMessage(error: unknown): string {
@@ -158,8 +162,9 @@ export default function AdminExplorationChannelsPage() {
 
   async function saveTags() {
     if (!tagTarget) return;
-    await run('tags', '/api/admin/collection/channels', { action: 'set_tags', id: tagTarget.id, tagIds: [...draftTagIds] }, () => 'タグを保存しました');
-    setTagTarget(null);
+    const saved = await run('tags', '/api/admin/collection/channels', { action: 'set_tags', id: tagTarget.id, tagIds: [...draftTagIds] }, () => 'タグを保存しました');
+    // 失敗時は選択中のタグを失わないようモーダルを開いたままにする
+    if (saved) setTagTarget(null);
   }
 
   return (

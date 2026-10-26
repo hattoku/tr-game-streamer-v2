@@ -84,6 +84,28 @@ export async function registerPlaylist(params: RegisterPlaylistParams): Promise<
   const items = await fetchPlaylistItems(playlistId);
   const durations = await fetchVideoDurations(items.map((i) => i.youtubeVideoId));
 
+  // Firestore の1バッチは500書き込みまで。長い再生リスト（有名チャンネルでは数百本）でも収まるよう、
+  // 動画は400件ずつ先に書き込み、再生リスト本体・カウンタは最後の1バッチでまとめて確定する。
+  // 途中で失敗しても再生リスト本体が無いので一覧には出ず、再登録時は同じドキュメントIDに上書きされる
+  const VIDEO_CHUNK_SIZE = 400;
+  for (let start = 0; start < items.length; start += VIDEO_CHUNK_SIZE) {
+    const videoBatch = adminDb.batch();
+    for (const item of items.slice(start, start + VIDEO_CHUNK_SIZE)) {
+      const videoRef = adminDb.collection('videos').doc(`${playlist.youtubePlaylistId}_${item.youtubeVideoId}`);
+      videoBatch.set(videoRef, {
+        youtubeVideoId: item.youtubeVideoId,
+        playlistId: playlist.youtubePlaylistId,
+        position: item.position,
+        title: item.title,
+        thumbnailUrl: item.thumbnailUrl,
+        durationSeconds: durations.get(item.youtubeVideoId) ?? null,
+        publishedAt: new Date(item.publishedAt),
+        playStartCount: 0,
+      });
+    }
+    await videoBatch.commit();
+  }
+
   const now = new Date();
   const batch = adminDb.batch();
 
@@ -131,20 +153,6 @@ export async function registerPlaylist(params: RegisterPlaylistParams): Promise<
 
   for (const tagId of fixedTagIds) {
     batch.update(adminDb.collection('tags').doc(tagId), { usagePlaylistCount: FieldValue.increment(1) });
-  }
-
-  for (const item of items) {
-    const videoRef = adminDb.collection('videos').doc(`${playlist.youtubePlaylistId}_${item.youtubeVideoId}`);
-    batch.set(videoRef, {
-      youtubeVideoId: item.youtubeVideoId,
-      playlistId: playlist.youtubePlaylistId,
-      position: item.position,
-      title: item.title,
-      thumbnailUrl: item.thumbnailUrl,
-      durationSeconds: durations.get(item.youtubeVideoId) ?? null,
-      publishedAt: new Date(item.publishedAt),
-      playStartCount: 0,
-    });
   }
 
   batch.update(gameRef, { playlistCount: (game.playlistCount ?? 0) + 1 });

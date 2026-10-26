@@ -11,7 +11,7 @@
  */
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -87,9 +87,13 @@ export default function AdminCollectionPage() {
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [rejecting, setRejecting] = useState(false);
 
+  // タブを素早く切り替えたとき、前のタブの読み込み結果で上書きしないよう最新の要求だけを反映する
+  const latestStatusRef = useRef<CandidateStatus>('pending');
+
   async function loadCandidates(next: CandidateStatus) {
+    latestStatusRef.current = next;
     const list = await fetchCandidates(next);
-    setCandidates(list);
+    if (latestStatusRef.current === next) setCandidates(list);
   }
 
   async function loadMeta() {
@@ -302,7 +306,11 @@ export default function AdminCollectionPage() {
       <Card className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-col gap-1 text-md text-text-tertiary">
           <p>
-            最終探索: {lastBatch ? `${formatDateTime(lastBatch.executedAt)}（${lastBatch.trigger === 'cron' ? '週1自動' : '手動'}、新規候補 ${lastBatch.candidatesFound}件）` : 'まだありません'}
+            最終探索: {lastBatch
+              ? `${formatDateTime(lastBatch.executedAt)}（${lastBatch.trigger === 'cron' ? '週1自動' : '手動'}、${
+                  lastBatch.status === 'skipped' ? 'APIの枠不足でスキップ' : `新規候補 ${lastBatch.candidatesFound}件${lastBatch.status === 'success' ? '' : '、一部エラーあり'}`
+                }）`
+              : 'まだありません'}
           </p>
           <p>
             本日のYouTube API消費（コンテンツ収集分）: {quotaUsed ?? '-'} / {COLLECTION_DAILY_QUOTA_LIMIT.toLocaleString('ja-JP')} ユニット
@@ -432,6 +440,7 @@ export default function AdminCollectionPage() {
                                       <Button variant="secondary" size="sm" onClick={() => setGameSelectFor(c)} disabled={busy}>
                                         選ぶ
                                       </Button>
+                                      <span className="text-sm text-text-muted">ゲームを選ぶと承認できます</span>
                                     </>
                                   )}
                                 </p>
