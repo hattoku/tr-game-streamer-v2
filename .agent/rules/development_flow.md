@@ -119,3 +119,39 @@ document/
 | 関連仕様書を更新した後 | 更新した関連仕様書の変更箇所 |
 
 > **NG パターン**: 仕様書を更新したのにテストしない。仕様書とコードの整合性は、確認して初めて保証される。
+
+---
+
+## 4. E2Eテスト（自動テスト）
+
+第3章のテスト観点は、Playwright の E2E テスト（`e2e/`）として stg に対して自動で確認する。
+
+### 実行の流れ
+
+```
+実装・自己確認（tsc / lint / build）
+      ↓
+stg へデプロイ（クラウド: scripts/deploy-stg-cloud.sh、ローカル: deploy.ps1 stg）
+      ↓
+E2E を実行（クラウド: npm run test:e2e:stg）
+      ↓
+結果を完了報告に添える（何件中何件成功、失敗したものと理由）
+```
+
+- 接続先は **stg のみ**。本番に対しては実行しない（`e2e/support/env.ts` が本番のホストを拒否する）
+- 実行には、クラウド環境の環境変数 `GCP_SA_KEY_STG_B64`（stg 用サービスアカウント。Firestore の読み書きに `roles/datastore.user` が必要）と `STAGING_GATE_PASSWORD`（stg ゲートのパスワード）が要る
+- stg はテストモードが常時有効（共通 uiコンポーネント フロント 仕様書 §7.1）。テストはテストモードウィジェットでテスト用会員（一般ユーザー・管理者）としてログインする
+- 失敗したテストのスクリーンショットとトレースは `test-results/` に残る
+- **同時に2つ実行しない**。実行の前後の後始末は、テスト用会員の `[E2E]` データをすべて消すため、別の実行のデータまで消して偽の失敗になる
+- ローカル（PowerShell）から実行する場合は、`$env:E2E_BASE_URL`（stg の URL）・`$env:STAGING_GATE_PASSWORD`・`$env:GOOGLE_APPLICATION_CREDENTIALS`（stg の Firestore を読み書きできる認証情報の JSON）を設定して `npx playwright install chromium` のあと `npx playwright test` を実行する
+
+### テストの書き方
+
+| ルール | 内容 |
+|------|------|
+| 1項目＝1テスト | 実装に使った仕様書の項目をそのままテストにする（第3章）。テスト名・コメントに仕様書と節を書く |
+| 追加のタイミング | 新しい機能・仕様変更を実装するたびに、その分のテストを足す。新しいページはスモークテスト（`e2e/smoke.spec.ts`）にも1行足す |
+| テストデータ | テストで作るデータの本文は必ず `[E2E]` で始める（`uniqueText()`）。実行の前後に `e2e/support/cleanup.ts` が削除する。新しい種類のデータを作るテストを足したら、cleanup にも削除処理を足す |
+| 削除の範囲 | テスト用会員（`users.isTestUser == true`）が作った `[E2E]` データだけを消す。手で作ったデータは消さない |
+| ログイン | `userPage`・`adminPage`・`guestPage`（`e2e/support/fixtures.ts`）を使う。同じテストの中で複数の立場を同時に動かせる |
+| 画面幅 | desktop（1440px）・mobile（390px）で全テスト、tablet（768px）はスモークのみ |

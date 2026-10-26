@@ -13,3 +13,7 @@ out
 build
 next-env.d.ts
 tsconfig.tsbuildinfo
+e2e
+playwright.config.ts
+test-results
+playwright-report

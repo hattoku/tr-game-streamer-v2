@@ -4,6 +4,10 @@
  *
  * - `NEXT_PUBLIC_TEST_MODE=true` かつ本番以外のビルドでのみ有効（それ以外は 404）。判定は lib/app-env.ts。
  *   本番（`NEXT_PUBLIC_APP_ENV=prod`）では変数が渡されていても無効になる。
+ * - stg ではテストモードを常時有効にしている（E2Eテスト用）。API ルートは proxy.ts のゲートの対象外のため、
+ *   ゲート（STAGING_GATE_PASSWORD）が設定されている環境では、ゲート通過済みの Cookie が無いリクエストを 404 にする
+ *   （ゲートのパスワードを知らない人が URL だけで管理者のテスト用会員になれないようにするため）。
+ *   Cloud Run 上でゲートが未設定の場合も 404 にする。
  * - リクエストボディ `{ kind: 'user' | 'admin' }` で、一般ユーザー（role user）と管理者（role owner）の
  *   どちらのテスト用会員でログインするかを選ぶ（§7.5）。
  * - テスト用会員は Firebase Auth に無ければここで自動作成する。users ドキュメントは isTestUser: true。
@@ -15,6 +19,7 @@ import { randomUUID } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { adminAuth, adminDb } from '../../../../lib/firebase-admin';
 import { TEST_MODE_ENABLED } from '../../../../lib/app-env';
+import { STG_GATE_COOKIE_NAME, computeStgGateToken } from '../../../../lib/stg-gate';
 
 type TestUserKind = 'user' | 'admin';
 
@@ -25,6 +30,14 @@ const TEST_USERS: Record<TestUserKind, { email: string; displayName: string; rol
 
 export async function POST(request: NextRequest) {
   if (!TEST_MODE_ENABLED) {
+    return NextResponse.json({ error: 'not_found' }, { status: 404 });
+  }
+  // Cloud Run 上（K_SERVICE がある）でゲートが未設定なら、誤設定とみなして無効にする（ローカルの next dev はゲート無しで使える）
+  const gatePassword = process.env.STAGING_GATE_PASSWORD;
+  if (!gatePassword && process.env.K_SERVICE) {
+    return NextResponse.json({ error: 'not_found' }, { status: 404 });
+  }
+  if (gatePassword && request.cookies.get(STG_GATE_COOKIE_NAME)?.value !== (await computeStgGateToken(gatePassword))) {
     return NextResponse.json({ error: 'not_found' }, { status: 404 });
   }
 

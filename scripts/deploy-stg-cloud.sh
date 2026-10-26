@@ -10,6 +10,7 @@ set -euo pipefail
 # - .env.local が無い前提のため --update-env-vars を渡さない。Cloud Run の YOUTUBE_API_KEY 等は
 #   既存リビジョンの値がそのまま引き継がれる（値を変えたいときはローカルから deploy.ps1 を使う）
 # - RAKUTEN_AFFILIATE_ID はビルド時埋め込み値なので、クラウド環境の環境変数から渡す（未設定なら空）
+# - テストモード（UI仕様書 §7）は stg では常時有効にする（_TEST_MODE=true。E2Eテストがテスト用会員でログインするため）
 # - --allow-unauthenticated は付けない（公開設定は既存サービスに設定済みで、付けると IAM 変更権限が要るため）
 # - ビルドは --async で投入して状態をポーリングする（ログのストリーミングに Project Viewer 権限が要るのを避ける）
 # - ソースのアップロード先を --gcs-source-staging-dir で明示する（既定バケットの確認に storage.buckets.list が要るのを避ける）
@@ -54,7 +55,7 @@ echo "--- Deploying to STAGING ($PROJECT_ID) from cloud ---"
 # 1. ビルドとプッシュ
 echo "Building and pushing Docker image..."
 BUILD_ID="$(gcloud builds submit --config cloudbuild.yaml \
-  --substitutions "_IMAGE_URL=$IMAGE_URL,_APP_ENV=stg,_RAKUTEN_AFFILIATE_ID=$RAKUTEN_AFFILIATE_ID" \
+  --substitutions "_IMAGE_URL=$IMAGE_URL,_APP_ENV=stg,_RAKUTEN_AFFILIATE_ID=$RAKUTEN_AFFILIATE_ID,_TEST_MODE=true" \
   --gcs-source-staging-dir "gs://${PROJECT_ID}_cloudbuild/source" \
   --async --format 'value(id)' .)"
 echo "Build ID: $BUILD_ID"
