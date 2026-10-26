@@ -9,7 +9,7 @@
 import { collection, doc, getDoc, getDocs, limit, orderBy, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import type { MylistCardData } from '@/components/mylist/MylistCard';
-import type { WatchStatus } from '@/components/ui/Chip';
+import { normalizeWatchStatus, type WatchStatus } from '@/components/ui/Chip';
 
 const WATCHED_THRESHOLD = 95;
 
@@ -122,5 +122,16 @@ export async function fetchMylistEntries(uid: string): Promise<MylistEntry[]> {
         hasNew: newPlaylistIds.has(playlistId),
       };
     }),
+  );
+}
+
+/**
+ * 視聴ステータスが「完走」のマイリスト登録済み再生リストID（TOP注目の再生リストからの除外用、ページ top 仕様書 §6.4）。
+ * `fetchMylistEntries` は動画・視聴履歴まで引いて重いため、`mylist` だけを引く。旧値 `reviewing` も完走として扱う。
+ */
+export async function fetchCompletedPlaylistIds(uid: string): Promise<Set<string>> {
+  const snap = await getDocs(query(collection(db, 'mylist'), where('userId', '==', uid)));
+  return new Set(
+    snap.docs.filter((d) => normalizeWatchStatus(d.data().watchStatus) === 'completed').map((d) => d.data().playlistId as string),
   );
 }

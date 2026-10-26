@@ -4,6 +4,8 @@
  * 3ペイン構造（ヘッダー＋サイドバー）は採用せず、簡易ヘッダー（ロゴ相当＋ページ内ナビ＋
  * サービスへ戻るリンク＋ユーザーメニュー）＋本文の2段構成で代替する
  * （管理_ダッシュボード仕様書 実装注記参照）。
+ * サービス画面との取り違えによる誤操作を防ぐため、ヘッダーはパープルの面＋上端ライン＋「ADMIN」バッジ、
+ * アクティブナビもパープルにする（共通 デザイントークン仕様書 §14.1）。
  */
 'use client';
 
@@ -33,7 +35,7 @@ function AdminNav({ pathname, pendingCount, className }: { pathname: string; pen
             aria-current={active ? 'page' : undefined}
             className={cn(
               'relative flex h-full items-center whitespace-nowrap text-base transition-colors duration-[120ms] hover:text-text-primary',
-              active ? 'text-text-primary' : 'text-text-tertiary',
+              active ? 'text-admin-accent-text' : 'text-text-tertiary',
             )}
           >
             {item.label}
@@ -46,7 +48,7 @@ function AdminNav({ pathname, pendingCount, className }: { pathname: string; pen
                 {formatBadgeCount(pendingCount)}
               </span>
             )}
-            {active && <span aria-hidden className="absolute inset-x-0 bottom-0 h-[2px] bg-text-primary" />}
+            {active && <span aria-hidden className="absolute inset-x-0 bottom-0 h-[2px] bg-admin-accent" />}
           </Link>
         );
       })}
@@ -61,11 +63,15 @@ export function AdminFrame({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="sticky top-0 z-30 border-b border-border-divider bg-header">
+      {/* 上端ラインは inset の影で描き、ヘッダー高さを変えない */}
+      <header className="sticky top-0 z-30 border-b border-admin-border bg-admin-header-bg shadow-[inset_0_3px_0_var(--color-admin-accent)]">
         <div className="mx-auto flex h-header-mobile w-full max-w-[1400px] items-center justify-between px-4 md:h-header md:px-6">
           <div className="flex h-full min-w-0 items-center gap-4 md:gap-8">
-            <Link href="/admin" className="whitespace-nowrap text-lg font-semibold text-text-primary">
+            <Link href="/admin" className="flex items-center gap-2 whitespace-nowrap text-lg font-semibold text-text-primary">
               管理画面
+              <span className="rounded-[4px] bg-admin-accent px-1.5 py-0.5 text-xs font-bold tracking-[0.04em] text-admin-on-accent">
+                ADMIN
+              </span>
             </Link>
             {/* PCはロゴ横にナビを並べる。モバイルはヘッダー下の2段目（下記）に折り返す
                 （ナビ項目・ユーザー名の長さに関わらず390px幅で詰まらないようにするため） */}
@@ -78,7 +84,7 @@ export function AdminFrame({ children }: { children: React.ReactNode }) {
             <UserDropdown />
           </div>
         </div>
-        <div className="border-t border-border-divider md:hidden">
+        <div className="border-t border-admin-border md:hidden">
           <PageContainer>
             <AdminNav pathname={pathname} pendingCount={pendingCount} className="h-11" />
           </PageContainer>
