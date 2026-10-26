@@ -17,8 +17,8 @@ export function GamePlaylistSection({ gameId }: { gameId: string }) {
     fetchPlaylistsByGame(gameId).then(setPlaylists);
   }, [gameId]);
 
-  // 「再生リストを追加する」導線: 一般ユーザー向け提案フローは未実装のため、
-  // 現時点では管理者専用の登録ページへ共通で遷移させる（gameIdを引き継いで事前選択する）
+  // 「再生リストを追加する」導線: 全ユーザー共通で /playlists/new へ（管理者は登録、一般ユーザーは提案。
+  // gameIdを引き継いで事前選択する）
   const addHref = `/playlists/new?gameId=${encodeURIComponent(gameId)}`;
 
   return <PlaylistListSection title="関連する再生リスト" playlists={playlists} addHref={addHref} />;

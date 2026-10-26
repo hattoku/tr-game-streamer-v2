@@ -1,13 +1,12 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { collection, doc, getDoc, getDocs } from 'firebase/firestore';
 import { db, auth } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button, LinkButton } from '@/components/ui/Button';
 import { Card, CardChildArea, SectionHeading } from '@/components/ui/Card';
-import { EmptyState } from '@/components/ui/EmptyState';
 import { Field, INPUT_CLASS, Input, Textarea } from '@/components/ui/Input';
 import { Skeleton, SkeletonText } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
@@ -16,17 +15,29 @@ import { cn } from '@/components/ui/cn';
 import { GameSelectModal, type GameOption } from '@/components/playlists/GameSelectModal';
 import { GameCreateModal } from '@/components/games/GameCreateModal';
 import { PlaylistSummary } from '@/components/playlists/PlaylistSummary';
+import { ProposalSteps } from '@/components/playlists/ProposalSteps';
+import { MultiSelectMenu } from '@/components/ui/DropdownMenu';
+import { MAX_GAME_PROPOSAL_NOTE_LENGTH, MAX_GAME_TITLE_LENGTH, type ProposalRakutenItem } from '@/lib/proposal-shared';
+import { PLATFORM_OPTIONS, findSimilarGames } from '@/lib/game-shared';
+import { normalizeRakutenGameTitle } from '@/lib/rakuten-shared';
 
-// 「再生リストを追加する」（管理者専用の最小版）。
+// 「再生リストを追加する」。
 // document/specification/page/ページ 再生リストを追加する 仕様書.md §2.1（1カラム）、§4.1（URL入力・確認エリア）、
-// §4.2（ゲームタイトル選択モーダル）、§4.3（送信ボタン）、§6.1（管理者向け完了画面）、§7（インライン＋トースト）。
+// §4.2（ゲームタイトル選択モーダル）、§4.3（送信ボタン）、§6（完了画面）、§7（インライン＋トースト）。
 // フェーズ2.5ステップ7でデザイン適用（wiki/sources/2026-09-12-login-and-register-design-plan.md）。
-// スコープ外（フェーズ3以降。wiki/sources/2026-09-10-phase2-plan.md）:
-// - 一般ユーザーの提案フロー（§5.4・§6.2）・ゲームタイトル追加提案モーダル（§4.2.2）・AI説明文自動生成（§4.1.4）
+// 管理者は「登録する」（/api/playlists/register で即登録、§6.1）、一般ユーザーは「提案する」
+// （/api/playlists/propose で `workflows` に保存、§5.4・§6.2。フェーズ7ステップ7-4）。一般ユーザーには
+// 未登録チャンネルの説明文欄を出さず（承認時に管理者が書く）、ゲームタイトル選択モーダルのフッターからは
+// 「新しいゲームタイトルとして入力する」に切り替えられる（§4.2.2 v3.15。ゲームタイトルと再生リストを1件の提案として同時に送る）。
+// AI説明文自動生成（§4.1.4）はスコープ外。
 // 流入元対応: `?gameId=`（ゲーム詳細から、§3.2）はゲームタイトルを事前選択、`?channelId=`（チャンネル詳細から、§3.3）は
 // 案内エリアを表示し、プレビューした再生リストのチャンネルが流入元と一致しなければ登録不可にする（§5.2、
-// サーバー側 register/route.ts でも `sourceChannelId` で再検証）。
-// 未ログインは /login へ（§1.2）。一般ユーザーには「管理者のみ」の空状態を出す（提案フローができるまで）。
+// サーバー側 register・propose でも `sourceChannelId` で再検証）。`?url=`（管理画面のゲームタイトル登録提案の承認後
+// 「この再生リストも登録する」から）は再生リストURLを入れてプレビューまで行う。
+// 未ログインは /login へ（§1.2）。ログイン後にこの画面へ戻すため `?next=` を付ける（§9.3）。
+// 一般ユーザー向けの作り込み（§9 v4.0）: 見出し「再生リストを提案する」と3段のステップ表示、送信ボタン上の注記、
+// ゲームタイトル選択での楽天ブックスの候補、新しいゲームタイトルの機種（任意）と似た名前の登録済みゲームタイトルの案内、
+// 完了画面のステップ表示と提案履歴への導線。
 
 interface PreviewResult {
   playlist: {
@@ -40,10 +51,13 @@ interface PreviewResult {
   channelMatches: boolean;
   channelAlreadyRegistered: boolean;
   playlistAlreadyRegistered: boolean;
+  /** 審査中の提案がある（§7.2）。一般ユーザーは提案不可、管理者は案内のみ */
+  pendingProposal: boolean;
 }
 
 interface CompletionResult {
-  playlistId: string;
+  /** 管理者の登録時のみ（提案はまだ公開されていないため無い。§6.2 注意） */
+  playlistId?: string;
   title: string;
   thumbnailUrl: string;
   channelName: string;
@@ -61,6 +75,16 @@ function isPlaylistUrl(url: string): boolean {
     return false;
   }
 }
+
+/** 一般ユーザーが新しいゲームタイトルとして入力している内容（§4.2.2・§9.2）。rakuten は楽天ブックスの候補から選んだ場合の商品 */
+interface NewGameInput {
+  title: string;
+  note: string;
+  platforms: string[];
+  rakuten: ProposalRakutenItem | null;
+}
+
+const PLATFORM_SELECT_OPTIONS = PLATFORM_OPTIONS.map((p) => ({ value: p, label: p }));
 
 async function getIdToken(): Promise<string> {
   if (!auth.currentUser) throw new Error('not signed in');
@@ -82,14 +106,21 @@ const REGISTER_ERRORS: Record<string, { inline: string; toast: string }> = {
   game_not_found: { inline: 'ゲームタイトルが見つかりませんでした', toast: '送信に失敗しました。時間をおいて再試行してください' },
   default: { inline: '', toast: '送信に失敗しました。時間をおいて再試行してください' },
 };
+// §7.2 一般ユーザー固有エラー（審査中の提案あり・登録済みは同じ文言）
+const ALREADY_PROPOSED_ERROR = { inline: 'この再生リストはすでに提案済み、または登録済みです', toast: '提案済みの再生リストです' };
+const PROPOSE_ERRORS: Record<string, { inline: string; toast: string }> = {
+  ...REGISTER_ERRORS,
+  already_proposed: ALREADY_PROPOSED_ERROR,
+};
 
 export default function NewPlaylistPage() {
   const { user, role, loading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const { toast } = useToast();
 
-  const [playlistUrl, setPlaylistUrl] = useState('');
+  const [playlistUrl, setPlaylistUrl] = useState(() => searchParams.get('url') ?? '');
   const [previewedUrl, setPreviewedUrl] = useState('');
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -99,6 +130,9 @@ export default function NewPlaylistPage() {
   const [selectedGame, setSelectedGame] = useState<GameOption | null>(null);
   const [gameModalOpen, setGameModalOpen] = useState(false);
   const [gameCreateModalOpen, setGameCreateModalOpen] = useState(false);
+  // 一般ユーザーが候補に無いゲームタイトルを新しく入力している状態（§4.2.2）。null なら通常の選択
+  const [newGame, setNewGame] = useState<NewGameInput | null>(null);
+  const [newGameTitleError, setNewGameTitleError] = useState<string | null>(null);
   const [gameError, setGameError] = useState<string | null>(null);
 
   const [channelDescription, setChannelDescription] = useState('');
@@ -124,13 +158,15 @@ export default function NewPlaylistPage() {
   // クエリが外れた／変わった直後に古いチャンネルを見せないよう、取得済みの id とクエリが一致するときだけ使う
   const sourceChannel = sourceChannelId && fetchedChannel?.id === sourceChannelId ? fetchedChannel : null;
 
-  // 未ログインはログインページへ（§1.2）
+  // 未ログインはログインページへ（§1.2）。ログイン後にクエリ込みでこの画面へ戻す（§9.3）
   useEffect(() => {
-    if (!loading && !user) router.replace('/login');
-  }, [loading, user, router]);
+    if (loading || user) return;
+    const query = searchParams.toString();
+    router.replace(`/login?next=${encodeURIComponent(query ? `${pathname}?${query}` : pathname)}`);
+  }, [loading, user, router, pathname, searchParams]);
 
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!user) return;
     getDocs(collection(db, 'games'))
       .then((snapshot) => {
         setGames(
@@ -139,12 +175,13 @@ export default function NewPlaylistPage() {
               id: d.id,
               title: (d.data().title as string) ?? '',
               packageImageUrl: (d.data().packageImageUrl as string | undefined) ?? null,
+              aliases: (d.data().aliases as string[] | undefined) ?? [],
             }))
             .sort((a, b) => a.title.localeCompare(b.title, 'ja')),
         );
       })
       .catch((e) => console.error('games の読み込みに失敗', e));
-  }, [isAdmin]);
+  }, [user]);
 
   // ゲームタイトル詳細ページ「再生リストを追加する」からの遷移時、gameIdクエリで
   // あらかじめゲームタイトルを選択済みにする（ページ ゲームタイトル 詳細仕様書 §4.4）。
@@ -161,7 +198,10 @@ export default function NewPlaylistPage() {
   }
 
   async function handleUrlBlur() {
-    const url = playlistUrl.trim();
+    await runPreview(playlistUrl.trim());
+  }
+
+  async function runPreview(url: string) {
     if (!url) {
       setPreview(null);
       setPreviewedUrl('');
@@ -202,6 +242,8 @@ export default function NewPlaylistPage() {
       // チェック順序（§5.2）: 公開状態 → チャンネル一致 → 登録済み → 流入元チャンネル一致
       if (!result.playlist.isPublic) toast({ type: 'error', message: '公開されていない再生リストです' });
       else if (!result.channelMatches) toast({ type: 'error', message: '登録できない再生リストです' });
+      else if (!isAdmin && (result.playlistAlreadyRegistered || result.pendingProposal))
+        toast({ type: 'error', message: ALREADY_PROPOSED_ERROR.toast });
       else if (result.playlistAlreadyRegistered) toast({ type: 'error', message: '登録済みの再生リストです' });
       else if (sourceChannelId && result.channel.youtubeChannelId !== sourceChannelId) {
         setUrlError(CHANNEL_MISMATCH_ERROR.inline);
@@ -215,14 +257,40 @@ export default function NewPlaylistPage() {
     }
   }
 
+  // `?url=` で流入したときは blur を待たずにプレビューする（ログイン状態が分かってから一度だけ）
+  const autoPreviewedRef = useRef(false);
+  useEffect(() => {
+    const urlParam = searchParams.get('url');
+    if (!user || autoPreviewedRef.current || !urlParam) return;
+    autoPreviewedRef.current = true;
+    // 非同期 IIFE にして、effect 本体で同期的に setState しない形にする（react-hooks/set-state-in-effect）
+    (async () => {
+      await runPreview(urlParam.trim());
+    })();
+    // runPreview は描画ごとに作り直される関数のため依存に含めない（一度だけ走らせる）
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, searchParams]);
+
   const sourceChannelMismatch = !!preview && !!sourceChannelId && preview.channel.youtubeChannelId !== sourceChannelId;
+  // 一般ユーザーは審査中の提案がある再生リストも提案できない（§7.2）。管理者は案内だけ出して登録はできる
+  const alreadyProposed = !isAdmin && !!preview && (preview.playlistAlreadyRegistered || preview.pendingProposal);
   const constraintsOk =
-    !!preview && preview.playlist.isPublic && preview.channelMatches && !preview.playlistAlreadyRegistered && !sourceChannelMismatch;
-  const canSubmit = constraintsOk && !!selectedGame && !submitting;
+    !!preview &&
+    preview.playlist.isPublic &&
+    preview.channelMatches &&
+    !preview.playlistAlreadyRegistered &&
+    !alreadyProposed &&
+    !sourceChannelMismatch;
+  const newGameTitle = newGame?.title.trim() ?? '';
+  const newGameReady =
+    !!newGame && !!newGameTitle && newGameTitle.length <= MAX_GAME_TITLE_LENGTH && newGame.note.trim().length <= MAX_GAME_PROPOSAL_NOTE_LENGTH;
+  // 新しいゲームタイトル名に似た登録済みゲームタイトル（§9.2）
+  const similarGames = newGame && !isAdmin ? findSimilarGames(newGameTitle, games) : [];
+  const canSubmit = constraintsOk && (!!selectedGame || (!isAdmin && newGameReady)) && !submitting;
 
   async function handleSubmit() {
     if (!constraintsOk || submitting) return;
-    if (!selectedGame) {
+    if (!selectedGame && !(newGame && !isAdmin)) {
       // ボタンは非活性のため通常は起きない（§7.2 の注記）。保険としてインラインのみ
       setGameError('ゲームタイトルを選択してください');
       return;
@@ -231,25 +299,35 @@ export default function NewPlaylistPage() {
     setSubmitError(null);
     try {
       const idToken = await getIdToken();
-      const res = await fetch('/api/playlists/register', {
+      const res = await fetch(isAdmin ? '/api/playlists/register' : '/api/playlists/propose', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
         body: JSON.stringify({
           playlistUrl: playlistUrl.trim(),
-          gameId: selectedGame.id,
-          channelDescription: preview?.channelAlreadyRegistered ? undefined : channelDescription,
+          gameId: selectedGame?.id,
+          ...(newGame && !selectedGame
+            ? { newGameTitle, newGameNote: newGame.note.trim(), newGamePlatforms: newGame.platforms, newGameRakuten: newGame.rakuten }
+            : {}),
+          channelDescription: isAdmin && !preview?.channelAlreadyRegistered ? channelDescription : undefined,
           sourceChannelId: sourceChannelId ?? undefined,
         }),
       });
       const body = await res.json();
       if (!res.ok) {
-        const msg = REGISTER_ERRORS[body.error as string] ?? REGISTER_ERRORS.default;
+        if (body.error === 'game_exists') {
+          // 新しいゲームタイトルが同名で登録済み（§4.2.2 バリデーション）。入力欄に出す
+          setNewGameTitleError('このゲームタイトルはすでに登録されています。一覧から選んでください');
+          toast({ type: 'error', message: '登録済みのゲームタイトルです' });
+          return;
+        }
+        const errors = isAdmin ? REGISTER_ERRORS : PROPOSE_ERRORS;
+        const msg = errors[body.error as string] ?? errors.default;
         setSubmitError(msg.inline || null);
         toast({ type: 'error', message: msg.toast });
         return;
       }
       setCompletion(body as CompletionResult);
-      toast({ type: 'success', message: '再生リストを登録しました' });
+      toast({ type: 'success', message: isAdmin ? '再生リストを登録しました' : '提案を送信しました' });
     } catch {
       toast({ type: 'error', message: REGISTER_ERRORS.default.toast });
     } finally {
@@ -264,6 +342,8 @@ export default function NewPlaylistPage() {
     setUrlError(null);
     setSelectedGame(null);
     setGameError(null);
+    setNewGame(null);
+    setNewGameTitleError(null);
     setChannelDescription('');
     setSubmitError(null);
     setCompletion(null);
@@ -271,20 +351,42 @@ export default function NewPlaylistPage() {
 
   if (loading || !user) return <NewPlaylistSkeleton />;
 
-  if (!isAdmin) {
+  // 提案受付の完了画面（§6.2）: 同一ページ内で切り替える。まだ公開されていないため「再生リストを見る」は出さない
+  if (completion && !isAdmin) {
     return (
       <div className="mx-auto max-w-[720px]">
-        <SectionHeading className="mb-5">再生リストを追加する</SectionHeading>
-        <EmptyState
-          icon={<AlertIcon />}
-          title="このページは管理者のみ利用できます"
-          description="一般ユーザー向けの再生リスト提案機能は準備中です"
-          action={
-            <LinkButton href="/" variant="secondary">
-              TOPへ戻る
-            </LinkButton>
-          }
-        />
+        {/* 仕様の「📨」は管理者向け完了画面（✅）と同じくアイコンで描く。審査待ちであることをステップ表示で見せる（§9.1） */}
+        <SectionHeading className="mb-4 flex items-center gap-2">
+          <CheckIcon size={22} className="shrink-0 text-toast-success" />
+          提案を送りました（確認待ち）
+        </SectionHeading>
+        <Card className="mb-4">
+          <ProposalSteps current={2} hereLabel />
+          <p className="mt-4 text-base text-text-secondary">
+            ありがとうございます！今は運営の確認待ちです。確認が済むとさがすに表示されます。結果は通知と提案履歴でお知らせします。
+          </p>
+        </Card>
+        <Card>
+          <PlaylistSummary
+            title={completion.title}
+            thumbnailUrl={completion.thumbnailUrl}
+            channelName={completion.channelName}
+            channelIconUrl={completion.channelIconUrl}
+            videoCount={completion.videoCount}
+            gameName={completion.gameName}
+          />
+        </Card>
+        <div className="mt-5 flex flex-wrap gap-3">
+          <LinkButton href="/playlists/proposals" variant="primary">
+            提案履歴を見る
+          </LinkButton>
+          <Button variant="secondary" onClick={resetForm}>
+            続けて提案する
+          </Button>
+          <LinkButton href="/playlists" variant="ghost">
+            再生リストを探す
+          </LinkButton>
+        </div>
       </div>
     );
   }
@@ -323,7 +425,18 @@ export default function NewPlaylistPage() {
 
   return (
     <div className="mx-auto max-w-[720px]">
-      <SectionHeading className="mb-5">再生リストを追加する</SectionHeading>
+      {isAdmin ? (
+        <SectionHeading className="mb-5">再生リストを追加する</SectionHeading>
+      ) : (
+        <>
+          <SectionHeading className="mb-4">再生リストを提案する</SectionHeading>
+          {/* 提案はすぐには公開されないことを、送る前から流れで見せる（§9.1） */}
+          <Card className="mb-4">
+            <ProposalSteps current={1} />
+            <p className="mt-3 text-md text-text-muted">運営が確認してから公開します。</p>
+          </Card>
+        </>
+      )}
 
       {/* チャンネル詳細ページから流入時の案内エリア（§3.3） */}
       {sourceChannel && (
@@ -395,7 +508,16 @@ export default function NewPlaylistPage() {
                     ) : (
                       <CheckLine state="ng">チャンネルが作成した再生リストではないため登録できません</CheckLine>
                     ))}
-                  {preview.playlistAlreadyRegistered && <CheckLine state="ng">この再生リストはすでに登録されています</CheckLine>}
+                  {alreadyProposed ? (
+                    <CheckLine state="ng">{ALREADY_PROPOSED_ERROR.inline}</CheckLine>
+                  ) : (
+                    preview.playlistAlreadyRegistered && <CheckLine state="ng">この再生リストはすでに登録されています</CheckLine>
+                  )}
+                  {isAdmin && preview.pendingProposal && !preview.playlistAlreadyRegistered && (
+                    <CheckLine state="info">
+                      この再生リストには審査中の提案があります。ここで登録した場合、その提案は審査画面で却下してください。
+                    </CheckLine>
+                  )}
                   {sourceChannelMismatch && <CheckLine state="ng">{CHANNEL_MISMATCH_ERROR.inline}</CheckLine>}
                   {showChannelState &&
                     (preview.channelAlreadyRegistered ? (
@@ -404,7 +526,7 @@ export default function NewPlaylistPage() {
                       <CheckLine state="info">未登録のチャンネルです。再生リスト登録と同時に新規チャンネルとして登録します。</CheckLine>
                     ))}
                 </ul>
-                {showChannelState && !preview.channelAlreadyRegistered && (
+                {isAdmin && showChannelState && !preview.channelAlreadyRegistered && (
                   <Field
                     label="チャンネルの説明文（任意・手入力）"
                     hint="AIによる自動生成は準備中のため、必要なら手入力してください"
@@ -426,34 +548,149 @@ export default function NewPlaylistPage() {
         )}
 
         <div className="flex flex-col gap-4 p-[18px]">
-          {/* ゲームタイトル選択（§4.2）。表示部は入力要素と同じ面＋シェブロン（トークン仕様書 §10 のセレクト） */}
-          <Field label="ゲームタイトル" error={gameError}>
-            {(props) => (
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  id={props.id}
-                  aria-invalid={props['aria-invalid']}
-                  aria-describedby={props['aria-describedby']}
-                  aria-haspopup="dialog"
-                  onClick={() => {
-                    setGameError(null);
-                    setGameModalOpen(true);
-                  }}
+          {/* ゲームタイトル選択（§4.2）。表示部は入力要素と同じ面＋シェブロン（トークン仕様書 §10 のセレクト）。
+              一般ユーザーが「新しいゲームタイトルとして入力する」を選んだ場合は入力欄に切り替える（§4.2.2） */}
+          {newGame && !isAdmin ? (
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-md text-text-tertiary">ゲームタイトル（新しいゲームタイトルとして提案します）</p>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setGameModalOpen(true)}
                   disabled={submitting}
-                  className={cn(INPUT_CLASS, 'flex items-center justify-between gap-2 text-left', !selectedGame && 'text-input-placeholder')}
                 >
-                  <span className="truncate">{selectedGame ? selectedGame.title : 'ゲームタイトルを選択する'}</span>
-                  <ChevronDownIcon size={16} className="shrink-0 text-text-muted" />
-                </button>
-                {selectedGame && (
-                  <Button variant="ghost" size="sm" aria-label="ゲームタイトルの選択を解除" onClick={() => setSelectedGame(null)} disabled={submitting}>
-                    <XIcon size={16} />
-                  </Button>
-                )}
+                  一覧から選び直す
+                </Button>
               </div>
-            )}
-          </Field>
+              {/* 楽天ブックスの候補から選んだ商品（§9.2）。審査時の登録に使う。外すと自由入力として送る */}
+              {newGame.rakuten && (
+                <div className="flex items-center gap-3 rounded-[8px] border border-border-card bg-bg-input p-2">
+                  {newGame.rakuten.imageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={newGame.rakuten.imageUrl} alt="" className="h-[64px] w-[48px] shrink-0 rounded-[4px] object-cover" />
+                  ) : (
+                    <div className="h-[64px] w-[48px] shrink-0 rounded-[4px] bg-bg-btn" />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs text-text-tertiary">楽天ブックスの商品</p>
+                    <p className="line-clamp-2 text-sm text-text-primary">{newGame.rakuten.title}</p>
+                  </div>
+                  <Button variant="ghost" size="sm" onClick={() => setNewGame({ ...newGame, rakuten: null })} disabled={submitting}>
+                    外す
+                  </Button>
+                </div>
+              )}
+              <Field
+                label={`ゲームタイトル名 *（${newGameTitle.length}/${MAX_GAME_TITLE_LENGTH}）`}
+                error={
+                  newGameTitleError ??
+                  (newGameTitle.length > MAX_GAME_TITLE_LENGTH ? `${MAX_GAME_TITLE_LENGTH}文字以内で入力してください` : null)
+                }
+              >
+                {(props) => (
+                  <Input
+                    {...props}
+                    value={newGame.title}
+                    onChange={(e) => {
+                      setNewGame({ ...newGame, title: e.target.value });
+                      setNewGameTitleError(null);
+                    }}
+                    onBlur={() => {
+                      if (!newGame.title.trim()) setNewGameTitleError('ゲームタイトル名を入力してください');
+                    }}
+                    disabled={submitting}
+                  />
+                )}
+              </Field>
+              {/* 似た名前の登録済みゲームタイトル（§9.2）。押すとそのゲームタイトルを選んだ状態に切り替える */}
+              {similarGames.length > 0 && (
+                <div className="flex flex-col gap-2 rounded-[8px] bg-bg-hover px-3 py-2">
+                  <p className="text-md text-text-secondary">登録済みのこちらではありませんか？</p>
+                  <div className="flex flex-wrap gap-2">
+                    {similarGames.map((g) => (
+                      <Button
+                        key={g.id}
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => {
+                          setSelectedGame(g);
+                          setGameError(null);
+                          setNewGame(null);
+                          setNewGameTitleError(null);
+                        }}
+                        disabled={submitting}
+                      >
+                        {g.title}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="flex flex-col gap-2">
+                <p className="text-md text-text-tertiary">機種（任意・複数選択可）</p>
+                <MultiSelectMenu
+                  values={new Set(newGame.platforms)}
+                  onToggle={(p) =>
+                    setNewGame({
+                      ...newGame,
+                      platforms: newGame.platforms.includes(p) ? newGame.platforms.filter((x) => x !== p) : [...newGame.platforms, p],
+                    })
+                  }
+                  options={PLATFORM_SELECT_OPTIONS}
+                  placeholder={newGame.platforms.length > 0 ? newGame.platforms.join('、') : '分かれば選んでください'}
+                  filterPlaceholder="機種名で絞り込み"
+                  aria-label="機種"
+                  disabled={submitting}
+                />
+              </div>
+              <Field
+                label={`備考（${newGame.note.trim().length}/${MAX_GAME_PROPOSAL_NOTE_LENGTH}）`}
+                hint="シリーズ情報など補足があれば記入してください"
+                error={
+                  newGame.note.trim().length > MAX_GAME_PROPOSAL_NOTE_LENGTH ? `${MAX_GAME_PROPOSAL_NOTE_LENGTH}文字以内で入力してください` : null
+                }
+              >
+                {(props) => (
+                  <Textarea
+                    {...props}
+                    value={newGame.note}
+                    onChange={(e) => setNewGame({ ...newGame, note: e.target.value })}
+                    disabled={submitting}
+                    rows={2}
+                  />
+                )}
+              </Field>
+            </div>
+          ) : (
+            <Field label="ゲームタイトル" error={gameError}>
+              {(props) => (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    id={props.id}
+                    aria-invalid={props['aria-invalid']}
+                    aria-describedby={props['aria-describedby']}
+                    aria-haspopup="dialog"
+                    onClick={() => {
+                      setGameError(null);
+                      setGameModalOpen(true);
+                    }}
+                    disabled={submitting}
+                    className={cn(INPUT_CLASS, 'flex items-center justify-between gap-2 text-left', !selectedGame && 'text-input-placeholder')}
+                  >
+                    <span className="truncate">{selectedGame ? selectedGame.title : 'ゲームタイトルを選択する'}</span>
+                    <ChevronDownIcon size={16} className="shrink-0 text-text-muted" />
+                  </button>
+                  {selectedGame && (
+                    <Button variant="ghost" size="sm" aria-label="ゲームタイトルの選択を解除" onClick={() => setSelectedGame(null)} disabled={submitting}>
+                      <XIcon size={16} />
+                    </Button>
+                  )}
+                </div>
+              )}
+            </Field>
+          )}
 
           {submitError && (
             <p role="alert" className="flex items-start gap-[6px] text-md text-input-error">
@@ -462,9 +699,10 @@ export default function NewPlaylistPage() {
             </p>
           )}
 
-          <div className="flex justify-end">
+          <div className="flex flex-col items-end gap-2">
+            {!isAdmin && <p className="text-md text-text-muted">送信後、運営の確認が済むまで公開されません</p>}
             <Button variant="primary" onClick={handleSubmit} disabled={!canSubmit} loading={submitting}>
-              登録する
+              {isAdmin ? '登録する' : '提案する'}
             </Button>
           </div>
         </div>
@@ -474,8 +712,56 @@ export default function NewPlaylistPage() {
         open={gameModalOpen}
         onOpenChange={setGameModalOpen}
         games={games}
-        onSelect={setSelectedGame}
-        onAddNew={() => setGameCreateModalOpen(true)}
+        onSelect={(game) => {
+          // 新しいゲームタイトルを入力中に一覧から選んだ場合は、入力を捨てて選択に切り替える
+          // （モーダルを閉じただけなら入力は残す）
+          setSelectedGame(game);
+          setGameError(null);
+          setNewGame(null);
+          setNewGameTitleError(null);
+        }}
+        onAddNew={isAdmin ? () => setGameCreateModalOpen(true) : undefined}
+        onEnterNew={
+          isAdmin
+            ? undefined
+            : (query) => {
+                setSelectedGame(null);
+                setGameError(null);
+                setNewGameTitleError(null);
+                // 検索欄が空なら入力中の内容を残す。検索語で入れ直した場合、前に選んだ楽天の商品は外す
+                setNewGame((prev) =>
+                  query
+                    ? { title: query, note: prev?.note ?? '', platforms: prev?.platforms ?? [], rakuten: null }
+                    : (prev ?? { title: '', note: '', platforms: [], rakuten: null }),
+                );
+                // gameId クエリの事前選択が、ゲームタイトル一覧の読み込み後に入力を上書きしないようにする
+                setAppliedGameIdParam(gameIdParam);
+              }
+        }
+        onPickRakuten={
+          isAdmin
+            ? undefined
+            : (item) => {
+                // 楽天ブックスの候補（§9.2）: 版・機種の表記を削った名前と、その商品の機種を入れた新しいゲームタイトルにする
+                setSelectedGame(null);
+                setGameError(null);
+                setNewGameTitleError(null);
+                const hardware = item.hardware.trim();
+                setNewGame((prev) => ({
+                  title: normalizeRakutenGameTitle(item.title).slice(0, MAX_GAME_TITLE_LENGTH),
+                  note: prev?.note ?? '',
+                  platforms: PLATFORM_OPTIONS.includes(hardware) ? [hardware] : [],
+                  rakuten: {
+                    itemUrl: item.itemUrl,
+                    title: item.title,
+                    imageUrl: item.imageUrl,
+                    hardware,
+                    booksGenreId: item.booksGenreId,
+                  },
+                }));
+                setAppliedGameIdParam(gameIdParam);
+              }
+        }
       />
       <GameCreateModal
         open={gameCreateModalOpen}

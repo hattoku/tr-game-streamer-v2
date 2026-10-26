@@ -1,6 +1,7 @@
 import { adminDb } from '@/lib/firebase-admin';
 import { fetchRakutenGameByItemUrl } from '@/lib/rakuten';
 import { normalizeRakutenBooksItemUrl } from '@/lib/rakuten-shared';
+import { parseAliases } from '@/lib/game-shared';
 
 // 管理者向けゲームタイトル登録/編集API（app/api/admin/games、app/api/admin/games/[gameId]）で共用する
 // リクエストボディの正規化・検証・マスタ解決。新規登録（POST）と編集（PATCH）で同じフォーム
@@ -10,6 +11,8 @@ import { normalizeRakutenBooksItemUrl } from '@/lib/rakuten-shared';
 
 export interface GameInput {
   title: string;
+  /** 別名（検索用。マスタ管理仕様書 §7.1 v2.9） */
+  aliases: string[];
   genreId: string | null;
   themeIds: string[];
   platforms: string[];
@@ -30,6 +33,7 @@ export function parseGameInput(body: Record<string, unknown>): GameInput {
   const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null);
   return {
     title: typeof body.title === 'string' ? body.title.trim() : '',
+    aliases: parseAliases(body.aliases),
     genreId: typeof body.genreId === 'string' && body.genreId ? body.genreId : null,
     themeIds: Array.isArray(body.themeIds) ? body.themeIds.filter((id: unknown): id is string => typeof id === 'string') : [],
     platforms: Array.isArray(body.platforms)

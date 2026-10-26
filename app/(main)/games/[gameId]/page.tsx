@@ -30,6 +30,7 @@ import { InventoryIcon, PencilIcon, PlayIcon } from '@/components/ui/icons';
 
 interface GameDetail {
   title: string;
+  aliases: string[];
   packageImageUrl: string | null;
   rakutenUrl: string | null;
   description: string | null;
@@ -78,6 +79,7 @@ export default function GameDetailPage() {
       const data = snap.data();
       setGame({
         title: data.title ?? '',
+        aliases: data.aliases ?? [],
         packageImageUrl: data.packageImageUrl ?? null,
         rakutenUrl: data.rakutenUrl ?? null,
         description: data.description ?? null,
@@ -113,6 +115,7 @@ export default function GameDetailPage() {
   const editInitial: GameFormInitial = {
     id: gameId,
     title: game.title,
+    aliases: game.aliases,
     genreId: game.genreId,
     themeIds: game.themeIds,
     platforms: game.platforms,

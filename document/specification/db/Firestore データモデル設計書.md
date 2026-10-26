@@ -1,6 +1,6 @@
 # プレミテ Firestore データモデル設計書
 
-**バージョン**: v1.21  
+**バージョン**: v1.23  
 **作成日**: 2026年3月30日（更新）  
 **対象**: 開発チーム  
 **関連ドキュメント**: プレミテ企画書 / プレミテ_技術スタック仕様書 / 各機能仕様書
@@ -192,6 +192,7 @@ Firestoreはテーブル結合（JOIN）ができないため、一覧表示や�
 | `latestVideoPublishedAt` | Timestamp? | — | 最新動画の公開日時（新着順ソート用） |
 | `registeredAt` | Timestamp | ✅ | プレミテへの登録日時 |
 | `registeredBy` | string | ✅ | 登録した管理者のuserId |
+| `proposedBy` | string? | — | 一般ユーザーの提案を承認して登録した場合の提案者のuserId（管理者の直接登録は null。v1.22） |
 | `isPublic` | boolean | ✅ | 公開フラグ（`false` = 論理削除） |
 | `score` | number? | — | 信頼度加重平均スコア（5点満点、レビュー0件の場合は `null`） |
 | `reviewCount` | number | ✅ | レビュー数（集計キャッシュ、デフォルト：0） |
@@ -257,6 +258,7 @@ YouTubeチャンネルの情報。
 | `rakutenItemCode` | string? | — | 楽天ブックスのitemCode（ASIN相当） |
 | `rakutenItemName` | string? | — | 楽天ブックスの元の商品名 |
 | `title` | string | ✅ | ゲームタイトル名（正規化後または選択された名称） |
+| `aliases` | string[]? | — | 別名（略称・表記ゆれ。例：「スマブラ」）。ゲームタイトル選択モーダルの検索対象（v1.23、ページ 再生リストを追加する 仕様書 §9.2）。管理者がマスタで登録 |
 | `packageImageUrl` | string? | — | 楽天ブックスから取得したパッケージ画像URL（縦長） |
 | `rakutenUrl` | string? | — | 楽天ブックスの商品ページURL（アフィリエイト導線） |
 | `description` | string? | — | ゲーム説明文（楽天ブックスから取得またはAI生成） |
@@ -485,15 +487,25 @@ YouTubeチャンネルの情報。
 | `submittedBy` | string | ✅ | 起票したユーザーのuserId |
 | `genreId` | string? | — | 関連ジャンルID（STEP1審査者特定に使用） |
 | `step1AssignedOperatorIds` | string[] | ✅ | STEP1にアサインされた運営者のuserIdリスト |
-| `proposalData` | map? | — | 提案データ（種別により異なる） |
+| `proposalData` | map? | — | 提案データ（種別により異なる。下記「`proposalData` の構造」） |
 | `reportData` | map? | — | 通報データ（種別により異なる）。`review_report` は `targetType`・`reviewId`・`playlistId`・`reason`・`detail` を持ち、承認時に `hiddenReviewSnapshot`（承認時点のレビュー内容: `userId`・`userDisplayName`・`starRating`・`comment`・`hasSpoiler`・`postedAt`・`updatedAt`）を追記する（管理 審査ワークフロー仕様書 §3.1） |
 | `step1History` | map[] | ✅ | STEP1の審査履歴（配列） |
 | `step1Errors` | map[] | ✅ | AI審査エラー記録（配列） |
 | `step2History` | map[] | ✅ | STEP2の審査履歴（配列） |
 | `editHistory` | map[] | ✅ | 申請内容の編集履歴（配列） |
 | `operatorMemo` | string? | — | 運営メモ |
+| `approvingAt` | Timestamp? | — | 再生リスト登録提案の承認処理中の印（同時承認の防止、2分で失効。処理後は削除。v1.22） |
 | `submittedAt` | Timestamp | ✅ | 提出日時 |
 | `updatedAt` | Timestamp | ✅ | 最終更新日時 |
+
+**`proposalData` の構造**（v1.22、フェーズ7ステップ7-4。提案は API Route（Admin SDK）からのみ作成し、クライアントからの `workflows` 作成は `review_report` に限る）
+
+| 種別 | フィールド |
+|------|-----------|
+| `playlist_register` | `playlistUrl`・`youtubePlaylistId`・`title`・`thumbnailUrl`・`itemCount`・`channelId`・`channelName`・`channelIconUrl`（提案時点の YouTube の情報）・`gameId`・`gameName`（新しいゲームタイトルとして提案した場合はどちらも null で、`newGameTitle`・`newGameNote`（null 可）を持つ）。承認時に `registeredPlaylistId`、ゲームタイトルを差し替えて承認した場合は `approvedGameId`・`approvedGameName` を追記。v1.23: 新しいゲームタイトルの場合は `newGamePlatforms`（string[]、任意）と `newGameRakuten`（楽天ブックスの候補から選んだ場合の `itemUrl`・`title`（元の商品名）・`imageUrl`・`hardware`・`booksGenreId`、それ以外は null）。却下時に `rejectReasonCode`（定型の見送り理由、管理 審査ワークフロー仕様書 §14.4） |
+| `game_title_register` | `playlistUrl`・`gameTitle`・`note`（null 可）。承認時に `createdGameId`（登録したゲームタイトルのID）を追記。v1.22 の改訂（同日）以降は新規作成しない（新しいゲームタイトルは `playlist_register` の `newGameTitle` で提案する） |
+
+**`editHistory` 要素の構造**（v1.22 時点では再生リスト登録提案のゲームタイトル差し替えのみ）: `editedAt`（Timestamp）・`operatorId`・`field`（`"gameId"`）・`from`・`to`
 
 **`step1History` 要素の構造**
 
@@ -804,7 +816,8 @@ AI運営者（審査AI）の設定。プラットフォーム共通で1体のみ
 | フィールド | 型 | 必須 | 説明 |
 |-----------|-----|:---:|------|
 | `userId` | string | ✅ | 通知の宛先ユーザーのuserId |
-| `type` | string | ✅ | 通知種別。`"series_new_episode"`（フェーズ2）／`"inquiry_reply"`（お問い合わせ返信、フェーズ7ステップ7-3-2） |
+| `type` | string | ✅ | 通知種別。`"series_new_episode"`（フェーズ2）／`"inquiry_reply"`（お問い合わせ返信、フェーズ7ステップ7-3-2）／`"review_result"`（再生リスト登録提案の審査結果、v1.23） |
+| `workflowId` | string? | — | 対象ワークフローのドキュメントID（`review_result`のみ）。承認時は `playlistId` に登録した再生リストのIDも入れる |
 | `playlistId` | string? | — | 対象再生リストのドキュメントID（`series_new_episode`のみ） |
 | `playlistTitle` | string? | — | 再生リストタイトル（denormalized、通知本文組み立て用） |
 | `inquiryId` | string? | — | 対象お問い合わせのドキュメントID（`inquiry_reply`のみ） |
@@ -929,3 +942,5 @@ ai_operators ──── (1) users
 | v1.19 | 2026-10-14 | フェーズ7ステップ7-3-1（お問い合わせ）。3.17 `inquiries` をフォーム仕様に合わせて改訂（`subject` 削除、`body`・`relatedUrls` 追加、`status` を4状態に、`userName` をゲスト null 可に）、書き込み経路（API Route のみ）を明記。6章のルール方針に追記 |
 | v1.20 | 2026-10-24 | 通報承認時のレビュー処理を論理削除に変更（管理 審査ワークフロー仕様書 v9.0 §3.1）。`reviews` に `isHidden`・`hiddenAt`・`hiddenByWorkflowId` を追加。`workflows.reportData.hiddenReviewSnapshot` に承認時点のレビュー内容を退避する |
 | v1.21 | 2026-10-24 | フェーズ7ステップ7-3-2（お問い合わせ履歴）。§3.17 `inquiries` に `lastAdminMessageAt`・`userLastReadAt`・`awaitingAdminReply` を追加し、送信者本人の読み取りを API 経由に変更。§3.30 `notifications` に `inquiry_reply` 種別と `inquiryId` を追加 |
+| v1.22 | 2026-10-25 | フェーズ7ステップ7-4（一般ユーザーの提案フロー）。§3.15 `workflows` に `proposalData`（`playlist_register`・`game_title_register`）と `editHistory` の構造を定義し、提案の作成を API 経由に限定。`playlists.proposedBy` を追加 |
+| v1.23 | 2026-10-25 | 再生リスト提案フローの作り込み。`workflows` の本人による直接読み取りを通報（`review_report`）に限定（提案は運営メモ・内部メモを含むため提案履歴 API 経由）。`games.aliases`（別名）、`workflows.proposalData` に `newGamePlatforms`・`newGameRakuten`・`rejectReasonCode`、`notifications` に `review_result` 種別と `workflowId` を追加 |
