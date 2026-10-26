@@ -161,9 +161,11 @@ export async function fetchCreatorReviews(uid: string, playlistIds: string[]): P
         const snap = await getDoc(doc(db, 'reviews', `${uid}_${playlistId}`));
         if (!snap.exists()) return null;
         const data = snap.data();
+        // 通報で非表示のレビューはコメントを出さない。視聴ステータスは視聴記録なので残す（管理 審査ワークフロー仕様書 §3.1）
+        const hidden = data.isHidden === true;
         const review: CreatorReview = {
           watchStatus: normalizeWatchStatus(data.watchStatus),
-          comment: (data.comment as string | null)?.trim() || null,
+          comment: hidden ? null : (data.comment as string | null)?.trim() || null,
           hasSpoiler: data.hasSpoiler === true,
         };
         return [playlistId, review] as const;

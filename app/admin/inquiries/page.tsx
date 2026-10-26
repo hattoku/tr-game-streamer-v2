@@ -27,6 +27,7 @@ import { Pagination } from '@/components/ui/Pagination';
 import { SelectMenu } from '@/components/ui/DropdownMenu';
 import { SkeletonText } from '@/components/ui/Skeleton';
 import { Tag } from '@/components/ui/Tag';
+import { StatusBadge } from '@/components/ui/Badge';
 import { CommentIcon } from '@/components/ui/icons';
 
 interface InquiryRow {
@@ -38,6 +39,8 @@ interface InquiryRow {
   email: string;
   body: string;
   submittedAt: number;
+  /** ユーザーが返信して運営がまだ返していない（管理 お問い合わせ管理仕様書 §1.1、7-3-2） */
+  awaitingAdminReply: boolean;
 }
 
 const PAGE_SIZE = 20;
@@ -74,6 +77,7 @@ export default function AdminInquiriesPage() {
               email: (data.email as string) ?? '',
               body: (data.body as string) ?? '',
               submittedAt: data.submittedAt?.toMillis?.() ?? 0,
+              awaitingAdminReply: data.awaitingAdminReply === true,
             };
           })
           .sort((a, b) => b.submittedAt - a.submittedAt);
@@ -169,6 +173,7 @@ export default function AdminInquiriesPage() {
                         <div className="flex min-w-0 flex-wrap items-center gap-2">
                           <Tag emphasis={r.status === 'open'}>{inquiryStatusLabel(r.status)}</Tag>
                           <span className="text-base text-text-primary">{inquiryCategoryLabel(r.category)}</span>
+                          {r.awaitingAdminReply && <StatusBadge>ユーザー返信あり</StatusBadge>}
                         </div>
                         <time className="text-sm text-text-muted">{formatDate(r.submittedAt)}</time>
                       </div>

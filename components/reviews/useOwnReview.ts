@@ -28,9 +28,11 @@ export interface ReviewDoc {
   watchStatus: WatchStatus | null;
   comment: string | null;
   hasSpoiler: boolean;
+  /** 通報承認で非表示（論理削除）になっている（管理 審査ワークフロー仕様書 §3.1） */
+  isHidden: boolean;
 }
 
-export const EMPTY_REVIEW: ReviewDoc = { starRating: null, watchStatus: null, comment: null, hasSpoiler: false };
+export const EMPTY_REVIEW: ReviewDoc = { starRating: null, watchStatus: null, comment: null, hasSpoiler: false, isHidden: false };
 
 const UPSERT_ERROR_MESSAGE: Record<string, string> = {
   url_in_comment: 'URLの入力はできません',
@@ -61,6 +63,7 @@ export function useOwnReview(user: User | null, playlistId: string): ReviewDoc {
               watchStatus: normalizeWatchStatus(snap.data().watchStatus),
               comment: (snap.data().comment as string | null) ?? null,
               hasSpoiler: (snap.data().hasSpoiler as boolean) ?? false,
+              isHidden: snap.data().isHidden === true,
             }
           : EMPTY_REVIEW,
       );

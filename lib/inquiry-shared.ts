@@ -105,3 +105,31 @@ export function hasInquiryErrors(errors: InquiryInputErrors): boolean {
 export function normalizeRelatedUrls(urls: string[]): string[] {
   return urls.map((u) => u.trim()).filter(Boolean);
 }
+
+/** ユーザー側の履歴・スレッド（ページ お問い合わせ履歴 仕様書 §1.1）で API が返す形。日時はミリ秒 */
+export interface UserInquirySummaryJson {
+  id: string;
+  category: string;
+  status: InquiryStatus;
+  body: string;
+  submittedAt: number;
+  /** 管理者からの未読の返信がある（lastAdminMessageAt > userLastReadAt） */
+  hasUnread: boolean;
+}
+
+export interface InquiryMessageJson {
+  id: string;
+  senderType: 'user' | 'admin';
+  body: string;
+  sentAt: number;
+}
+
+export interface UserInquiryDetailJson {
+  id: string;
+  category: string;
+  status: InquiryStatus;
+  body: string;
+  relatedUrls: string[];
+  submittedAt: number;
+  messages: InquiryMessageJson[];
+}

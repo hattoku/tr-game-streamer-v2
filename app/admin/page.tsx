@@ -8,6 +8,7 @@
  * 縮小する。モニタリング・クォータ・不正検知・マスタ管理等はデータ源／機能自体が
  * 未実装のため今回は置かない。オーナー限定表示の出し分けも行わない（operator/owner共通）。
  * お問い合わせサマリーはフェーズ7ステップ7-3-1で「未対応件数」だけを追加した（種別別内訳・24時間超過アラートは無し）。
+ * 審査ワークフローのサマリーはフェーズ7ステップ7-4で提案（再生リスト・ゲームタイトル登録提案）の未処理件数も並べた。
  */
 'use client';
 
@@ -15,6 +16,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { collection, getDocs, orderBy, limit, query, where } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
+import { PROPOSAL_TYPES } from '@/lib/proposal-shared';
 import { Card, SectionHeading } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Skeleton } from '@/components/ui/Skeleton';
@@ -30,7 +32,9 @@ export default function AdminDashboardPage() {
   const { toast } = useToast();
 
   const [pendingReportCount, setPendingReportCount] = useState<number | null>(null);
+  const [pendingProposalCount, setPendingProposalCount] = useState<number | null>(null);
   const [openInquiryCount, setOpenInquiryCount] = useState<number | null>(null);
+  const [awaitingReplyCount, setAwaitingReplyCount] = useState<number | null>(null);
   const [lastBatch, setLastBatch] = useState<BatchLogSummary | null | undefined>(undefined);
 
   const [refreshBusy, setRefreshBusy] = useState(false);
@@ -43,9 +47,24 @@ export default function AdminDashboardPage() {
     setPendingReportCount(snap.size);
   }
 
+  async function loadPendingProposalCount() {
+    // 提案（再生リスト登録提案・ゲームタイトル登録提案、フェーズ7ステップ7-4）も通報と同じく type＋status の等価条件で数える
+    const snaps = await Promise.all(
+      PROPOSAL_TYPES.map((type) =>
+        getDocs(query(collection(db, 'workflows'), where('type', '==', type), where('status', '==', 'reviewing_lv1'))),
+      ),
+    );
+    setPendingProposalCount(snaps.reduce((sum, snap) => sum + snap.size, 0));
+  }
+
   async function loadOpenInquiryCount() {
-    const snap = await getDocs(query(collection(db, 'inquiries'), where('status', '==', 'open')));
-    setOpenInquiryCount(snap.size);
+    // 「ユーザー返信あり」（ユーザーが返信して運営がまだ返していない）も並べて出す（7-3-2、ユーザー決定）
+    const [openSnap, awaitingSnap] = await Promise.all([
+      getDocs(query(collection(db, 'inquiries'), where('status', '==', 'open'))),
+      getDocs(query(collection(db, 'inquiries'), where('awaitingAdminReply', '==', true))),
+    ]);
+    setOpenInquiryCount(openSnap.size);
+    setAwaitingReplyCount(awaitingSnap.size);
   }
 
   async function loadLastBatch() {
@@ -63,7 +82,7 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     // 非同期 IIFE にして、effect 本体で同期的に setState しない形にする（react-hooks/set-state-in-effect）
     (async () => {
-      await Promise.all([loadPendingReportCount(), loadOpenInquiryCount(), loadLastBatch()]);
+      await Promise.all([loadPendingReportCount(), loadPendingProposalCount(), loadOpenInquiryCount(), loadLastBatch()]);
     })();
   }, []);
 
@@ -98,18 +117,23 @@ export default function AdminDashboardPage() {
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         <Card className="flex flex-col gap-3">
-          <p className="text-lg font-medium text-text-primary">審査ワークフロー（通報）</p>
-          {pendingReportCount === null ? (
+          <p className="text-lg font-medium text-text-primary">審査ワークフロー</p>
+          {pendingReportCount === null || pendingProposalCount === null ? (
             <Skeleton className="h-9 w-16" />
-          ) : pendingReportCount === 0 ? (
+          ) : pendingReportCount === 0 && pendingProposalCount === 0 ? (
             <p className="inline-flex items-center gap-2 text-base text-text-secondary">
               <CheckIcon size={16} className="text-text-tertiary" />
-              未処理の通報はありません
+              未処理の通報・提案はありません
             </p>
           ) : (
-            <p className="text-score font-semibold text-text-primary">
-              {pendingReportCount.toLocaleString()} <span className="text-md font-normal text-text-muted">件 未処理</span>
-            </p>
+            <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1">
+              <p className="text-score font-semibold text-text-primary">
+                {pendingReportCount.toLocaleString()} <span className="text-md font-normal text-text-muted">件 通報</span>
+              </p>
+              <p className="text-score font-semibold text-text-primary">
+                {pendingProposalCount.toLocaleString()} <span className="text-md font-normal text-text-muted">件 提案</span>
+              </p>
+            </div>
           )}
           <Link href="/admin/workflows" className="w-fit text-base text-text-tertiary underline-offset-4 hover:text-text-primary hover:underline">
             一覧を見る →
@@ -118,17 +142,24 @@ export default function AdminDashboardPage() {
 
         <Card className="flex flex-col gap-3">
           <p className="text-lg font-medium text-text-primary">お問い合わせ</p>
-          {openInquiryCount === null ? (
+          {openInquiryCount === null || awaitingReplyCount === null ? (
             <Skeleton className="h-9 w-16" />
-          ) : openInquiryCount === 0 ? (
+          ) : openInquiryCount === 0 && awaitingReplyCount === 0 ? (
             <p className="inline-flex items-center gap-2 text-base text-text-secondary">
               <CheckIcon size={16} className="text-text-tertiary" />
               未対応のお問い合わせはありません
             </p>
           ) : (
-            <p className="text-score font-semibold text-text-primary">
-              {openInquiryCount.toLocaleString()} <span className="text-md font-normal text-text-muted">件 未対応</span>
-            </p>
+            <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1">
+              <p className="text-score font-semibold text-text-primary">
+                {openInquiryCount.toLocaleString()} <span className="text-md font-normal text-text-muted">件 未対応</span>
+              </p>
+              {awaitingReplyCount > 0 && (
+                <p className="text-score font-semibold text-text-primary">
+                  {awaitingReplyCount.toLocaleString()} <span className="text-md font-normal text-text-muted">件 ユーザー返信あり</span>
+                </p>
+              )}
+            </div>
           )}
           <Link href="/admin/inquiries" className="w-fit text-base text-text-tertiary underline-offset-4 hover:text-text-primary hover:underline">
             一覧を見る →

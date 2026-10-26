@@ -13,7 +13,6 @@ import { Checkbox, Field, Input, PasswordInput } from '@/components/ui/Input';
 import { CenteredSpinner } from '@/components/ui/Spinner';
 import { useToast } from '@/components/ui/Toast';
 import { AlertIcon } from '@/components/ui/icons';
-import { SIGNUP_HREF } from '@/components/layout/nav';
 
 // ログイン／アカウント作成ページ。
 // document/specification/page/ページ ログイン アカウント登録・ログイン仕様書.md のうち
@@ -23,6 +22,8 @@ import { SIGNUP_HREF } from '@/components/layout/nav';
 //   フェーズ3以降のため、当面はこのページ内のモード切替で代替する
 // - ログイン成功後、管理者（オーナー・運営者）は /admin へ、一般ユーザーは TOP へ（§5.4。
 //   フェーズ6ステップ3で管理画面ができたため分岐を実装）
+// - `?next=<サイト内パス>` があれば、ロールに関わらずログイン・アカウント作成後にそこへ戻す（§5.4 v1.9。再生リストの提案画面から）。
+//   モード切替リンクでも引き継ぐ
 // - ログアウトはヘッダーのユーザードロップダウン（components/layout/UserDropdown.tsx）
 // 据え置き（HANDOFF.md 未解決事項 8・9、および計画書 §2.2）:
 // - 「パスワードをお忘れの方はこちら」（§5.1・§9）は /password-reset（フェーズ7ステップ7-2）へのリンクとして実装済み
@@ -30,6 +31,31 @@ import { SIGNUP_HREF } from '@/components/layout/nav';
 // - ソーシャルログイン・パスキー・メール認証・初期設定フロー（§6〜§10）
 
 type Mode = 'login' | 'signup';
+
+/**
+ * `next` クエリを、同じオリジンのサイト内パスのときだけ返す（オープンリダイレクト防止）。
+ * 制御文字・空白を含むもの（URL解決時にタブ等が除かれて `//外部` になりうる）と、/login 自体は受け付けない
+ */
+function safeNextPath(next: string | null): string | null {
+  if (!next || !next.startsWith('/') || /[\u0000-\u0020\u007f\\]/.test(next)) return null;
+  try {
+    const base = window.location.origin;
+    const url = new URL(next, base);
+    if (url.origin !== base || url.pathname === '/login' || url.pathname.startsWith('/login/')) return null;
+    return `${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    return null;
+  }
+}
+
+/** ログイン⇔アカウント作成の切り替えリンク先（next を引き継ぐ） */
+function modeHref(mode: Mode, next: string | null): string {
+  const params = new URLSearchParams();
+  if (mode === 'signup') params.set('mode', 'signup');
+  if (next) params.set('next', next);
+  const query = params.toString();
+  return query ? `/login?${query}` : '/login';
+}
 
 interface FieldErrors {
   email?: string;
@@ -90,20 +116,21 @@ function LoginPageBody() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const mode: Mode = searchParams.get('mode') === 'signup' ? 'signup' : 'login';
+  const next = safeNextPath(searchParams.get('next'));
 
-  // ログイン済みでこのページに来た場合は、管理者（オーナー・運営者）はダッシュボードへ、
-  // 一般ユーザーは TOP へ戻す（§5.4）
+  // ログイン済みでこのページに来た場合は、戻り先（next）があればそこへ、無ければ管理者（オーナー・運営者）は
+  // ダッシュボードへ、一般ユーザーは TOP へ戻す（§5.4）
   useEffect(() => {
-    if (!loading && user) router.replace(role === 'owner' || role === 'operator' ? '/admin' : '/');
-  }, [loading, user, role, router]);
+    if (!loading && user) router.replace(next ?? (role === 'owner' || role === 'operator' ? '/admin' : '/'));
+  }, [loading, user, role, router, next]);
 
   if (loading || user) return <CenteredSpinner />;
 
   // モードが変わったら入力とエラーをすべて捨てる（key で作り直す）
-  return <LoginForm key={mode} mode={mode} />;
+  return <LoginForm key={mode} mode={mode} next={next} />;
 }
 
-function LoginForm({ mode }: { mode: Mode }) {
+function LoginForm({ mode, next }: { mode: Mode; next: string | null }) {
   const { refreshRole } = useAuth();
   const { toast } = useToast();
   const isSignup = mode === 'signup';
@@ -256,11 +283,11 @@ function LoginForm({ mode }: { mode: Mode }) {
 
       <p className="text-center text-base text-text-muted">
         {isSignup ? (
-          <Link href="/login" className="text-text-primary underline underline-offset-[3px] hover:text-text-secondary">
+          <Link href={modeHref('login', next)} className="text-text-primary underline underline-offset-[3px] hover:text-text-secondary">
             すでにアカウントをお持ちの方はこちら
           </Link>
         ) : (
-          <Link href={SIGNUP_HREF} className="text-text-primary underline underline-offset-[3px] hover:text-text-secondary">
+          <Link href={modeHref('signup', next)} className="text-text-primary underline underline-offset-[3px] hover:text-text-secondary">
             アカウントをお持ちでない方はこちら
           </Link>
         )}

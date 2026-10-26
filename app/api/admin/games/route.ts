@@ -37,6 +37,7 @@ export async function POST(request: NextRequest) {
     rakutenItemCode: null,
     rakutenItemName: null,
     title: resolved.title,
+    aliases: resolved.aliases,
     packageImageUrl: resolved.packageImageUrl,
     rakutenUrl: resolved.rakutenUrl,
     description: resolved.description,

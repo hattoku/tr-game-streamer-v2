@@ -66,10 +66,13 @@ export async function DELETE(request: NextRequest) {
         updatedAt: new Date(),
       });
     } else {
-      const userRef = adminDb.collection('users').doc(uid);
-      const userSnap = await userRef.get();
       batch.delete(reviewRef);
-      batch.update(userRef, { reviewCount: Math.max(0, (userSnap.data()?.reviewCount ?? 0) - 1) });
+      // 通報で非表示のレビューは users.reviewCount に数えていないため減らさない
+      if (review.isHidden !== true) {
+        const userRef = adminDb.collection('users').doc(uid);
+        const userSnap = await userRef.get();
+        batch.update(userRef, { reviewCount: Math.max(0, (userSnap.data()?.reviewCount ?? 0) - 1) });
+      }
     }
   }
   await batch.commit();
