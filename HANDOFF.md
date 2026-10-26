@@ -15,7 +15,10 @@
 > **7-4** 実装済み（2026-10-25）＝一般ユーザーは `/playlists/new` で「提案する」（`POST /api/playlists/propose`）。ゲームタイトルが候補に無ければ同じフォームで新しいゲームタイトル名を入力し、再生リストと1件の提案として同時に送る（ユーザー決定。当初の別ウィンドウのゲームタイトル提案は廃止）。
 > 提案は `workflows`（`playlist_register`・`game_title_register`）に API 経由で保存し、管理画面 `/admin/workflows` の「提案」セクションで通報と同じ単一ステップで承認/却下（ユーザー決定）。
 > 承認時に管理者の登録と同じ処理（`lib/playlist-registration.ts`）で本登録、承認前にゲームタイトルを差し替え可（ユーザー決定）。rules で提案のクライアント直接作成を禁止。
-> 計画は `/mnt/project-files/plans/7-4-再生リスト提案フロー-実装計画.md`。次は 7-1 の本文整備（利用規約・プライバシーポリシー）→本番デプロイ。
+> 計画は `/mnt/project-files/plans/7-4-再生リスト提案フロー-実装計画.md`。
+> 2026-10-26 作り込み: ステップ表示・提案履歴（`/playlists/proposals`）・審査結果通知・別名（`games.aliases`）と楽天候補でのゲーム検索・審査画面の動画一覧と定型の見送り理由・未処理バッジ。
+> `workflows` の本人直接読み取りは通報だけに限定。詳細は [[2026-10-25-phase7-step7-4-proposals]]。後日タスク: Discord 週次サマリー（別タスク）。
+> 次は 7-1 の本文整備（利用規約・プライバシーポリシー）→本番デプロイ。
 > **rules の変更（inquiries の本人読み取り禁止、7-3-1 の write false）は次回 `deploy.ps1` で反映**。
 > コードを先にデプロイしてから rules を反映する順なら問題ない（旧クライアントは本人読み取りをしていない）。
 > `firestore.rules` の `inquiries` を write false にした変更は次回 `deploy.ps1` で stg/本番に反映。
