@@ -9,7 +9,7 @@ import { randomBytes } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import sharp from 'sharp';
 import { getStorage } from 'firebase-admin/storage';
-import type { Transaction } from 'firebase-admin/firestore';
+import type { DocumentData, DocumentReference, Transaction } from 'firebase-admin/firestore';
 import { adminApp, adminDb } from './firebase-admin';
 import { readJsonObject } from './collections-server';
 import {
@@ -208,13 +208,29 @@ export async function reserveDailyQuota(tx: Transaction, uid: string, count: num
   return true;
 }
 
+/** お問い合わせのドキュメントIDの形（Firestore の自動ID）。パスとして解釈される文字を含む値を早めに弾く */
+export function isInquiryIdShape(value: string): boolean {
+  return /^[A-Za-z0-9]{20}$/.test(value);
+}
+
 /**
  * 閲覧 API の本体（§9.6）。権限の確認は呼び出し側で済ませておくこと。
- * ファイル名の形を確かめ、無ければ（削除済みを含む）404。ヘッダーで型を固定し、ブラウザに中身を推測・実行させない
+ * ファイル名の形を確かめ、そのお問い合わせ（本体かメッセージ）の未削除の添付として記録があるものだけを返す。
+ * それ以外（削除済みを含む）は 404。ヘッダーで型を固定し、ブラウザに中身を推測・実行させない
  */
-export async function serveInquiryAttachment(inquiryId: string, fileName: string): Promise<NextResponse> {
+export async function serveInquiryAttachment(
+  inquiryRef: DocumentReference,
+  inquiryData: DocumentData,
+  fileName: string,
+): Promise<NextResponse> {
+  const inquiryId = inquiryRef.id;
   const match = FILE_NAME_RE.exec(fileName);
-  if (!match) return NextResponse.json({ error: 'not_found' }, { status: 404 });
+  const notFound = NextResponse.json({ error: 'not_found' }, { status: 404 });
+  if (!match) return notFound;
+  if (!activeFileNames(inquiryData.attachments).includes(fileName)) {
+    const messages = await inquiryRef.collection('messages').where('senderType', '==', 'user').get();
+    if (!messages.docs.some((m) => activeFileNames(m.data().attachments).includes(fileName))) return notFound;
+  }
   const format = (Object.keys(INQUIRY_ATTACHMENT_EXTENSIONS) as InquiryAttachmentFormat[]).find(
     (f) => INQUIRY_ATTACHMENT_EXTENSIONS[f] === match[1],
   )!;
@@ -222,7 +238,7 @@ export async function serveInquiryAttachment(inquiryId: string, fileName: string
   try {
     [data] = await bucket().file(storagePath(inquiryId, fileName)).download();
   } catch (e) {
-    if ((e as { code?: number }).code === 404) return NextResponse.json({ error: 'not_found' }, { status: 404 });
+    if ((e as { code?: number }).code === 404) return notFound;
     throw e;
   }
   return new NextResponse(new Uint8Array(data), {
@@ -253,38 +269,58 @@ function markDeleted(raw: unknown, fileNames: Set<string>, now: Date): unknown {
   });
 }
 
+const isExpired = (data: DocumentData | undefined, cutoff: Date) =>
+  data?.status === 'resolved' && data.resolvedAt != null && data.resolvedAt.toMillis() <= cutoff.getTime();
+
 /**
  * 保存期間（対応済みから180日）を過ぎたお問い合わせの画像を消す（管理 お問い合わせ管理仕様書 §6）。
- * 先に読んだ時点の画像だけを名前で消し、その後のトランザクションで削除日時を入れる。
- * 間に再オープン・新しい添付があっても、新しい画像は消さず hasAttachments も残る
+ * - 消す直前に読み直し、再オープンされていれば対象から外す（期限の取り消し）
+ * - Storage から実際に消せた（または既に無かった）画像にだけ削除日時を入れる。消せなかった画像は次の実行でやり直す
+ * - 読んだ後に増えた画像は名前で区別して消さず、hasAttachments も残す
  */
-export async function purgeExpiredInquiryAttachments(now: Date): Promise<{ inquiries: number; files: number; counters: number }> {
+export async function purgeExpiredInquiryAttachments(
+  now: Date,
+): Promise<{ inquiries: number; files: number; failedFiles: number; counters: number }> {
   const cutoff = new Date(now.getTime() - RETENTION_DAYS * 24 * 60 * 60 * 1000);
   const snap = await adminDb.collection('inquiries').where('hasAttachments', '==', true).where('resolvedAt', '<=', cutoff).get();
 
+  let inquiries = 0;
   let files = 0;
+  let failedFiles = 0;
   for (const doc of snap.docs) {
+    const current = await doc.ref.get();
+    if (!isExpired(current.data(), cutoff)) continue;
     const messages = await doc.ref.collection('messages').get();
-    const targets = new Set([
-      ...activeFileNames(doc.data().attachments),
+    const targets = [
+      ...activeFileNames(current.data()?.attachments),
       ...messages.docs.flatMap((m) => activeFileNames(m.data().attachments)),
-    ]);
-    await deleteInquiryImages(doc.id, [...targets]);
-    files += targets.size;
+    ];
+    const deleted = new Set<string>();
+    for (const name of targets) {
+      try {
+        await bucket().file(storagePath(doc.id, name)).delete({ ignoreNotFound: true });
+        deleted.add(name);
+      } catch (e) {
+        failedFiles++;
+        console.error(`[purge-attachments] ${doc.id}/${name} を削除できませんでした`, e);
+      }
+    }
+    files += deleted.size;
 
     await adminDb.runTransaction(async (tx) => {
       const inquiry = await tx.get(doc.ref);
       const latestMessages = await tx.get(doc.ref.collection('messages'));
-      const inquiryAttachments = markDeleted(inquiry.data()?.attachments, targets, now);
+      const inquiryAttachments = markDeleted(inquiry.data()?.attachments, deleted, now);
       let remaining = activeFileNames(inquiryAttachments).length;
       latestMessages.docs.forEach((m) => {
         if (!Array.isArray(m.data().attachments) || m.data().attachments.length === 0) return;
-        const updated = markDeleted(m.data().attachments, targets, now);
+        const updated = markDeleted(m.data().attachments, deleted, now);
         remaining += activeFileNames(updated).length;
         tx.update(m.ref, { attachments: updated });
       });
       tx.update(doc.ref, { attachments: inquiryAttachments ?? [], hasAttachments: remaining > 0 });
     });
+    inquiries++;
   }
 
   // 1日の上限のカウンターは7日より前のものを片付ける（データモデル設計書 §3.31）
@@ -295,5 +331,5 @@ export async function purgeExpiredInquiryAttachments(now: Date): Promise<{ inqui
     counters.docs.slice(i, i + 400).forEach((d) => batch.delete(d.ref));
     await batch.commit();
   }
-  return { inquiries: snap.size, files, counters: counters.size };
+  return { inquiries, files, failedFiles, counters: counters.size };
 }

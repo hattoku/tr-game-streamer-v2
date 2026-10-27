@@ -162,18 +162,36 @@ test('フォームと返信で画像を添付でき、本人と管理者だけ�
     }
   });
 
+  const inquiryRef = db().collection('inquiries').doc(inquiryId);
+  const expire = () => inquiryRef.update({ status: 'resolved', resolvedAt: new Date(Date.now() - 181 * 24 * 60 * 60 * 1000) });
+  const purge = () => adminPage.request.post('/api/admin/inquiries/purge-attachments', { headers: { Authorization: `Bearer ${adminToken}` } });
+
+  await test.step('管理仕様書 §6 再オープンすると保存期間の起点が消え、削除の対象から外れる', async () => {
+    await expire();
+    const reopen = await api.post(`/api/inquiries/${inquiryId}`, { headers: { Authorization: `Bearer ${userToken}` }, data: { action: 'reopen' } });
+    expect(reopen.status()).toBe(200);
+    expect((await inquiryRef.get()).data()?.resolvedAt).toBeNull();
+    expect((await purge()).status()).toBe(200);
+    await userPage.goto(`/contact/history/${inquiryId}`);
+    await expect(userPage.getByRole('button', { name: '添付画像 1を拡大する' })).toHaveCount(2);
+  });
+
   await test.step('管理仕様書 §6 対応済みから180日を過ぎた画像は削除され、「保存期間を過ぎたため削除しました」と出る', async () => {
-    await db()
-      .collection('inquiries')
-      .doc(inquiryId)
-      .update({ status: 'resolved', resolvedAt: new Date(Date.now() - 181 * 24 * 60 * 60 * 1000) });
-    const res = await adminPage.request.post('/api/admin/inquiries/purge-attachments', { headers: { Authorization: `Bearer ${adminToken}` } });
+    const detail = await (await api.get(`/api/inquiries/${inquiryId}`, { headers: { Authorization: `Bearer ${userToken}` } })).json();
+    const file = `${detail.inquiry.attachments[0].id}.png`;
+    await expire();
+    const res = await purge();
     expect(res.status()).toBe(200);
-    expect((await res.json()).inquiries).toBeGreaterThanOrEqual(1);
+    const result = await res.json();
+    expect(result.inquiries).toBeGreaterThanOrEqual(1);
+    expect(result.failedFiles).toBe(0);
 
     await userPage.goto(`/contact/history/${inquiryId}`);
     await expect(userPage.getByText('保存期間を過ぎたため削除しました')).toHaveCount(2);
     await expect(userPage.getByRole('button', { name: '添付画像 1を拡大する' })).toHaveCount(0);
+    // 閲覧 API からも見られない
+    expect((await api.get(`/api/inquiries/${inquiryId}/attachments/${file}`, { headers: { Authorization: `Bearer ${userToken}` } })).status()).toBe(404);
+    expect((await api.get(`/api/admin/inquiries/${inquiryId}/attachments/${file}`, { headers: { Authorization: `Bearer ${adminToken}` } })).status()).toBe(404);
   });
 });
 

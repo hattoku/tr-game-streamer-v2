@@ -5,7 +5,7 @@
  */
 'use client';
 
-import { useEffect, useMemo, useRef, type ChangeEvent } from 'react';
+import { useEffect, useRef, type ChangeEvent } from 'react';
 import {
   INQUIRY_ATTACHMENTS_MAX,
   INQUIRY_ATTACHMENT_ERRORS,
@@ -19,25 +19,28 @@ export interface PickedImage {
   /** 途中の画像を外したときにプレビューがずれないよう、行ごとに安定した key を持たせる */
   key: number;
   file: File;
+  /** プレビュー用の Blob URL。選んだときに作り、一覧から外れたら AttachmentPicker が破棄する */
+  previewUrl: string;
 }
 
 let nextKey = 0;
 
 function Preview({ image, index, onRemove, disabled }: { image: PickedImage; index: number; onRemove: () => void; disabled?: boolean }) {
-  const url = useMemo(() => URL.createObjectURL(image.file), [image.file]);
-  useEffect(() => () => URL.revokeObjectURL(url), [url]);
   return (
     <li className="relative size-[72px] shrink-0 overflow-hidden rounded-[6px] border border-surface-border bg-bg-hover">
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={url} alt={`選択した画像 ${index + 1}`} className="size-full object-cover" />
+      <img src={image.previewUrl} alt={`選択した画像 ${index + 1}`} className="size-full object-cover" />
+      {/* 見た目は小さな丸、押せる範囲は右上の 32px 四方（390px 幅で押しやすく） */}
       <button
         type="button"
         onClick={onRemove}
         disabled={disabled}
         aria-label={`選択した画像 ${index + 1}を外す`}
-        className="absolute right-1 top-1 rounded-full bg-overlay p-[3px] text-text-primary hover:bg-bg-selected disabled:opacity-40"
+        className="absolute right-0 top-0 flex size-8 items-start justify-end p-1 disabled:opacity-40"
       >
-        <XIcon size={12} />
+        <span className="rounded-full bg-overlay p-[3px] text-text-primary">
+          <XIcon size={12} />
+        </span>
       </button>
     </li>
   );
@@ -58,6 +61,17 @@ export function AttachmentPicker({
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // 一覧から外れた（外した・送信後に空にした）画像の Blob URL を破棄する。アンマウント時は残りもすべて破棄する
+  const liveUrls = useRef(new Set<string>());
+  useEffect(() => {
+    const current = new Set(images.map((i) => i.previewUrl));
+    liveUrls.current.forEach((url) => {
+      if (!current.has(url)) URL.revokeObjectURL(url);
+    });
+    liveUrls.current = current;
+  }, [images]);
+  useEffect(() => () => liveUrls.current.forEach((url) => URL.revokeObjectURL(url)), []);
+
   function handleSelect(event: ChangeEvent<HTMLInputElement>) {
     const picked = Array.from(event.target.files ?? []);
     // 同じファイルを外してから選び直せるよう、毎回空に戻す
@@ -69,7 +83,7 @@ export function AttachmentPicker({
       return;
     }
     onError(undefined);
-    onChange([...images, ...picked.map((file) => ({ key: nextKey++, file }))]);
+    onChange([...images, ...picked.map((file) => ({ key: nextKey++, file, previewUrl: URL.createObjectURL(file) }))]);
   }
 
   return (
@@ -108,15 +122,15 @@ export function AttachmentPicker({
           </Button>
         </div>
       )}
-      {error ? (
+      {error && (
         <p role="alert" className="text-md text-input-error">
           {error}
         </p>
-      ) : (
-        <p className="text-md text-text-muted">
-          PNG・JPEG・WebP、1枚5MBまで・{INQUIRY_ATTACHMENTS_MAX}枚まで。スクリーンショットにメールアドレスなどの個人情報が写っていないかご確認ください
-        </p>
       )}
+      {/* 個人情報の注意はエラーの有無にかかわらず常に出す（§9.3） */}
+      <p className="text-md text-text-muted">
+        PNG・JPEG・WebP、1枚5MBまで・{INQUIRY_ATTACHMENTS_MAX}枚まで。スクリーンショットにメールアドレスなどの個人情報が写っていないかご確認ください
+      </p>
     </fieldset>
   );
 }

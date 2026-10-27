@@ -103,9 +103,9 @@ export function ContactForm() {
         if (data?.errors) setErrors(data.errors as InquiryInputErrors);
         const code: unknown = data?.error;
         if (isInquiryAttachmentErrorCode(code)) {
+          // 添付欄のエラーとトーストで伝える（上部のバナーには重ねない）
           const message = INQUIRY_ATTACHMENT_ERRORS[code];
           setImageError(message);
-          setFormError(message);
           toast({ type: 'error', message });
           return;
         }
