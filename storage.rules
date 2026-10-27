@@ -1,0 +1,12 @@
+rules_version = '2';
+
+// Cloud Storage のルール（技術スタック仕様書 2.12節）。
+// 現在の用途はお問い合わせの添付画像（inquiries/{inquiryId}/...）のみで、読み書きはすべて API Route（Admin SDK）が行う。
+// 画像には個人情報が写りうるため、クライアントからは一切読み書きさせない（ページ お問い合わせフォーム仕様書 §9.6）。
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

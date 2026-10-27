@@ -9,13 +9,24 @@ export class InquiryApiError extends Error {
   }
 }
 
-async function callInquiryApi<T>(path: string, method: 'GET' | 'POST', body?: unknown): Promise<T> {
+async function callInquiryApi<T>(path: string, method: 'GET' | 'POST', body?: unknown, files: File[] = []): Promise<T> {
   if (!auth.currentUser) throw new InquiryApiError('not_signed_in');
   const idToken = await auth.currentUser.getIdToken();
+  // 画像があるときは multipart/form-data（本文は payload に JSON、ページ お問い合わせフォーム仕様書 §9）
+  let requestBody: BodyInit | undefined = body === undefined ? undefined : JSON.stringify(body);
+  if (files.length > 0) {
+    const form = new FormData();
+    form.append('payload', JSON.stringify(body ?? {}));
+    files.forEach((f) => form.append('images', f));
+    requestBody = form;
+  }
   const res = await fetch(path, {
     method,
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-    body: body === undefined ? undefined : JSON.stringify(body),
+    headers: {
+      ...(files.length > 0 ? {} : { 'Content-Type': 'application/json' }),
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: requestBody,
   });
   const json = (await res.json().catch(() => ({}))) as { error?: string } & T;
   if (!res.ok) throw new InquiryApiError(json.error ?? `status_${res.status}`);
@@ -33,6 +44,11 @@ export async function fetchMyInquiry(inquiryId: string): Promise<UserInquiryDeta
   return inquiry;
 }
 
-export async function postInquiryAction(inquiryId: string, body: { action: 'reply'; body: string } | { action: 'reopen' }): Promise<void> {
-  await callInquiryApi(`/api/inquiries/${encodeURIComponent(inquiryId)}`, 'POST', body);
+/** reply は画像を添付できる（3枚まで。失敗時は InquiryApiError の code が attachment_* になる） */
+export async function postInquiryAction(
+  inquiryId: string,
+  body: { action: 'reply'; body: string } | { action: 'reopen' },
+  files: File[] = [],
+): Promise<void> {
+  await callInquiryApi(`/api/inquiries/${encodeURIComponent(inquiryId)}`, 'POST', body, files);
 }

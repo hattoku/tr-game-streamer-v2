@@ -1,10 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getOptionalUid, requireUser } from '@/lib/api-auth';
 import { adminAuth, adminDb } from '@/lib/firebase-admin';
-import { readJsonObject } from '@/lib/collections-server';
+import {
+  InquiryAttachmentError,
+  assertDailyQuota,
+  attachmentErrorResponse,
+  deleteInquiryImages,
+  processInquiryImages,
+  readInquiryRequest,
+  reserveDailyQuota,
+  uploadInquiryImages,
+  type StoredInquiryAttachment,
+} from '@/lib/inquiry-attachments-server';
 import {
   INQUIRY_URLS_MAX,
   hasInquiryErrors,
+  inquiryAttachmentFileName,
   isInquiryStatus,
   normalizeRelatedUrls,
   validateInquiryInput,
@@ -15,11 +26,16 @@ import {
 // ログイン済みは返信先を確実にするため、メールアドレス・表示名をクライアントの値ではなくアカウントから取る（§3）。
 // 書き込みは Admin SDK のみ（firestore.rules の inquiries はクライアントからの書き込みを許可しない）。
 // 管理者へのメール通知・admin_notifications は未実装（管理 お問い合わせ管理仕様書 実装注記）。
+// 画像の添付（§9）はログイン済みのみ。multipart/form-data で受け、検証・再エンコード・Storage への保存を済ませてから、
+// 1日の上限の加算と同じトランザクションでお問い合わせを書く。途中で失敗したら保存した画像を消す（一部だけ付いた状態を作らない）。
 export async function POST(request: NextRequest) {
   const uid = await getOptionalUid(request);
 
-  const body = await readJsonObject(request);
-  if (!body) return NextResponse.json({ error: 'invalid_body' }, { status: 400 });
+  const parsed = await readInquiryRequest(request);
+  if (!parsed) return NextResponse.json({ error: 'invalid_body' }, { status: 400 });
+  if ('errorResponse' in parsed) return parsed.errorResponse;
+  const { body, files } = parsed;
+  if (files.length > 0 && !uid) return attachmentErrorResponse('attachment_guest');
 
   const relatedUrlsRaw = Array.isArray(body.relatedUrls) ? body.relatedUrls : [];
   if (relatedUrlsRaw.length > INQUIRY_URLS_MAX || relatedUrlsRaw.some((u) => typeof u !== 'string')) {
@@ -47,7 +63,19 @@ export async function POST(request: NextRequest) {
   const email = accountEmail ?? input.email.trim();
 
   const now = new Date();
-  const ref = await adminDb.collection('inquiries').add({
+  const ref = adminDb.collection('inquiries').doc();
+  let attachments: StoredInquiryAttachment[] = [];
+  if (uid && files.length > 0) {
+    try {
+      await assertDailyQuota(uid, files.length, now);
+      attachments = await uploadInquiryImages(ref.id, await processInquiryImages(files));
+    } catch (e) {
+      if (e instanceof InquiryAttachmentError) return attachmentErrorResponse(e.code);
+      throw e;
+    }
+  }
+
+  const data = {
     userId: uid,
     userName,
     email,
@@ -57,10 +85,32 @@ export async function POST(request: NextRequest) {
     status: 'open',
     isGuest: uid === null,
     operatorMemo: null,
+    attachments,
+    hasAttachments: attachments.length > 0,
+    resolvedAt: null,
     submittedAt: now,
     updatedAt: now,
-  });
+  };
+  if (!uid || attachments.length === 0) {
+    await ref.set(data);
+    return NextResponse.json({ id: ref.id });
+  }
 
+  const fileNames = attachments.map(inquiryAttachmentFileName);
+  try {
+    const saved = await adminDb.runTransaction(async (tx) => {
+      if (!(await reserveDailyQuota(tx, uid, attachments.length, now))) return false;
+      tx.set(ref, data);
+      return true;
+    });
+    if (!saved) {
+      await deleteInquiryImages(ref.id, fileNames);
+      return attachmentErrorResponse('attachment_daily_limit');
+    }
+  } catch (e) {
+    await deleteInquiryImages(ref.id, fileNames);
+    throw e;
+  }
   return NextResponse.json({ id: ref.id });
 }
 

@@ -3,6 +3,7 @@
  * ログイン・未ログインどちらも送信できる。ログイン済みはアカウントのメールアドレスを自動入力・編集不可にする（§3）。
  * 送信は POST /api/inquiries（Admin SDK）。入力チェックは lib/inquiry-shared.ts をサーバーと共有する。
  * 送信完了画面には、ログイン済みのときだけ `/contact/history` へのリンクを出す（§7、フェーズ7ステップ7-3-2）。
+ * 画像の添付欄（§9）はログイン済みのときだけ出す。画像があるときは multipart/form-data（本文は payload に JSON）で送る。
  */
 'use client';
 
@@ -11,16 +12,19 @@ import Link from 'next/link';
 import { auth } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import {
+  INQUIRY_ATTACHMENT_ERRORS,
   INQUIRY_BODY_MAX,
   INQUIRY_CATEGORIES,
   INQUIRY_URLS_MAX,
   hasInquiryErrors,
+  isInquiryAttachmentErrorCode,
   validateInquiryInput,
   type InquiryCategory,
   type InquiryInputErrors,
 } from '@/lib/inquiry-shared';
 import { Button, Card, Field, Input, SectionHeading, SelectMenu, Skeleton, Textarea, useToast } from '@/components/ui';
 import { AlertIcon, PlusIcon, XIcon } from '@/components/ui/icons';
+import { AttachmentPicker, type PickedImage } from '@/components/contact/AttachmentPicker';
 
 const LINK_CLASS = 'text-text-primary underline underline-offset-[3px] hover:text-text-secondary';
 
@@ -34,6 +38,8 @@ export function ContactForm() {
   const [urls, setUrls] = useState<Array<{ key: number; value: string }>>([{ key: 0, value: '' }]);
   const [nextUrlKey, setNextUrlKey] = useState(1);
   const [guestEmail, setGuestEmail] = useState('');
+  const [images, setImages] = useState<PickedImage[]>([]);
+  const [imageError, setImageError] = useState<string>();
   const [errors, setErrors] = useState<InquiryInputErrors>({});
   const [formError, setFormError] = useState<string>();
   const [busy, setBusy] = useState(false);
@@ -74,17 +80,35 @@ export function ContactForm() {
     setBusy(true);
     try {
       const idToken = await auth.currentUser?.getIdToken();
+      // 画像はログイン済みのときだけ送る（§9.1。ゲストには添付欄を出していない）
+      const files = user ? images.map((i) => i.file) : [];
+      let requestBody: BodyInit = JSON.stringify(input);
+      if (files.length > 0) {
+        const form = new FormData();
+        form.append('payload', JSON.stringify(input));
+        files.forEach((f) => form.append('images', f));
+        requestBody = form;
+      }
       const res = await fetch('/api/inquiries', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
+          // multipart のときは境界付きの Content-Type をブラウザに付けさせる
+          ...(files.length > 0 ? {} : { 'Content-Type': 'application/json' }),
           ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
         },
-        body: JSON.stringify(input),
+        body: requestBody,
       });
       if (!res.ok) {
         const data = await res.json().catch(() => null);
         if (data?.errors) setErrors(data.errors as InquiryInputErrors);
+        const code: unknown = data?.error;
+        if (isInquiryAttachmentErrorCode(code)) {
+          const message = INQUIRY_ATTACHMENT_ERRORS[code];
+          setImageError(message);
+          setFormError(message);
+          toast({ type: 'error', message });
+          return;
+        }
         throw new Error(`status ${res.status}`);
       }
       setSentAsGuest(isGuest);
@@ -221,6 +245,8 @@ export function ContactForm() {
             </div>
           )}
         </fieldset>
+
+        {user && <AttachmentPicker images={images} onChange={setImages} error={imageError} onError={setImageError} disabled={busy} />}
 
         {loading ? (
           <Skeleton className="h-[62px] w-full" />

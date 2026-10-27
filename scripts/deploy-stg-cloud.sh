@@ -72,9 +72,9 @@ while true; do
   esac
 done
 
-# 2. Firestore ルール・インデックスをデプロイ（新コードが依存するため Cloud Run より先に反映する）
-echo "Deploying Firestore rules and indexes..."
-npx --yes firebase-tools@15 deploy --only firestore:rules,firestore:indexes --project "$PROJECT_ID" --non-interactive
+# 2. Firestore ルール・インデックスと Storage ルールをデプロイ（新コードが依存するため Cloud Run より先に反映する）
+echo "Deploying Firestore rules, indexes and Storage rules..."
+npx --yes firebase-tools@15 deploy --only firestore:rules,firestore:indexes,storage --project "$PROJECT_ID" --non-interactive
 
 # 3. Cloud Run へデプロイ
 echo "Deploying to Cloud Run..."
