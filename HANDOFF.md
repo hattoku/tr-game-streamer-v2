@@ -20,9 +20,9 @@
 > `workflows` の本人直接読み取りは通報だけに限定。詳細は [[2026-10-25-phase7-step7-4-proposals]]。後日タスク: Discord 週次サマリー（別タスク）。
 > 次は 7-1 の本文整備（利用規約・プライバシーポリシー）→本番デプロイ。
 > **お問い合わせの画像添付** 実装済み（2026-10-27、計画 `/mnt/project-files/plans/お問い合わせ画像添付-実装計画.md`、ページ お問い合わせフォーム仕様書 §9）。
-> 本番に出す前に必要な作業（stg・本番それぞれ）: ①Firebase コンソールで Storage を有効化（本番環境モード・asia-northeast1）
+> 本番に出す前に必要な作業（stg・本番それぞれ）: ①Firebase コンソールで Storage を有効化（本番環境モード。無料枠のため US のリージョンを選ぶ。stg は 2026-10-27 に US-EAST1 で有効化済み）
 > ②Cloud Run のサービスアカウントがバケットのオブジェクトを読み書き・削除できること（既定の Compute SA は編集者ロールで足りる）
-> ③`deploy.ps1` が `storage.rules` を一緒にデプロイする（Storage 未有効だと失敗する）④削除ジョブを作る:
+> ③`deploy.ps1` が `storage.rules` を一緒にデプロイする（Storage 未有効だと失敗する。クラウド用の `scripts/deploy-stg-cloud.sh` は `claude-stg-deployer` に Storage の閲覧権限が要る）④削除ジョブを作る:
 > `gcloud scheduler jobs create http purge-inquiry-attachments-daily --location asia-northeast1 --schedule "30 4 * * *" --time-zone "Asia/Tokyo" --http-method POST --uri "<Cloud Run の URL>/api/admin/inquiries/purge-attachments" --headers "X-Cron-Secret=<CRON_SECRET>" --project <プロジェクトID>`
 > **rules の変更（inquiries の本人読み取り禁止、7-3-1 の write false）は次回 `deploy.ps1` で反映**。
 > コードを先にデプロイしてから rules を反映する順なら問題ない（旧クライアントは本人読み取りをしていない）。

@@ -81,7 +81,7 @@ test('フォームと返信で画像を添付でき、本人と管理者だけ�
     await userPage.getByLabel('メッセージ', { exact: true }).fill(uniqueText('返信'));
     await userPage.locator('input[type=file]').setInputFiles({ name: 'photo.jpg', mimeType: 'image/jpeg', buffer: await jpegWithGps() });
     await userPage.getByRole('button', { name: '送信する' }).click();
-    await expect(userPage.getByText('メッセージを送信しました')).toBeVisible();
+    await expect(userPage.getByText('メッセージを送信しました').first()).toBeVisible();
     // お問い合わせ内容の1枚と、返信の1枚
     await expect(userPage.getByRole('button', { name: '添付画像 1を拡大する' })).toHaveCount(2);
   });
