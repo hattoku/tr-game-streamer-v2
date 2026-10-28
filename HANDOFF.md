@@ -22,7 +22,7 @@
 > **お問い合わせの画像添付** 実装済み（2026-10-27、計画 `/mnt/project-files/plans/お問い合わせ画像添付-実装計画.md`、ページ お問い合わせフォーム仕様書 §9）。
 > 本番に出す前に必要な作業（stg・本番それぞれ）: ①Firebase コンソールで Storage を有効化（本番環境モード。無料枠のため US のリージョンを選ぶ。stg は 2026-10-27 に US-EAST1 で有効化済み）
 > ②Cloud Run のサービスアカウントがバケットのオブジェクトを読み書き・削除できること（既定の Compute SA は編集者ロールで足りる）
-> ③`deploy.ps1` が `storage.rules` を一緒にデプロイする（Storage 未有効だと失敗する。クラウド用の `scripts/deploy-stg-cloud.sh` は `claude-stg-deployer` に Storage の閲覧権限が要る）④削除ジョブを作る:
+> ③`deploy.ps1` が `storage.rules` を一緒にデプロイする（Storage 未有効だと失敗する。クラウド用の `scripts/deploy-stg-cloud.sh` は firebase-tools ではなく Firebase Rules API で stg のバケットへ直接反映する。stg の既定バケットを SA から取れず（404）firebase-tools の storage デプロイが失敗するため。`claude-stg-deployer` には 2026-10-28 に `roles/firebasestorage.viewer`（プロジェクト）と `roles/storage.objectAdmin`（stg バケット）を付与済みで、E2E の後始末で添付画像も消せる）④削除ジョブを作る:
 > `gcloud scheduler jobs create http purge-inquiry-attachments-daily --location asia-northeast1 --schedule "30 4 * * *" --time-zone "Asia/Tokyo" --http-method POST --uri "<Cloud Run の URL>/api/admin/inquiries/purge-attachments" --headers "X-Cron-Secret=<CRON_SECRET>" --project <プロジェクトID>`
 > **rules の変更（inquiries の本人読み取り禁止、7-3-1 の write false）は次回 `deploy.ps1` で反映**。
 > コードを先にデプロイしてから rules を反映する順なら問題ない（旧クライアントは本人読み取りをしていない）。

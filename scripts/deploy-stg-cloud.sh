@@ -16,6 +16,7 @@ set -euo pipefail
 # - ソースのアップロード先を --gcs-source-staging-dir で明示する（既定バケットの確認に storage.buckets.list が要るのを避ける）
 
 PROJECT_ID="tr-game-streamer-stg"
+STORAGE_BUCKET="${PROJECT_ID}.firebasestorage.app"
 REPO_NAME="tr-game-streamer"
 SERVICE_NAME="puremite"
 REGION="asia-northeast1"
@@ -73,8 +74,23 @@ while true; do
 done
 
 # 2. Firestore ルール・インデックスと Storage ルールをデプロイ（新コードが依存するため Cloud Run より先に反映する）
-echo "Deploying Firestore rules, indexes and Storage rules..."
-npx --yes firebase-tools@15 deploy --only firestore:rules,firestore:indexes,storage --project "$PROJECT_ID" --non-interactive
+echo "Deploying Firestore rules and indexes..."
+npx --yes firebase-tools@15 deploy --only firestore:rules,firestore:indexes --project "$PROJECT_ID" --non-interactive
+
+# Storage ルールは Firebase Rules API で直接反映する。firebase-tools の storage デプロイは既定バケットの取得
+# （firebasestorage.defaultBucket.get）が stg では SA から 404 になり失敗するため（2026-10-28）。
+# 反映先は stg のバケットに固定する。SA に Firebase Rules の権限（Firestore ルールのデプロイと同じ）が要る
+echo "Deploying Storage rules to gs://$STORAGE_BUCKET ..."
+ACCESS_TOKEN="$(gcloud auth print-access-token)"
+RULES_API="https://firebaserules.googleapis.com/v1/projects/$PROJECT_ID"
+RULESET_BODY="$(python3 -c 'import json,sys; print(json.dumps({"source": {"files": [{"name": "storage.rules", "content": open(sys.argv[1]).read()}]}}))' storage.rules)"
+RULESET_NAME="$(curl -sSf -X POST -H "Authorization: Bearer $ACCESS_TOKEN" -H 'Content-Type: application/json' \
+  -d "$RULESET_BODY" "$RULES_API/rulesets" | python3 -c 'import json,sys; print(json.load(sys.stdin)["name"])')"
+RELEASE_NAME="projects/$PROJECT_ID/releases/firebase.storage/$STORAGE_BUCKET"
+curl -sSf -X PATCH -H "Authorization: Bearer $ACCESS_TOKEN" -H 'Content-Type: application/json' \
+  -d "{\"release\":{\"name\":\"$RELEASE_NAME\",\"rulesetName\":\"$RULESET_NAME\"}}" \
+  "https://firebaserules.googleapis.com/v1/$RELEASE_NAME" > /dev/null
+echo "Storage rules released: $RULESET_NAME"
 
 # 3. Cloud Run へデプロイ
 echo "Deploying to Cloud Run..."
