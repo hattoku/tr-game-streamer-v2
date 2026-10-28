@@ -106,6 +106,72 @@ export function normalizeRelatedUrls(urls: string[]): string[] {
   return urls.map((u) => u.trim()).filter(Boolean);
 }
 
+// ---------------------------------------------------------------------------
+// 添付画像（ページ お問い合わせフォーム仕様書 §9）。ログイン済みユーザーだけが、フォームの送信とスレッドの返信に付けられる
+// ---------------------------------------------------------------------------
+
+export type InquiryAttachmentFormat = 'png' | 'jpeg' | 'webp';
+
+/** 受け付ける形式（§9.2）。ブラウザの事前チェックとファイル選択の accept に使う。サーバーは MIME を信じず先頭バイトで判定する */
+export const INQUIRY_ATTACHMENT_MIME_TYPES: Readonly<Record<string, InquiryAttachmentFormat>> = {
+  'image/png': 'png',
+  'image/jpeg': 'jpeg',
+  'image/webp': 'webp',
+};
+export const INQUIRY_ATTACHMENT_EXTENSIONS: Readonly<Record<InquiryAttachmentFormat, string>> = { png: 'png', jpeg: 'jpg', webp: 'webp' };
+export const INQUIRY_ATTACHMENTS_MAX = 3;
+export const INQUIRY_ATTACHMENT_BYTES_MAX = 5 * 1024 * 1024;
+export const INQUIRY_ATTACHMENTS_DAILY_MAX = 20;
+
+/** API のエラーコード → §9.4 の文言。フォーム・スレッドの返信欄で共用する */
+export const INQUIRY_ATTACHMENT_ERRORS = {
+  attachment_type: 'PNG・JPEG・WebP の画像を選択してください',
+  attachment_size: '1枚5MB以内の画像を選択してください',
+  attachment_count: '画像は3枚まで添付できます',
+  attachment_unreadable: '画像を読み込めませんでした。別の画像を選択してください',
+  attachment_daily_limit: '本日添付できる画像の上限（20枚）に達しました。明日以降に送信してください',
+  attachment_guest: 'ログインすると画像を添付できます',
+} as const;
+export type InquiryAttachmentErrorCode = keyof typeof INQUIRY_ATTACHMENT_ERRORS;
+
+export function isInquiryAttachmentErrorCode(value: unknown): value is InquiryAttachmentErrorCode {
+  return typeof value === 'string' && value in INQUIRY_ATTACHMENT_ERRORS;
+}
+
+/** ブラウザで選んだ時点の確認（§9.4）。形式は申告された MIME で見る（サーバーは中身で判定し直す） */
+export function checkAttachmentFiles(files: ReadonlyArray<{ type: string; size: number }>): InquiryAttachmentErrorCode | null {
+  if (files.length > INQUIRY_ATTACHMENTS_MAX) return 'attachment_count';
+  if (files.some((f) => !(f.type in INQUIRY_ATTACHMENT_MIME_TYPES))) return 'attachment_type';
+  if (files.some((f) => f.size > INQUIRY_ATTACHMENT_BYTES_MAX)) return 'attachment_size';
+  return null;
+}
+
+/** 画面に渡す添付画像の情報（Firestore データモデル設計書 §3.17「添付画像」） */
+export interface InquiryAttachmentJson {
+  id: string;
+  format: InquiryAttachmentFormat;
+  width: number;
+  height: number;
+  /** 保存期間（対応済みから180日）を過ぎて画像を削除済み */
+  deleted: boolean;
+}
+
+/** Storage 上のファイル名（`inquiries/{inquiryId}/` の下）。閲覧 API の URL にも使う */
+export function inquiryAttachmentFileName(attachment: Pick<InquiryAttachmentJson, 'id' | 'format'>): string {
+  return `${attachment.id}.${INQUIRY_ATTACHMENT_EXTENSIONS[attachment.format]}`;
+}
+
+/** Firestore の `attachments` を画面用に読み替える。形の崩れた要素は捨てる */
+export function parseInquiryAttachments(raw: unknown): InquiryAttachmentJson[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((a) => {
+    if (!a || typeof a !== 'object') return [];
+    const { id, format, width, height, deletedAt } = a as Record<string, unknown>;
+    if (typeof id !== 'string' || (format !== 'png' && format !== 'jpeg' && format !== 'webp')) return [];
+    return [{ id, format, width: Number(width) || 0, height: Number(height) || 0, deleted: deletedAt != null }];
+  });
+}
+
 /** ユーザー側の履歴・スレッド（ページ お問い合わせ履歴 仕様書 §1.1）で API が返す形。日時はミリ秒 */
 export interface UserInquirySummaryJson {
   id: string;
@@ -121,6 +187,7 @@ export interface InquiryMessageJson {
   id: string;
   senderType: 'user' | 'admin';
   body: string;
+  attachments: InquiryAttachmentJson[];
   sentAt: number;
 }
 
@@ -130,6 +197,7 @@ export interface UserInquiryDetailJson {
   status: InquiryStatus;
   body: string;
   relatedUrls: string[];
+  attachments: InquiryAttachmentJson[];
   submittedAt: number;
   messages: InquiryMessageJson[];
 }
