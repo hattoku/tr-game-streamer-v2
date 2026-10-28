@@ -21,6 +21,7 @@ const ADMIN_NAV = [
   { label: 'ダッシュボード', href: '/admin' },
   { label: '審査ワークフロー', href: '/admin/workflows' },
   { label: 'お問い合わせ', href: '/admin/inquiries' },
+  { label: 'コンテンツ収集', href: '/admin/collection' },
 ] as const;
 
 function AdminNav({ pathname, pendingCount, className }: { pathname: string; pendingCount: number; className?: string }) {
@@ -34,7 +35,7 @@ function AdminNav({ pathname, pendingCount, className }: { pathname: string; pen
             href={item.href}
             aria-current={active ? 'page' : undefined}
             className={cn(
-              'relative flex h-full items-center whitespace-nowrap text-base transition-colors duration-[120ms] hover:text-text-primary',
+              'relative flex h-full shrink-0 items-center whitespace-nowrap text-base transition-colors duration-[120ms] hover:text-text-primary',
               active ? 'text-admin-accent-text' : 'text-text-tertiary',
             )}
           >
@@ -86,7 +87,8 @@ export function AdminFrame({ children }: { children: React.ReactNode }) {
         </div>
         <div className="border-t border-admin-border md:hidden">
           <PageContainer>
-            <AdminNav pathname={pathname} pendingCount={pendingCount} className="h-11" />
+            {/* 項目が増えても390px幅で画面全体が横に広がらないよう、ナビの中だけ横スクロールにする */}
+            <AdminNav pathname={pathname} pendingCount={pendingCount} className="h-11 overflow-x-auto" />
           </PageContainer>
         </div>
       </header>

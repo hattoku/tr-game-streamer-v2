@@ -28,6 +28,7 @@ const REQUEST_ORIGIN = 'https://puremite.net';
 
 // 429時の再試行までの待ち時間（レートリミットが1秒単位のため少し余裕を持たせる）
 const RATE_LIMIT_RETRY_MS = 1100;
+const RAKUTEN_TIMEOUT_MS = 10_000;
 
 export class RakutenApiError extends Error {
   status?: number;
@@ -116,9 +117,16 @@ async function callRakutenApi<T>(api: string, params: Record<string, string>, re
   url.searchParams.set('format', 'json');
   url.searchParams.set('formatVersion', '2');
 
-  const res = await fetch(url, {
-    headers: { Referer: `${REQUEST_ORIGIN}/`, Origin: REQUEST_ORIGIN },
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      headers: { Referer: `${REQUEST_ORIGIN}/`, Origin: REQUEST_ORIGIN },
+      // 楽天が応答しないときに呼び出し元（収集候補のまとめて承認など）のリクエストごと止まらないよう打ち切る
+      signal: AbortSignal.timeout(RAKUTEN_TIMEOUT_MS),
+    });
+  } catch (e) {
+    throw new RakutenApiError(`楽天ブックスAPI呼び出しに失敗しました: ${e instanceof Error ? e.message : 'network_error'}`);
+  }
   if (res.status === 429 && retryOnRateLimit) {
     await new Promise((resolve) => setTimeout(resolve, RATE_LIMIT_RETRY_MS));
     return callRakutenApi<T>(api, params, false);

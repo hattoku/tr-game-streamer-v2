@@ -31,6 +31,8 @@ const ADMIN_PAGES: PageCase[] = [
   { path: '/admin', heading: 'ダッシュボード' },
   { path: '/admin/workflows', heading: '審査ワークフロー' },
   { path: '/admin/inquiries', heading: 'お問い合わせ' },
+  { path: '/admin/collection', heading: 'コンテンツ収集' },
+  { path: '/admin/collection/channels', heading: '探索対象チャンネル' },
 ];
 
 // 一覧ページから最初の1件をたどって開く詳細ページ（データが無い環境では飛ばす）

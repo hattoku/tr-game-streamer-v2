@@ -49,3 +49,15 @@ export function resolveTags(tagIds: string[], fixedTagIds: string[], tagsMap: Ma
   const editable = resolved.filter((t) => !t.fixed).sort((a, b) => a.createdAt - b.createdAt);
   return [...fixed, ...editable].map(({ id, name, fixed: f }) => ({ id, name, fixed: f }));
 }
+
+/**
+ * 探すページのタグ絞り込み・TOPのタグピックアップに出すユーザー作成タグ（origin: user）の最小使用数
+ * （ページ 再生リストを探す 仕様書 §4.3「表示対象」。タグの乱立で一覧が散らからないようにするため）。
+ */
+export const USER_TAG_MIN_USAGE = 3;
+
+/** 一覧（探す・TOP）に出すタグか。運営者タグは1件以上、ユーザー作成タグは USER_TAG_MIN_USAGE 件以上付いているもの */
+export function isListedTag(tag: TagInfo, target: 'playlist' | 'game'): boolean {
+  const usage = target === 'playlist' ? tag.usagePlaylistCount : tag.usageGameCount;
+  return tag.origin === 'operator' ? usage > 0 : usage >= USER_TAG_MIN_USAGE;
+}

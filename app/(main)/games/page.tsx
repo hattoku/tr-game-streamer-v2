@@ -16,7 +16,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { fetchTagsMap, resolveTags, type TagInfo } from '@/lib/tags';
+import { fetchTagsMap, isListedTag, resolveTags, type TagInfo } from '@/lib/tags';
 import { fetchGameVideoCounts } from '@/lib/playlist-aggregates';
 import { GameCard, type GameCardData } from '@/components/games/GameCard';
 import { Card, SectionHeading } from '@/components/ui/Card';
@@ -52,6 +52,8 @@ export default function GamesPage() {
   const [games, setGames] = useState<GameListItem[] | null>(null);
   const [genres, setGenres] = useState<Genre[]>([]);
   const [tags, setTags] = useState<TagInfo[]>([]);
+  // 絞り込み条件チップ用。?tag= で一覧に出ないユーザータグが選ばれていても表示・解除できるよう全タグを持つ
+  const [allTags, setAllTags] = useState<Map<string, TagInfo>>(new Map());
 
   const [keyword, setKeyword] = useState('');
   const [selectedGenreIds, setSelectedGenreIds] = useState<Set<string>>(new Set());
@@ -78,8 +80,9 @@ export default function GamesPage() {
           .map((d) => ({ id: d.id, name: (d.data().name as string) ?? '' }))
           .sort((a, b) => a.name.localeCompare(b.name, 'ja')),
       );
+      setAllTags(tagsMap);
       setTags(
-        [...tagsMap.values()].filter((t) => t.usageGameCount > 0).sort((a, b) => a.name.localeCompare(b.name, 'ja')),
+        [...tagsMap.values()].filter((t) => isListedTag(t, 'game')).sort((a, b) => a.name.localeCompare(b.name, 'ja')),
       );
       setGames(
         gamesSnap.docs.map((d) => {
@@ -176,8 +179,9 @@ export default function GamesPage() {
         .map((g) => (
           <FilterChip key={g.id} label={g.name} onRemove={() => toggleGenre(g.id)} />
         ))}
-      {tags
-        .filter((t) => selectedTagIds.has(t.id))
+      {[...selectedTagIds]
+        .map((id) => allTags.get(id))
+        .filter((t): t is TagInfo => !!t)
         .map((t) => (
           <FilterChip key={t.id} label={t.name} onRemove={() => toggleTag(t.id)} />
         ))}

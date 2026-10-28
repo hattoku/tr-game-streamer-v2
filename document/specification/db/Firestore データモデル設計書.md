@@ -1,6 +1,6 @@
 # プレミテ Firestore データモデル設計書
 
-**バージョン**: v1.24  
+**バージョン**: v1.25  
 **作成日**: 2026年3月30日（更新）  
 **対象**: 開発チーム  
 **関連ドキュメント**: プレミテ企画書 / プレミテ_技術スタック仕様書 / 各機能仕様書
@@ -44,6 +44,7 @@
    - 3.29 [new_title_candidates](#329-new_title_candidates)
    - 3.30 [notifications](#330-notifications)
    - 3.31 [inquiry_upload_counters](#331-inquiry_upload_counters)
+   - 3.32 [exploration_channels](#332-exploration_channels)
 4. [リレーション図](#4-リレーション図)
 5. [インデックス設計](#5-インデックス設計)
 6. [セキュリティルール方針](#6-セキュリティルール方針)
@@ -105,7 +106,7 @@ Firestoreはテーブル結合（JOIN）ができないため、一覧表示や�
 | 20 | `fraud_alerts` | 不正レビュー検知アラート | モニタリング・不正監視仕様書 |
 | 21 | `batch_logs` | YouTube定期取得バッチ実行ログ（動画更新バッチ / チャンネル更新バッチ） | YouTube定期取得仕様書 |
 | 22 | `api_quota_logs` | YouTube APIクォータ消費ログ（動画更新バッチ / チャンネル更新バッチ） | モニタリング仕様書 |
-| 23 | `collection_candidates` | AI運営者が収集した再生リスト候補 | AI運営者コンテンツ収集仕様書 |
+| 23 | `collection_candidates` | コンテンツ収集（チャンネル起点の探索）で集めた再生リスト候補 | AI運営者コンテンツ収集仕様書 / 収集候補レビューUI仕様書 |
 | 24 | `collection_batch_logs` | コンテンツ収集バッチ実行ログ（コンテンツ収集バッチ） | AI運営者コンテンツ収集仕様書 |
 | 25 | `collection_quota_logs` | コンテンツ収集APIクォータ消費ログ | AI運営者コンテンツ収集仕様書 |
 | 26 | `ai_operators` | AI運営者の設定情報 | ユーザー管理仕様書 / AI運営者審査仕様書 |
@@ -113,6 +114,7 @@ Firestoreはテーブル結合（JOIN）ができないため、一覧表示や�
 | 28 | `app_settings` | アプリ全体の設定値（閾値など） | モニタリング仕様書 |
 | 29 | `new_title_candidates` | 新作タイトル検知候補 | AI運営者 コンテンツ収集仕様書 |
 | 30 | `notifications` | ユーザー向けサイト内通知（ベルアイコン・通知一覧） | ユーザー通知機能仕様書 |
+| 31 | `exploration_channels` | コンテンツ収集の探索対象チャンネル | AI運営者コンテンツ収集仕様書 §3.1 |
 
 ---
 
@@ -694,63 +696,69 @@ YouTube API クォータ消費の記録。
 
 ### 3.23 `collection_candidates`
 
-AI運営者が収集した再生リスト候補。
+コンテンツ収集（チャンネル起点の探索、AI運営者 コンテンツ収集機能仕様書 v3.0 §3）で集めた再生リスト候補。書き込みは API Route（Admin SDK）のみ。
 
-**パス**: `collection_candidates/{candidateId}`
+**パス**: `collection_candidates/{playlistId}`（ドキュメントIDは YouTube の再生リストID。同じ再生リストを二重に候補化しない）
 
 | フィールド | 型 | 必須 | 説明 |
 |-----------|-----|:---:|------|
 | `playlistId` | string | ✅ | YouTubeの再生リストID |
 | `playlistTitle` | string | ✅ | 再生リストタイトル |
-| `channelId` | string | ✅ | チャンネルID |
+| `channelId` | string | ✅ | YouTubeチャンネルID |
 | `channelTitle` | string | ✅ | チャンネル名 |
+| `explorationChannelId` | string | ✅ | 見つけた探索対象チャンネル（`exploration_channels` のドキュメントID） |
 | `thumbnailUrl` | string | ✅ | サムネイルURL |
-| `videoCount` | number | ✅ | 動画数 |
-| `latestVideoPublishedAt` | Timestamp | ✅ | 最終動画公開日時 |
-| `genreId` | string | ✅ | 収集のトリガーとなったジャンルID（発見時のコンテキスト） |
-| `genreName` | string | ✅ | 収集のトリガーとなったジャンル名（denormalized） |
-| `aiOperatorId` | string | ✅ | 収集したAI運営者のuserId（プラットフォーム全体共通AI） |
-| `aiResult` | string | ✅ | `"collect"` 固定 |
-| `aiFlags` | string[] | ✅ | フラグキー配列 |
-| `aiComment` | string | ✅ | AI判定コメント |
-| `status` | string | ✅ | `"pending"` / `"approved"` / `"rejected"` / `"registered"` |
+| `videoCount` | number | ✅ | 動画数（探索時点の `contentDetails.itemCount`） |
+| `playlistPublishedAt` | Timestamp? | — | 再生リストの作成日時（`snippet.publishedAt`） |
+| `guessedGameId` | string? | — | 推定したゲームタイトルID（推定なしは null） |
+| `guessedGameTitle` | string? | — | 推定したゲームタイトル名（denormalized） |
+| `gameQuery` | string | ✅ | 楽天ブックス検索に使うゲーム名らしい語句（§3.4） |
+| `titleTagIds` | string[] | ✅ | タイトルの語句から拾ったタグID（運営者タグのみ）。チャンネル単位タグは承認時に `exploration_channels.tagIds` から加える |
+| `source` | string | ✅ | `"channel"`（将来 `"game_search"` を追加） |
+| `status` | string | ✅ | `"pending"` / `"registered"` / `"rejected"` |
 | `collectedAt` | Timestamp | ✅ | 収集日時 |
-| `reviewedAt` | Timestamp? | — | オーナーレビュー日時 |
-| `reviewedBy` | string? | — | レビューしたオーナーのuserId |
-| `reviewComment` | string? | — | オーナーのコメント |
+| `reviewedAt` | Timestamp? | — | 承認・却下日時 |
+| `reviewedBy` | string? | — | 承認・却下した管理者のuserId |
+| `reviewComment` | string? | — | 却下理由など（自動却下時は `"not_public"` 等） |
+| `registeredPlaylistId` | string? | — | 登録した `playlists` のドキュメントID |
+
+> v1.25 で旧設計（ジャンル起点）の `genreId`・`genreName`・`aiOperatorId`・`aiResult`・`aiFlags`・`aiComment`・`latestVideoPublishedAt` と `approved` 状態を削除した。AI判定のフィールドは Gemini 導入時に追加する。
 
 ---
 
 ### 3.24 `collection_batch_logs`
 
-コンテンツ収集バッチの実行結果ログ。
+コンテンツ収集（探索）の実行結果ログ。
 
 **パス**: `collection_batch_logs/{logId}`
 
 | フィールド | 型 | 必須 | 説明 |
 |-----------|-----|:---:|------|
-| `executedAt` | Timestamp | ✅ | バッチ実行日時 |
-| `processedGenres` | number | ✅ | 処理ジャンル数 |
-| `searchCount` | number | ✅ | 検索API実行回数 |
-| `candidatesFound` | number | ✅ | 収集候補数 |
-| `skippedByFilter` | number | ✅ | フィルタ除外数 |
-| `skippedBySpam` | number | ✅ | スパム除外数 |
+| `executedAt` | Timestamp | ✅ | 実行日時 |
+| `trigger` | string | ✅ | `"manual"`（管理画面のボタン）/ `"cron"`（Cloud Scheduler） |
+| `executedBy` | string? | — | 実行した管理者のuserId（cron は null） |
+| `processedChannels` | number | ✅ | 探索したチャンネル数 |
+| `playlistsFetched` | number | ✅ | 取得した再生リスト数 |
+| `candidatesFound` | number | ✅ | 新しく保存した候補数 |
+| `skippedByFilter` | number | ✅ | ハードフィルタで除外した数 |
+| `skippedExisting` | number | ✅ | 登録済み・候補化済みで除外した数 |
 | `status` | string | ✅ | `"success"` / `"partial"` / `"skipped"` / `"error"` |
 | `quotaConsumed` | number | ✅ | 消費クォータ |
+| `errors` | array | ✅ | `{ explorationChannelId, message }` の配列 |
 
 ---
 
 ### 3.25 `collection_quota_logs`
 
-コンテンツ収集バッチによるクォータ消費記録。
+コンテンツ収集（チャンネル特定・探索・承認）によるクォータ消費の日別積算。
 
-**パス**: `collection_quota_logs/{logId}`
+**パス**: `collection_quota_logs/{YYYY-MM-DD}`（日本時間の日付。1日1ドキュメント）
 
 | フィールド | 型 | 必須 | 説明 |
 |-----------|-----|:---:|------|
-| `date` | string | ✅ | 日付（`YYYY-MM-DD`） |
-| `quotaConsumed` | number | ✅ | 消費ユニット数 |
-| `recordedAt` | Timestamp | ✅ | 記録日時 |
+| `date` | string | ✅ | 日付（`YYYY-MM-DD`、日本時間） |
+| `quotaConsumed` | number | ✅ | その日の消費ユニット数（加算） |
+| `recordedAt` | Timestamp | ✅ | 最終更新日時 |
 
 ### 3.26 `ai_operators`
 
@@ -869,6 +877,30 @@ AI運営者（審査AI）の設定。プラットフォーム共通で1体のみ
 
 ---
 
+### 3.32 `exploration_channels`
+
+コンテンツ収集の探索対象チャンネル（AI運営者 コンテンツ収集機能仕様書 §3.1）。書き込みは API Route（Admin SDK）のみ。
+
+**パス**: `exploration_channels/{docId}`（自動ID）
+
+| フィールド | 型 | 必須 | 説明 |
+|-----------|-----|:---:|------|
+| `name` | string | ✅ | 登録時の名前（wiki の表記など） |
+| `status` | string | ✅ | `"unresolved"` / `"pending_confirm"` / `"active"` / `"excluded"` |
+| `youtubeChannelId` | string? | — | 確定したYouTubeチャンネルID（`active` のみ） |
+| `channelTitle` | string? | — | 確定したチャンネル名 |
+| `channelIconUrl` | string? | — | 確定したチャンネルのアイコンURL |
+| `subscriberCount` | number? | — | 確定時点の登録者数（非公開は null） |
+| `searchCandidates` | array | ✅ | 名前検索の候補 `{ youtubeChannelId, title, iconUrl, subscriberCount }`（最大5件。確定後は空） |
+| `tagIds` | string[] | ✅ | チャンネル単位タグ（運営者タグのみ）。承認時に付与する |
+| `lastExploredAt` | Timestamp? | — | 最終探索日時 |
+| `lastFoundCount` | number? | — | 前回の探索で新しく保存した候補数 |
+| `createdAt` | Timestamp | ✅ | 登録日時 |
+| `createdBy` | string | ✅ | 登録した管理者のuserId |
+| `updatedAt` | Timestamp | ✅ | 更新日時 |
+
+---
+
 ## 4. リレーション図
 
 ```
@@ -984,3 +1016,4 @@ ai_operators ──── (1) users
 | v1.22 | 2026-10-25 | フェーズ7ステップ7-4（一般ユーザーの提案フロー）。§3.15 `workflows` に `proposalData`（`playlist_register`・`game_title_register`）と `editHistory` の構造を定義し、提案の作成を API 経由に限定。`playlists.proposedBy` を追加 |
 | v1.23 | 2026-10-25 | 再生リスト提案フローの作り込み。`workflows` の本人による直接読み取りを通報（`review_report`）に限定（提案は運営メモ・内部メモを含むため提案履歴 API 経由）。`games.aliases`（別名）、`workflows.proposalData` に `newGamePlatforms`・`newGameRakuten`・`rejectReasonCode`、`notifications` に `review_result` 種別と `workflowId` を追加 |
 | v1.24 | 2026-10-27 | お問い合わせの画像添付。§3.17 `inquiries` に `attachments`・`hasAttachments`・`resolvedAt`、`messages` に `attachments` と添付画像の構造を追加。§3.31 `inquiry_upload_counters` を新設。§5.2 にインデックス、§6 に Storage のルール方針を追加 |
+| v1.25 | 2026-10-28 | フェーズ7-5（友人テスト前のコンテンツ充実）。コンテンツ収集をチャンネル起点に変更したことに合わせ、3.23 `collection_candidates` をタイトル・チャンネル起点のスキーマに改訂（ドキュメントIDを再生リストIDに、ゲーム推定・タグ候補を追加、ジャンル起点・AI判定のフィールドを削除）、3.24 `collection_batch_logs`・3.25 `collection_quota_logs` を改訂、3.32 `exploration_channels` を追加 |
