@@ -7,6 +7,7 @@
 //
 // 呼び出し元はNext.js API Route等のサーバーサイドコードに限定すること
 // （YOUTUBE_API_KEYをブラウザに露出させないため）。
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { YOUTUBE_API_KEY } from './constants';
 
 const API_BASE = 'https://www.googleapis.com/youtube/v3';
@@ -35,18 +36,23 @@ function bestThumbnailUrl(thumbnails: Thumbnails | undefined): string {
 }
 
 // 定期取得バッチ（新着動画自動検知）のクォータ消費記録用カウンタ。
-// list系エンドポイント（playlists/channels/playlistItems/videos）はいずれも1ユニット消費のため
-// 呼び出し回数をそのまま加算する。resetQuotaCounter()/getQuotaConsumed()で1バッチ分を集計する想定
+// list系エンドポイント（playlists/channels/playlistItems/videos）は1ユニット、search.list は
+// 100ユニットとして加算する（ENDPOINT_COST）。resetQuotaCounter()/getQuotaConsumed()で1バッチ分を集計する想定
 // （batch_logs.quotaConsumed。Firestore データモデル設計書 3.21節）。
-let quotaCounter = 0;
+// 同時に走るリクエスト（探索の定期実行と手動操作など）で数が混ざらないよう、resetQuotaCounter() は
+// 呼び出し元の非同期コンテキストに専用のカウンタを置く（AsyncLocalStorage.enterWith）。
+const quotaStorage = new AsyncLocalStorage<{ count: number }>();
 
 export function resetQuotaCounter(): void {
-  quotaCounter = 0;
+  quotaStorage.enterWith({ count: 0 });
 }
 
 export function getQuotaConsumed(): number {
-  return quotaCounter;
+  return quotaStorage.getStore()?.count ?? 0;
 }
+
+// search.list だけは1回100ユニット（他のlist系は1ユニット）。AI運営者_YouTube API調査レポート §2
+const ENDPOINT_COST: Record<string, number> = { search: 100 };
 
 async function callApi<T>(endpoint: string, params: Record<string, string>): Promise<T> {
   if (!YOUTUBE_API_KEY) {
@@ -58,7 +64,8 @@ async function callApi<T>(endpoint: string, params: Record<string, string>): Pro
   }
 
   const res = await fetch(url);
-  quotaCounter += 1;
+  const quotaStore = quotaStorage.getStore();
+  if (quotaStore) quotaStore.count += ENDPOINT_COST[endpoint] ?? 1;
   const body = await res.json();
   if (!res.ok) {
     const reason = body?.error?.errors?.[0]?.reason;
@@ -214,4 +221,146 @@ export async function fetchVideoDurations(videoIds: string[]): Promise<Map<strin
     }
   }
   return result;
+}
+
+// ---- コンテンツ収集（チャンネル起点の再生リスト探索）用 ----
+// 管理_Ai運営者 コンテンツ収集機能仕様書 v3.0 §3
+
+export interface ChannelPlaylist {
+  youtubePlaylistId: string;
+  title: string;
+  thumbnailUrl: string;
+  channelId: string;
+  channelTitle: string;
+  itemCount: number;
+  isPublic: boolean;
+  publishedAt: string | null;
+}
+
+/** チャンネルの再生リストを全件取得する（playlists.list の channelId 指定、50件ごとに1ユニット。§3.2） */
+export async function fetchChannelPlaylists(channelId: string): Promise<ChannelPlaylist[]> {
+  const playlists: ChannelPlaylist[] = [];
+  let pageToken: string | undefined;
+
+  do {
+    const data = await callApi<{
+      items: Array<{
+        id: string;
+        snippet: { title: string; thumbnails: Thumbnails; channelId: string; channelTitle: string; publishedAt?: string };
+        contentDetails: { itemCount: number };
+        status: { privacyStatus: string };
+      }>;
+      nextPageToken?: string;
+    }>('playlists', {
+      part: 'snippet,contentDetails,status',
+      channelId,
+      maxResults: '50',
+      ...(pageToken ? { pageToken } : {}),
+    });
+
+    for (const item of data.items) {
+      playlists.push({
+        youtubePlaylistId: item.id,
+        title: item.snippet.title,
+        thumbnailUrl: bestThumbnailUrl(item.snippet.thumbnails),
+        channelId: item.snippet.channelId,
+        channelTitle: item.snippet.channelTitle,
+        itemCount: item.contentDetails.itemCount,
+        isPublic: item.status.privacyStatus === 'public',
+        publishedAt: item.snippet.publishedAt ?? null,
+      });
+    }
+    pageToken = data.nextPageToken;
+  } while (pageToken);
+
+  return playlists;
+}
+
+export interface ChannelDetail {
+  youtubeChannelId: string;
+  title: string;
+  iconUrl: string;
+  /** 登録者数を非公開にしているチャンネルは null */
+  subscriberCount: number | null;
+}
+
+type ChannelsListResponse = {
+  items?: Array<{
+    id: string;
+    snippet: { title: string; thumbnails: Thumbnails };
+    statistics?: { subscriberCount?: string; hiddenSubscriberCount?: boolean };
+  }>;
+};
+
+function toChannelDetail(item: NonNullable<ChannelsListResponse['items']>[number]): ChannelDetail {
+  const hidden = item.statistics?.hiddenSubscriberCount;
+  const count = item.statistics?.subscriberCount;
+  return {
+    youtubeChannelId: item.id,
+    title: item.snippet.title,
+    iconUrl: bestThumbnailUrl(item.snippet.thumbnails),
+    subscriberCount: !hidden && count ? Number(count) : null,
+  };
+}
+
+/** チャンネルIDのリストから詳細（名前・アイコン・登録者数）を取得する。50件まで1ユニット */
+export async function fetchChannelDetails(channelIds: string[]): Promise<ChannelDetail[]> {
+  if (channelIds.length === 0) return [];
+  const data = await callApi<ChannelsListResponse>('channels', {
+    part: 'snippet,statistics',
+    id: channelIds.slice(0, 50).join(','),
+  });
+  const byId = new Map((data.items ?? []).map((item) => [item.id, toChannelDetail(item)]));
+  // 入力順（search.list の関連度順）を保つ
+  return channelIds.map((id) => byId.get(id)).filter((d): d is ChannelDetail => !!d);
+}
+
+/**
+ * チャンネル名で検索し、候補を最大5件返す（search.list type=channel、100ユニット＋channels.list 1ユニット。§3.1）。
+ */
+export async function searchChannelsByName(name: string): Promise<ChannelDetail[]> {
+  const data = await callApi<{ items?: Array<{ id: { channelId?: string } }> }>('search', {
+    part: 'snippet',
+    type: 'channel',
+    q: name,
+    maxResults: '5',
+    regionCode: 'JP',
+    relevanceLanguage: 'ja',
+  });
+  const ids = (data.items ?? []).map((i) => i.id.channelId).filter((id): id is string => !!id);
+  return fetchChannelDetails(ids);
+}
+
+export type ChannelRef = { kind: 'handle'; value: string } | { kind: 'id'; value: string };
+
+/**
+ * チャンネルURL・@ハンドル・チャンネルID（UC...）を解釈する。どれにも当たらなければ null（名前として扱う）。
+ * 受け付ける形: https://www.youtube.com/@handle、https://www.youtube.com/channel/UC...、@handle、UC...
+ */
+export function parseChannelRef(input: string): ChannelRef | null {
+  const text = input.trim();
+  if (!text) return null;
+  if (/^UC[\w-]{22}$/.test(text)) return { kind: 'id', value: text };
+  if (/^@[^\s/]+$/.test(text)) return { kind: 'handle', value: text };
+  let url: URL;
+  try {
+    url = new URL(text);
+  } catch {
+    return null;
+  }
+  if (!/(^|\.)youtube\.com$/.test(url.hostname)) return null;
+  const segments = url.pathname.split('/').filter(Boolean);
+  if (segments[0]?.startsWith('@')) return { kind: 'handle', value: decodeURIComponent(segments[0]) };
+  if (segments[0] === 'channel' && segments[1] && /^UC[\w-]{22}$/.test(segments[1])) return { kind: 'id', value: segments[1] };
+  return null;
+}
+
+/** parseChannelRef の結果からチャンネルを特定する（channels.list、1ユニット）。見つからなければ null */
+export async function resolveChannelRef(ref: ChannelRef): Promise<ChannelDetail | null> {
+  const data = await callApi<ChannelsListResponse>('channels', {
+    part: 'snippet,statistics',
+    ...(ref.kind === 'handle' ? { forHandle: ref.value } : { id: ref.value }),
+  });
+  const item = data.items?.[0];
+  return item ? toChannelDetail(item) : null;
 }

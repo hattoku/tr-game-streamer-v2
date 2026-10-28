@@ -1,3 +1,4 @@
+import { FieldValue } from 'firebase-admin/firestore';
 import { adminDb } from './firebase-admin';
 import {
   extractPlaylistId,
@@ -13,7 +14,8 @@ import { PLAYLIST_PROPOSAL_TYPE } from './proposal-shared';
 
 // 再生リストの登録・提案で共通のサーバー側処理（ページ 再生リストを追加する 仕様書 §4.1.5・§5）。
 // 管理者の直接登録（/api/playlists/register）、一般ユーザーの提案（/api/playlists/propose）、
-// 提案の承認（/api/admin/workflows/[workflowId]）から使う。プレビュー時の情報は信用せず、
+// 提案の承認（/api/admin/workflows/[workflowId]）、コンテンツ収集の承認（/api/admin/collection/candidates、
+// 収集候補レビューUI仕様書 v2.0 §4）から使う。プレビュー時の情報は信用せず、
 // YouTube API と Firestore の状態を毎回サーバー側で取り直す。
 
 export type PlaylistApiError = { error: string; status: number; message?: string };
@@ -81,8 +83,11 @@ export async function registerPlaylist(params: {
   sourceChannelId?: unknown;
   registeredBy: string;
   proposedBy: string | null;
+  /** 固定タグとして付けるタグID（運営者タグ。存在確認は呼び出し側で行う） */
+  fixedTagIds?: string[];
 }): Promise<RegisteredPlaylist | PlaylistApiError> {
   const { playlistUrl, gameId, channelDescription, sourceChannelId, registeredBy, proposedBy } = params;
+  const fixedTagIds = [...new Set(params.fixedTagIds ?? [])];
 
   const valid = await fetchValidPlaylist(playlistUrl);
   if ('error' in valid) return valid;
@@ -109,6 +114,28 @@ export async function registerPlaylist(params: {
 
   const items = await fetchPlaylistItems(playlist.youtubePlaylistId);
   const durations = await fetchVideoDurations(items.map((i) => i.youtubeVideoId));
+
+  // Firestore の1バッチは500書き込みまで。長い再生リスト（有名チャンネルでは数百本）でも収まるよう、
+  // 動画は400件ずつ先に書き込み、再生リスト本体・カウンタは最後の1バッチでまとめて確定する。
+  // 途中で失敗しても再生リスト本体が無いので一覧には出ず、再登録時は同じドキュメントIDに上書きされる
+  const VIDEO_CHUNK_SIZE = 400;
+  for (let start = 0; start < items.length; start += VIDEO_CHUNK_SIZE) {
+    const videoBatch = adminDb.batch();
+    for (const item of items.slice(start, start + VIDEO_CHUNK_SIZE)) {
+      const videoRef = adminDb.collection('videos').doc(`${playlist.youtubePlaylistId}_${item.youtubeVideoId}`);
+      videoBatch.set(videoRef, {
+        youtubeVideoId: item.youtubeVideoId,
+        playlistId: playlist.youtubePlaylistId,
+        position: item.position,
+        title: item.title,
+        thumbnailUrl: item.thumbnailUrl,
+        durationSeconds: durations.get(item.youtubeVideoId) ?? null,
+        publishedAt: new Date(item.publishedAt),
+        playStartCount: 0,
+      });
+    }
+    await videoBatch.commit();
+  }
 
   const now = new Date();
   const batch = adminDb.batch();
@@ -150,24 +177,14 @@ export async function registerPlaylist(params: {
     score: null,
     reviewCount: 0,
     mylistCount: 0,
-    playlistTagIds: [],
-    playlistTagsFixed: [],
+    playlistTagIds: fixedTagIds,
+    playlistTagsFixed: fixedTagIds,
     referenceUrl: playlistUrl,
     lastFetchedAt: null,
   });
 
-  for (const item of items) {
-    const videoRef = adminDb.collection('videos').doc(`${playlist.youtubePlaylistId}_${item.youtubeVideoId}`);
-    batch.set(videoRef, {
-      youtubeVideoId: item.youtubeVideoId,
-      playlistId: playlist.youtubePlaylistId,
-      position: item.position,
-      title: item.title,
-      thumbnailUrl: item.thumbnailUrl,
-      durationSeconds: durations.get(item.youtubeVideoId) ?? null,
-      publishedAt: new Date(item.publishedAt),
-      playStartCount: 0,
-    });
+  for (const tagId of fixedTagIds) {
+    batch.update(adminDb.collection('tags').doc(tagId), { usagePlaylistCount: FieldValue.increment(1) });
   }
 
   batch.update(gameRef, { playlistCount: (game.playlistCount ?? 0) + 1 });

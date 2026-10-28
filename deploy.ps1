@@ -71,11 +71,11 @@ if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
-# 2. Firestore ルール・インデックスをデプロイ
+# 2. Firestore ルール・インデックスと Storage ルール（お問い合わせの添付画像、全拒否）をデプロイ
 # 新コードが依存するルール/インデックスを、Cloud Run に新リビジョンが載る前に反映しておく。
 # 以前は hosting のみで手動運用だったため両環境への反映漏れが起きやすかった（wiki/concepts/ステージング環境運用方針.md）
-Write-Host "Deploying Firestore rules and indexes..." -ForegroundColor Green
-firebase deploy --only firestore:rules,firestore:indexes --project "$ProjectId"
+Write-Host "Deploying Firestore rules, indexes and Storage rules..." -ForegroundColor Green
+firebase deploy --only firestore:rules,firestore:indexes,storage --project "$ProjectId"
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR: Firestore rules/indexes deploy failed (exit code $LASTEXITCODE). Aborting deploy." -ForegroundColor Red
     exit $LASTEXITCODE

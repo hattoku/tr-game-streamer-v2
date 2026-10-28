@@ -4,10 +4,11 @@
  * `NEXT_PUBLIC_TEST_MODE=true` かつ本番以外のビルドでのみ描画する（判定は lib/app-env.ts）。
  * ログインは /api/test/sign-in が毎回設定し直す使い捨てパスワードで行う（資格情報を環境変数やコードに持たない）。
  * モバイルではボトムタブバーに重ならないよう、その上に置く。
+ * 画面下の操作バー等に重なって押しにくいときは、見出しの「－」で小さな🧪ボタンに畳める（畳んだ状態はブラウザに保存し、次回以降も保つ）。
  */
 'use client';
 
-import { useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
@@ -19,7 +20,39 @@ type Kind = 'user' | 'admin';
 
 const KIND_LABEL: Record<Kind, string> = { user: '一般ユーザー', admin: '管理者' };
 
+const COLLAPSED_KEY = 'testModeWidgetCollapsed';
+const collapsedListeners = new Set<() => void>();
+
+function readCollapsed(): boolean {
+  try {
+    return localStorage.getItem(COLLAPSED_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writeCollapsed(collapsed: boolean) {
+  try {
+    localStorage.setItem(COLLAPSED_KEY, collapsed ? '1' : '0');
+  } catch {
+    // 保存できない環境（プライベートウィンドウ等）では、畳んだ状態は次回に持ち越さない
+  }
+  collapsedListeners.forEach((l) => l());
+}
+
+function subscribeCollapsed(listener: () => void) {
+  collapsedListeners.add(listener);
+  return () => {
+    collapsedListeners.delete(listener);
+  };
+}
+
+const POSITION_CLASS =
+  'fixed right-[calc(0.75rem+env(safe-area-inset-right))] z-[70] bottom-[calc(var(--spacing-bottom-tabs)+env(safe-area-inset-bottom)+12px)] md:bottom-4';
+
 export function TestModeWidget() {
+  // サーバー描画・ハイドレーション時は展開で固定し、保存済みの状態はその後に反映する
+  const collapsed = useSyncExternalStore(subscribeCollapsed, readCollapsed, () => false);
   const { user, role, loading, refreshRole } = useAuth();
   const [busy, setBusy] = useState<Kind | 'signout' | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -64,12 +97,37 @@ export function TestModeWidget() {
 
   const disabled = busy !== null || loading;
 
+  if (collapsed) {
+    return (
+      <aside aria-label="テストモード" className={POSITION_CLASS}>
+        <button
+          type="button"
+          onClick={() => writeCollapsed(false)}
+          aria-label="テストモードを開く"
+          className="inline-flex size-9 items-center justify-center rounded-full border border-brand-primary bg-gradient-elevated text-base shadow-elevated"
+        >
+          🧪
+        </button>
+      </aside>
+    );
+  }
+
   return (
     <aside
       aria-label="テストモード"
-      className="fixed right-[calc(0.75rem+env(safe-area-inset-right))] z-[70] w-[200px] rounded-[10px] border border-brand-primary bg-gradient-elevated p-3 text-md shadow-elevated bottom-[calc(var(--spacing-bottom-tabs)+env(safe-area-inset-bottom)+12px)] md:bottom-4"
+      className={cn(POSITION_CLASS, 'w-[200px] rounded-[10px] border border-brand-primary bg-gradient-elevated p-3 text-md shadow-elevated')}
     >
-      <p className="mb-2 font-medium text-text-primary">🧪 テストモード</p>
+      <div className="mb-2 flex items-center justify-between">
+        <p className="font-medium text-text-primary">🧪 テストモード</p>
+        <button
+          type="button"
+          onClick={() => writeCollapsed(true)}
+          aria-label="テストモードを畳む"
+          className="inline-flex size-6 items-center justify-center rounded-[4px] text-text-tertiary hover:bg-bg-hover hover:text-text-primary"
+        >
+          －
+        </button>
+      </div>
       <p className="mb-2 text-text-muted">
         現在: {loading ? '確認中' : currentKind ? `${KIND_LABEL[currentKind]}でログイン中` : 'ログアウト中'}
       </p>

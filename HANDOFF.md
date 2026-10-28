@@ -19,6 +19,11 @@
 > 2026-10-26 作り込み: ステップ表示・提案履歴（`/playlists/proposals`）・審査結果通知・別名（`games.aliases`）と楽天候補でのゲーム検索・審査画面の動画一覧と定型の見送り理由・未処理バッジ。
 > `workflows` の本人直接読み取りは通報だけに限定。詳細は [[2026-10-25-phase7-step7-4-proposals]]。後日タスク: Discord 週次サマリー（別タスク）。
 > 次は 7-1 の本文整備（利用規約・プライバシーポリシー）→本番デプロイ。
+> **お問い合わせの画像添付** 実装済み（2026-10-27、計画 `/mnt/project-files/plans/お問い合わせ画像添付-実装計画.md`、ページ お問い合わせフォーム仕様書 §9）。
+> 本番に出す前に必要な作業（stg・本番それぞれ）: ①Firebase コンソールで Storage を有効化（本番環境モード。無料枠のため US のリージョンを選ぶ。stg は 2026-10-27 に US-EAST1 で有効化済み）
+> ②Cloud Run のサービスアカウントがバケットのオブジェクトを読み書き・削除できること（既定の Compute SA は編集者ロールで足りる）
+> ③`deploy.ps1` が `storage.rules` を一緒にデプロイする（Storage 未有効だと失敗する。クラウド用の `scripts/deploy-stg-cloud.sh` は `claude-stg-deployer` に Storage の閲覧権限が要る）④削除ジョブを作る:
+> `gcloud scheduler jobs create http purge-inquiry-attachments-daily --location asia-northeast1 --schedule "30 4 * * *" --time-zone "Asia/Tokyo" --http-method POST --uri "<Cloud Run の URL>/api/admin/inquiries/purge-attachments" --headers "X-Cron-Secret=<CRON_SECRET>" --project <プロジェクトID>`
 > **rules の変更（inquiries の本人読み取り禁止、7-3-1 の write false）は次回 `deploy.ps1` で反映**。
 > コードを先にデプロイしてから rules を反映する順なら問題ない（旧クライアントは本人読み取りをしていない）。
 > `firestore.rules` の `inquiries` を write false にした変更は次回 `deploy.ps1` で stg/本番に反映。
@@ -1400,6 +1405,7 @@ Firebase Hostingの設定のみの反映。**正式公開でnoindex/Basic認証�
 - ~~パスワード再設定~~ → 7-2 で実装済み
 - お問い合わせ: 7-3-1（フォーム・管理画面）は 2026-10-14 実装済み（`wiki/sources/2026-10-14-phase7-step7-3-1-inquiries.md`）。7-3-2（履歴・ユーザー側スレッド・返信通知）は 2026-10-24 実装済み（stg 実機確認は未実施）
 - ~~一般ユーザーの再生リスト登録または提案フロー（現状は管理者専用のため、友人は追加ができない）~~ → 7-4 で提案フローを実装（2026-10-25）
+- コンテンツ充実（7-5）: 有名チャンネル起点の再生リスト自動探索・まとめて承認・タグのカテゴリ別一覧を 2026-10-26 実装（`wiki/sources/2026-10-26-phase7-step7-5-content-collection.md`）。本番の週1実行は Cloud Scheduler ジョブの作成が別途必要
 - ~~通報の受け皿（審査ワークフロー最小版）~~ → フェーズ6ステップ3（2026-09-22）で通報の一覧・承認/却下を実装済み
 
 ### フェーズ8: 販促・正式公開判断

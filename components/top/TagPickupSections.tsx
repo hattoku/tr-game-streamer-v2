@@ -1,6 +1,6 @@
 /**
  * TOPページ タグピックアップセクション（ページ top 仕様書 §8）。未ログイン・ログイン済み問わず表示。
- * `tags.usagePlaylistCount`降順の上位6件（0件のタグは対象外、§8.2実装注記）について、
+ * `tags.usagePlaylistCount`降順の上位6件（0件のタグ・使用数3件未満のユーザー作成タグは対象外、§8.2実装注記）について、
  * タグごとに「# [タグ名] の再生リスト」セクションをスコア高い順（スコアなしは末尾）で並べる。
  */
 'use client';
@@ -9,13 +9,13 @@ import { useMemo } from 'react';
 import { PlaylistCard, sortPlaylists, type PlaylistSummary } from '@/components/playlists/PlaylistGrid';
 import { CarouselItem } from '@/components/ui/Carousel';
 import { TopSection } from '@/components/top/TopSection';
-import type { TagInfo } from '@/lib/tags';
+import { isListedTag, type TagInfo } from '@/lib/tags';
 
 export function TagPickupSections({ playlists, tags }: { playlists: PlaylistSummary[]; tags: Map<string, TagInfo> }) {
   const topTags = useMemo(
     () =>
       [...tags.values()]
-        .filter((t) => t.usagePlaylistCount > 0)
+        .filter((t) => isListedTag(t, 'playlist'))
         .sort((a, b) => b.usagePlaylistCount - a.usagePlaylistCount)
         .slice(0, 6),
     [tags],

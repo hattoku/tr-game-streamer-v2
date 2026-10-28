@@ -6,6 +6,7 @@
  * スレッドの先頭にはお問い合わせ内容（inquiries.body）をユーザーのメッセージとして表示する。
  * 未ログインユーザーのお問い合わせはスレッドが無いため（§4.5）、返信欄の代わりにメールでの返信を案内する
  * （メール通知は未実装のため、mailto リンクから手動で送る。フェーズ7ステップ7-3-1の決定）。
+ * ユーザーが添付した画像は本文の下にサムネイルで出し、クリックで拡大する（§4.6。管理者用の API から取得）。
  */
 'use client';
 
@@ -13,7 +14,15 @@ import { useEffect, useState } from 'react';
 import { notFound, useParams } from 'next/navigation';
 import { collection, doc, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
-import { INQUIRY_MEMO_MAX, INQUIRY_REPLY_MAX, INQUIRY_STATUSES, inquiryCategoryLabel, type InquiryStatus } from '@/lib/inquiry-shared';
+import {
+  INQUIRY_MEMO_MAX,
+  INQUIRY_REPLY_MAX,
+  INQUIRY_STATUSES,
+  inquiryCategoryLabel,
+  parseInquiryAttachments,
+  type InquiryAttachmentJson,
+  type InquiryStatus,
+} from '@/lib/inquiry-shared';
 import { Card, CardDivider, SectionHeading } from '@/components/ui/Card';
 import { Button, LinkButton } from '@/components/ui/Button';
 import { SelectMenu } from '@/components/ui/DropdownMenu';
@@ -23,6 +32,7 @@ import { SkeletonText } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 import { ChevronLeftIcon, ExternalLinkIcon } from '@/components/ui/icons';
 import { ThreadMessage, formatInquiryDate as formatDate } from '@/components/contact/ThreadMessage';
+import { InquiryAttachments } from '@/components/contact/InquiryAttachments';
 
 interface InquiryDetail {
   userId: string | null;
@@ -31,6 +41,7 @@ interface InquiryDetail {
   category: string;
   body: string;
   relatedUrls: string[];
+  attachments: InquiryAttachmentJson[];
   status: InquiryStatus;
   isGuest: boolean;
   operatorMemo: string | null;
@@ -41,6 +52,7 @@ interface Message {
   id: string;
   senderType: 'user' | 'admin';
   body: string;
+  attachments: InquiryAttachmentJson[];
   sentAt: number;
 }
 
@@ -79,6 +91,7 @@ export default function AdminInquiryDetailPage() {
           category: (data.category as string) ?? 'other',
           body: (data.body as string) ?? '',
           relatedUrls: Array.isArray(data.relatedUrls) ? (data.relatedUrls as string[]) : [],
+          attachments: parseInquiryAttachments(data.attachments),
           status: (data.status as InquiryStatus) ?? 'open',
           isGuest: data.isGuest === true,
           operatorMemo: (data.operatorMemo as string | null) ?? null,
@@ -101,6 +114,7 @@ export default function AdminInquiryDetailPage() {
               id: d.id,
               senderType: data.senderType === 'admin' ? 'admin' : 'user',
               body: (data.body as string) ?? '',
+              attachments: parseInquiryAttachments(data.attachments),
               sentAt: data.sentAt?.toMillis?.() ?? 0,
             };
           }),
@@ -241,6 +255,7 @@ export default function AdminInquiryDetailPage() {
         <div className="flex flex-col gap-2">
           <p className="text-lg font-medium text-text-primary">お問い合わせ内容</p>
           <p className="whitespace-pre-wrap break-words text-base text-text-secondary">{inquiry.body}</p>
+          <InquiryAttachments inquiryId={inquiryId} attachments={inquiry.attachments} scope="admin" className="mt-1" />
           {inquiry.relatedUrls.length > 0 && (
             <div className="mt-2 flex flex-col gap-1">
               <p className="text-md text-text-tertiary">関連URL</p>
@@ -327,6 +342,7 @@ export default function AdminInquiryDetailPage() {
                   sentAt={m.sentAt}
                   body={m.body}
                   fromAdmin={m.senderType === 'admin'}
+                  attachments={<InquiryAttachments inquiryId={inquiryId} attachments={m.attachments} scope="admin" />}
                 />
               ))}
             </ol>
