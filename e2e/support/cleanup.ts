@@ -5,7 +5,8 @@ import { applicationDefault, getApps, initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { E2E_MARK, STG_PROJECT_ID } from './env';
 
-function db() {
+/** stg の Firestore（Admin SDK）。後始末以外のテストの下準備にも使う */
+export function db() {
   const app =
     getApps().find((a) => a.name === 'e2e-cleanup') ??
     initializeApp({ credential: applicationDefault(), projectId: STG_PROJECT_ID }, 'e2e-cleanup');
