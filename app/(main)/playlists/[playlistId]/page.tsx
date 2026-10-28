@@ -126,6 +126,68 @@ function formatRemaining(remainingSeconds: number): string {
   return `残り${Math.floor(remainingSeconds / 60)}分`;
 }
 
+// スリープや長時間のタブ非表示から戻ったとみなす空白時間。これを超えて止まっていた埋め込みプレーヤーは
+// 「この動画は再生できません（エラーコード 152-18）」で使えなくなることがあるため、作り直す
+// （動画プレーヤー仕様書「プレーヤーの不調からの復帰」）
+const STALE_PLAYER_GAP_MS = 10 * 60 * 1000;
+const WAKE_CHECK_INTERVAL_MS = 30 * 1000;
+// プレーヤーのエラーで自動的に作り直すのは、この間隔に1回まで。続けてエラーになったら再読み込みを案内する
+const AUTO_REBUILD_COOLDOWN_MS = 60 * 1000;
+
+// 再生位置の端末内の控え（LocalStorage）。Firestore への書き込みが間に合わない・届かない場合
+// （ページを閉じる直前、スリープ復帰直後のオフラインなど）でも再開位置を失わないようにする
+// （動画プレーヤー仕様書「再生時間の記録タイミング」）
+interface LocalProgress {
+  youtubeVideoId: string;
+  seconds: number;
+  at: number;
+}
+
+function localProgressKey(uid: string, playlistId: string): string {
+  return `puremite:watch-progress:${uid}:${playlistId}`;
+}
+
+function readLocalProgress(uid: string, playlistId: string): LocalProgress | null {
+  try {
+    const raw = window.localStorage.getItem(localProgressKey(uid, playlistId));
+    if (!raw) return null;
+    const v = JSON.parse(raw);
+    if (typeof v?.youtubeVideoId !== 'string' || typeof v?.seconds !== 'number' || typeof v?.at !== 'number') return null;
+    return v;
+  } catch {
+    return null;
+  }
+}
+
+function writeLocalProgress(uid: string, playlistId: string, youtubeVideoId: string, seconds: number) {
+  try {
+    const value: LocalProgress = { youtubeVideoId, seconds, at: Date.now() };
+    window.localStorage.setItem(localProgressKey(uid, playlistId), JSON.stringify(value));
+  } catch {
+    // プライベートブラウズ等で使えない場合は Firestore のみ
+  }
+}
+
+// watch_progress（再開位置）と watch_history（視聴進捗%）を書き込み、視聴進捗%を返す
+async function writeProgressDocs(uid: string, playlistId: string, video: VideoItem, seconds: number): Promise<number> {
+  await setDoc(doc(db, 'watch_progress', `${uid}_${playlistId}_${video.youtubeVideoId}`), {
+    userId: uid,
+    playlistId,
+    youtubeVideoId: video.youtubeVideoId,
+    lastPlayedSeconds: seconds,
+    updatedAt: serverTimestamp(),
+  });
+  const percent = video.durationSeconds ? Math.min(100, Math.round((seconds / video.durationSeconds) * 100)) : 0;
+  await setDoc(doc(db, 'watch_history', `${uid}_${video.youtubeVideoId}`), {
+    userId: uid,
+    playlistId,
+    youtubeVideoId: video.youtubeVideoId,
+    progressPercent: percent,
+    watchedAt: serverTimestamp(),
+  });
+  return percent;
+}
+
 let ytApiPromise: Promise<void> | null = null;
 function loadYouTubeApi(): Promise<void> {
   if (window.YT?.Player) return Promise.resolve();
@@ -167,6 +229,8 @@ export default function PlaylistDetailPage() {
   // `?autoplay=1` で開かれた際の自動再生の試行中（オーバーレイの▶をスピナーにする）
   const [autoStartPending, setAutoStartPending] = useState(false);
   const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
+  // プレーヤーの作り直しでも直らないエラーが続いている（再読み込みを案内する）
+  const [playerError, setPlayerError] = useState(false);
   // 最終話の再生終了時ダイアログ（動画プレーヤー仕様書「最終話の再生終了時」）。null は非表示
   const [finishedPrompt, setFinishedPrompt] = useState<FinishedPromptSections | null>(null);
   const [finishedLoginOpen, setFinishedLoginOpen] = useState(false);
@@ -193,6 +257,20 @@ export default function PlaylistDetailPage() {
   // 最新レンダーの handleEnded（goToRelativeRef と同じ理由）
   const handleEndedRef = useRef<() => void>(() => {});
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // プレーヤー（iframe）のマウント先。作り直しのたびに中身を新しい要素に差し替えるため、React には子を描画させない
+  const playerHostRef = useRef<HTMLDivElement | null>(null);
+  // 直近の onStateChange の状態（YT.PlayerState）。イベントハンドラやタイマーから最新値を参照する
+  const playerStateRef = useRef<number | null>(null);
+  // 最後にプレーヤーから正常に読み取れた再生位置。スリープ復帰直後など不調のプレーヤーは 0 を返すことがあり、
+  // その値で保存済みの位置を上書きしないよう、一時停止中・離脱時・エラー時の保存はこちらを使う
+  const lastGoodPositionRef = useRef<{ youtubeVideoId: string; seconds: number } | null>(null);
+  // 直近に Firestore へ保存した位置（同じ値の書き込みを省く）
+  const lastSavedRef = useRef<{ youtubeVideoId: string; seconds: number } | null>(null);
+  // 直近にエラーを受けてプレーヤーを作り直した時刻
+  const lastErrorRebuildAtRef = useRef(0);
+  // 最新レンダーの flushProgress・rebuildPlayer（goToRelativeRef と同じ理由。タイマーやイベントから呼ぶ）
+  const flushProgressRef = useRef<() => void>(() => {});
+  const rebuildPlayerRef = useRef<() => void>(() => {});
   // 直近の recordEpisodeOpened（fire-and-forget）の書き込み Promise。saveProgress 側がこれを
   // 待ってから書き込むことで、ネットワーク遅延で recordEpisodeOpened が後から Firestore に
   // 届いて進捗を 0 に巻き戻してしまう競合を防ぐ
@@ -381,12 +459,29 @@ export default function PlaylistDetailPage() {
           ),
         );
         const lastProgress = progressSnap.docs[0]?.data();
-        if (lastProgress) {
+        let resume: { youtubeVideoId: string; seconds: number } | null = lastProgress
+          ? { youtubeVideoId: lastProgress.youtubeVideoId, seconds: lastProgress.lastPlayedSeconds ?? 0 }
+          : null;
+        // 端末内の控えの方が新しければ（Firestore への最後の書き込みが届かなかった）そちらを使い、Firestore にも書き戻す
+        const local = readLocalProgress(user.uid, playlistId);
+        const remoteAt: number = lastProgress?.updatedAt?.toMillis?.() ?? 0;
+        if (local && local.at > remoteAt) {
+          const localVideo = videoList.find((v) => v.youtubeVideoId === local.youtubeVideoId);
+          if (localVideo) {
+            resume = { youtubeVideoId: local.youtubeVideoId, seconds: local.seconds };
+            writeProgressDocs(user.uid, playlistId, localVideo, local.seconds)
+              .then((percent) => setWatchHistory((prev) => ({ ...prev, [localVideo.youtubeVideoId]: percent })))
+              .catch((err) => console.error(err));
+          }
+        }
+        if (resume) {
           const ordered = reverse ? [...videoList].reverse() : videoList;
-          const idx = ordered.findIndex((v) => v.youtubeVideoId === lastProgress.youtubeVideoId);
+          const target = resume;
+          const idx = ordered.findIndex((v) => v.youtubeVideoId === target.youtubeVideoId);
           if (idx >= 0) {
             setCurrentIndex(idx);
-            setResumeSeconds(lastProgress.lastPlayedSeconds ?? 0);
+            setResumeSeconds(target.seconds);
+            lastGoodPositionRef.current = target;
           }
         }
       }
@@ -411,7 +506,10 @@ export default function PlaylistDetailPage() {
   }, [playlistId]);
 
   async function recordEpisodeOpened(video: VideoItem, startSeconds: number) {
+    lastGoodPositionRef.current = { youtubeVideoId: video.youtubeVideoId, seconds: startSeconds };
     if (!user || !playlistId) return;
+    writeLocalProgress(user.uid, playlistId, video.youtubeVideoId, startSeconds);
+    lastSavedRef.current = { youtubeVideoId: video.youtubeVideoId, seconds: startSeconds };
     const write = setDoc(doc(db, 'watch_progress', `${user.uid}_${playlistId}_${video.youtubeVideoId}`), {
       userId: user.uid,
       playlistId,
@@ -426,34 +524,66 @@ export default function PlaylistDetailPage() {
   async function saveProgress(video: VideoItem, seconds: number) {
     if (!user || !playlistId) return;
     // recordEpisodeOpened の書き込みが先に Firestore に届くよう待ち合わせる（上記コメント参照）
+    const last = lastSavedRef.current;
+    if (last?.youtubeVideoId === video.youtubeVideoId && last.seconds === seconds) return;
+    lastSavedRef.current = { youtubeVideoId: video.youtubeVideoId, seconds };
+    // ページを閉じる直前など Firestore への書き込みが終わらない場合に備え、先に端末内へ控えを残す
+    writeLocalProgress(user.uid, playlistId, video.youtubeVideoId, seconds);
     await openWriteRef.current?.catch(() => {});
-    await setDoc(doc(db, 'watch_progress', `${user.uid}_${playlistId}_${video.youtubeVideoId}`), {
-      userId: user.uid,
-      playlistId,
-      youtubeVideoId: video.youtubeVideoId,
-      lastPlayedSeconds: seconds,
-      updatedAt: serverTimestamp(),
-    });
-    const percent = video.durationSeconds ? Math.min(100, Math.round((seconds / video.durationSeconds) * 100)) : 0;
-    await setDoc(doc(db, 'watch_history', `${user.uid}_${video.youtubeVideoId}`), {
-      userId: user.uid,
-      playlistId,
-      youtubeVideoId: video.youtubeVideoId,
-      progressPercent: percent,
-      watchedAt: serverTimestamp(),
-    });
+    const percent = await writeProgressDocs(user.uid, playlistId, video, seconds);
     setWatchHistory((prev) => ({ ...prev, [video.youtubeVideoId]: percent }));
   }
 
+  // プレーヤーが正常に動いていると判断できるときだけ、現在の再生位置（秒）を返す。
+  // 再生中・一時停止中・バッファ中で、動画の長さが取れていて、対象の動画を読み込んでいること。
+  // それ以外（スリープ復帰後のエラー表示中、読み込み直後など）は null
+  function readHealthyPosition(): number | null {
+    const player = playerRef.current;
+    const video = currentVideoRef.current;
+    const YT = window.YT;
+    if (!player || !video || !playerReadyRef.current || !YT || typeof player.getCurrentTime !== 'function') return null;
+    const state = player.getPlayerState?.();
+    if (state !== YT.PlayerState.PLAYING && state !== YT.PlayerState.PAUSED && state !== YT.PlayerState.BUFFERING) return null;
+    if (!(player.getDuration?.() > 0)) return null;
+    const loadedId = player.getVideoData?.()?.video_id;
+    if (loadedId && loadedId !== video.youtubeVideoId) return null;
+    const seconds = Math.floor(player.getCurrentTime());
+    lastGoodPositionRef.current = { youtubeVideoId: video.youtubeVideoId, seconds };
+    return seconds;
+  }
+
+  // 現在の動画の再生位置を保存する（一時停止・タブ非表示・ページ離脱・エラー・動画の切り替え直前）。
+  // 再生中ならプレーヤーから読み取り、そうでなければ最後に正常に読み取れた位置を使う。
+  // 止まっているプレーヤーは不調でも気づけないため、その値では上書きしない
+  function flushProgress() {
+    const video = currentVideoRef.current;
+    if (!video) return;
+    const live = playerStateRef.current === window.YT?.PlayerState?.PLAYING ? readHealthyPosition() : null;
+    const last = lastGoodPositionRef.current;
+    const seconds = live ?? (last?.youtubeVideoId === video.youtubeVideoId ? last.seconds : null);
+    if (seconds == null) return;
+    saveProgress(video, seconds).catch((err) => console.error(err));
+  }
+  useEffect(() => {
+    flushProgressRef.current = flushProgress;
+  });
+
+  // 再生中だけ 5 秒ごとに保存する（一時停止したら止める）
   function startInterval() {
     if (intervalRef.current) return;
     intervalRef.current = setInterval(() => {
-      const player = playerRef.current;
+      if (playerStateRef.current !== window.YT?.PlayerState?.PLAYING) return;
       const video = currentVideoRef.current;
-      if (!player || !video || typeof player.getCurrentTime !== 'function') return;
-      const seconds = Math.floor(player.getCurrentTime());
-      saveProgress(video, seconds);
+      const seconds = readHealthyPosition();
+      if (!video || seconds == null) return;
+      saveProgress(video, seconds).catch((err) => console.error(err));
     }, 5000);
+  }
+
+  function stopInterval() {
+    if (!intervalRef.current) return;
+    clearInterval(intervalRef.current);
+    intervalRef.current = null;
   }
 
   // YT.Player を新規生成する。通常は再生対象が決まった時点で cue（autoplay: false）として
@@ -461,15 +591,31 @@ export default function PlaylistDetailPage() {
   // で行う。autoplay: true で呼ぶのは、その先読みが間に合わなかった場合のフォールバックのみ
   // （この経路は iOS Safari では自動再生されないことがあるが、動画自体はロードされるので
   // 手動で再生ボタンを押せば再生できる）
+  // 既にプレーヤーがあれば破棄して作り直す（rebuildPlayer 参照）
   function createPlayer(video: VideoItem, startSeconds: number, autoplay: boolean) {
-    playerRef.current = new window.YT.Player('yt-player-target', {
-      // マウント先の div は iframe に置き換えられるため、親（aspect-video の箱）いっぱいのサイズを明示する
+    const host = playerHostRef.current;
+    if (!host) return;
+    try {
+      playerRef.current?.destroy?.();
+    } catch (err) {
+      console.error(err);
+    }
+    playerReadyRef.current = false;
+    playerStateRef.current = null;
+    stopInterval();
+    // マウント先の要素は iframe に置き換えられるため、作るたびに新しい要素を用意する
+    const mount = document.createElement('div');
+    host.replaceChildren(mount);
+    const player = new window.YT.Player(mount, {
+      // 親（aspect-video の箱）いっぱいのサイズを明示する
       width: '100%',
       height: '100%',
       videoId: video.youtubeVideoId,
       playerVars: { autoplay: autoplay ? 1 : 0, start: Math.floor(startSeconds), playsinline: 1 },
       events: {
         onReady: (e: any) => {
+          // 作り直し後に古いプレーヤーから届いたイベントは無視する
+          if (playerRef.current !== player) return;
           playerReadyRef.current = true;
           // `?autoplay=1` で開かれた場合は、cue 済みの先読みプレーヤーで再生開始を試みる。
           // ページ内遷移の直後なら PC ブラウザでは概ね許可されるが、iOS Safari などでは
@@ -484,8 +630,10 @@ export default function PlaylistDetailPage() {
           }
         },
         onStateChange: (e: any) => {
+          if (playerRef.current !== player) return;
           const YT = window.YT;
           debugLog(`state=${e.data}`);
+          playerStateRef.current = e.data;
           const autoAdvance = autoAdvanceRef.current;
           if (autoAdvance) {
             if (Date.now() > autoAdvance.deadline || autoAdvance.retries <= 0) {
@@ -508,6 +656,7 @@ export default function PlaylistDetailPage() {
           }
           if (e.data === YT.PlayerState.PLAYING) {
             setIsPlaying(true);
+            setPlayerError(false);
             startInterval();
             if (autoStartingRef.current) {
               // 自動再生が成功した: ボタン押下時（handleStart）と同じく開始済みとして扱う
@@ -519,19 +668,106 @@ export default function PlaylistDetailPage() {
               if (video) recordEpisodeOpened(video, Math.floor(e.target.getCurrentTime())).catch((err) => console.error(err));
             }
           }
-          if (e.data === YT.PlayerState.PAUSED) setIsPlaying(false);
+          if (e.data !== YT.PlayerState.PLAYING && e.data !== YT.PlayerState.BUFFERING) stopInterval();
+          if (e.data === YT.PlayerState.PAUSED) {
+            setIsPlaying(false);
+            // 一時停止した位置を保存する（以後、再生を再開するまで定期保存はしない）
+            const video = currentVideoRef.current;
+            const seconds = readHealthyPosition();
+            if (video && seconds != null) saveProgress(video, seconds).catch((err) => console.error(err));
+          }
           if (e.data === YT.PlayerState.ENDED) {
+            setIsPlaying(false);
             const ended = currentVideoRef.current;
-            if (ended?.durationSeconds) saveProgress(ended, ended.durationSeconds);
+            if (ended?.durationSeconds) {
+              lastGoodPositionRef.current = { youtubeVideoId: ended.youtubeVideoId, seconds: ended.durationSeconds };
+              saveProgress(ended, ended.durationSeconds).catch((err) => console.error(err));
+            }
             debugLog(`ENDED continuous=${continuousPlayRef.current}`);
             // 生成時点の古い関数ではなく最新のものを呼ぶ（handleEndedRef 参照）
             handleEndedRef.current();
           }
         },
+        // プレーヤーのエラー（動画プレーヤー仕様書「プレーヤーの不調からの復帰」）。最後に正常に読み取れた位置を
+        // 保存したうえで、その位置で一時停止状態のプレーヤーを作り直す。作り直しても続けてエラーになる場合は
+        // 作り直しを繰り返さず、ページの再読み込みを案内する
+        onError: (e: any) => {
+          if (playerRef.current !== player) return;
+          debugLog(`error=${e.data}`);
+          setIsPlaying(false);
+          stopInterval();
+          flushProgressRef.current();
+          if (Date.now() - lastErrorRebuildAtRef.current < AUTO_REBUILD_COOLDOWN_MS) {
+            setPlayerError(true);
+            return;
+          }
+          lastErrorRebuildAtRef.current = Date.now();
+          rebuildPlayerRef.current();
+        },
       },
     });
+    playerRef.current = player;
     cuedVideoIdRef.current = video.youtubeVideoId;
   }
+
+  // 現在の動画を、保存済みの位置で一時停止（cue）状態のプレーヤーとして作り直す。
+  // 再生開始前（サムネイル表示中）なら「続きから再生する」の位置、開始後なら最後に正常に読み取れた位置
+  function rebuildPlayer() {
+    const video = currentVideoRef.current;
+    if (!video || !window.YT?.Player) return;
+    const last = lastGoodPositionRef.current;
+    const seconds = last?.youtubeVideoId === video.youtubeVideoId ? last.seconds : resumeSeconds;
+    debugLog(`rebuild at ${seconds}`);
+    autoAdvanceRef.current = null;
+    setIsPlaying(false);
+    setResumeSeconds(seconds);
+    createPlayer(video, seconds, false);
+  }
+  useEffect(() => {
+    rebuildPlayerRef.current = rebuildPlayer;
+  });
+
+  // スリープ・長時間のタブ非表示からの復帰を検知したら、再生中でなければプレーヤーを作り直す。
+  // タブを隠したときとページを閉じるときは、その時点の再生位置を保存する
+  useEffect(() => {
+    let lastTick = Date.now();
+    let hiddenAt: number | null = null;
+    const onWake = (gap: number) => {
+      debugLog(`wake gap=${Math.round(gap / 1000)}s`);
+      // タイマーと visibilitychange の両方で検知しても作り直しは1回にする
+      lastTick = Date.now();
+      hiddenAt = null;
+      if (!playerRef.current) return;
+      if (playerStateRef.current === window.YT?.PlayerState?.PLAYING) return;
+      rebuildPlayerRef.current();
+    };
+    // スリープ中はタイマーが止まるため、次に動いたときの時刻の飛びで復帰を検知する
+    const timer = setInterval(() => {
+      const now = Date.now();
+      const gap = now - lastTick;
+      lastTick = now;
+      if (gap > STALE_PLAYER_GAP_MS) onWake(gap);
+    }, WAKE_CHECK_INTERVAL_MS);
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        hiddenAt = Date.now();
+        flushProgressRef.current();
+        return;
+      }
+      const gap = hiddenAt != null ? Date.now() - hiddenAt : 0;
+      hiddenAt = null;
+      lastTick = Date.now();
+      if (gap > STALE_PLAYER_GAP_MS) onWake(gap);
+    };
+    const onPageHide = () => flushProgressRef.current();
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pagehide', onPageHide);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pagehide', onPageHide);
+    };
+  }, []);
 
   function handleStart() {
     // 自動再生の試行中（または試行前）にユーザーが押した場合は、こちらの経路で開始済みとする
@@ -565,6 +801,8 @@ export default function PlaylistDetailPage() {
     const nextIndex = currentIndex + delta;
     const nextVideo = orderedVideos[nextIndex];
     if (!nextVideo) return;
+    // 切り替える前の動画の位置を確定させる
+    flushProgress();
     setCurrentIndex(nextIndex);
     setResumeSeconds(0);
     recordEpisodeOpened(nextVideo, 0).catch((err) => console.error(err));
@@ -618,6 +856,7 @@ export default function PlaylistDetailPage() {
   function jumpTo(index: number) {
     const video = orderedVideos[index];
     if (!video) return;
+    if (playerStarted) flushProgress();
     setCurrentIndex(index);
     setResumeSeconds(0);
     setPlayerStarted(true);
@@ -634,7 +873,8 @@ export default function PlaylistDetailPage() {
 
   function togglePlayPause() {
     const player = playerRef.current;
-    if (!player) return;
+    // 作り直し直後で準備ができていない間は何もしない
+    if (!player || !playerReadyRef.current) return;
     if (isPlaying) player.pauseVideo();
     else player.playVideo();
   }
@@ -748,6 +988,8 @@ export default function PlaylistDetailPage() {
 
   useEffect(() => {
     return () => {
+      // ページ内の遷移で離れるときも、その時点の位置を保存する
+      flushProgressRef.current();
       if (intervalRef.current) clearInterval(intervalRef.current);
       if (autoStartTimerRef.current) clearTimeout(autoStartTimerRef.current);
       if (autoAdvanceTimerRef.current) clearTimeout(autoAdvanceTimerRef.current);
@@ -787,7 +1029,7 @@ export default function PlaylistDetailPage() {
         )}
       >
         {/* プレーヤーのマウント先は常に置いておき、開始前はサムネイルを重ねる */}
-        <div id="yt-player-target" className="absolute inset-0 size-full" />
+        <div ref={playerHostRef} className="absolute inset-0 size-full" />
         {!playerStarted && (
           <button
             type="button"
@@ -853,6 +1095,16 @@ export default function PlaylistDetailPage() {
               シアター{theaterMode ? '解除' : ''}
             </Button>
             <Checkbox label="連続再生" checked={continuousPlay} onChange={(e) => handleContinuousPlayToggle(e.target.checked)} className="ml-1" />
+          </div>
+        )}
+        {playerError && (
+          <div role="alert" className="flex flex-wrap items-center gap-3 rounded-[8px] border border-border-card bg-bg-card p-3 text-md text-text-primary">
+            <span className="flex-1">
+              プレーヤーを読み込めませんでした。ページを再読み込みしてください（再生位置は保存されています）。
+            </span>
+            <Button variant="secondary" onClick={() => window.location.reload()}>
+              ページを再読み込み
+            </Button>
           </div>
         )}
         {debugLines.length > 0 && (
