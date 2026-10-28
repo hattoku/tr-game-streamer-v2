@@ -1,6 +1,6 @@
 # プレミテ Firestore データモデル設計書
 
-**バージョン**: v1.24  
+**バージョン**: v1.25  
 **作成日**: 2026年3月30日（更新）  
 **対象**: 開発チーム  
 **関連ドキュメント**: プレミテ企画書 / プレミテ_技術スタック仕様書 / 各機能仕様書
@@ -42,7 +42,9 @@
    - 3.27 [ng_words](#327-ng_words)
    - 3.28 [app_settings](#328-app_settings)
    - 3.29 [new_title_candidates](#329-new_title_candidates)
-   - 3.31 [exploration_channels](#331-exploration_channels)
+   - 3.30 [notifications](#330-notifications)
+   - 3.31 [inquiry_upload_counters](#331-inquiry_upload_counters)
+   - 3.32 [exploration_channels](#332-exploration_channels)
 4. [リレーション図](#4-リレーション図)
 5. [インデックス設計](#5-インデックス設計)
 6. [セキュリティルール方針](#6-セキュリティルール方針)
@@ -565,6 +567,9 @@ YouTubeチャンネルの情報。
 | `lastAdminMessageAt` | Timestamp? | — | 管理者が最後にスレッドへ返信した日時（ユーザー側の未読判定用） |
 | `userLastReadAt` | Timestamp? | — | 送信者本人が最後にスレッド詳細を開いた日時。`lastAdminMessageAt` より古ければ未読 |
 | `awaitingAdminReply` | boolean? | — | ユーザーが返信して管理者がまだ返信していない状態（管理画面の「ユーザー返信あり」）。ユーザーの返信で `true`、管理者の返信・クローズで `false`。未設定は `false` 扱い |
+| `attachments` | map[]? | — | お問い合わせ内容に添付した画像（0〜3件、構造は下記「添付画像」）。未設定は添付なし |
+| `hasAttachments` | boolean? | — | このお問い合わせ（本体または `messages`）に削除前の添付画像がある。添付時に `true`、保存期間での削除後に `false`。削除処理の対象を絞るために使う |
+| `resolvedAt` | Timestamp? | — | ステータスを「対応済み」にした日時。対応済み以外へ戻すと null。添付画像の保存期間（180日）の起点 |
 | `submittedAt` | Timestamp | ✅ | お問い合わせ送信日時 |
 | `updatedAt` | Timestamp | ✅ | 最終更新日時 |
 
@@ -575,7 +580,18 @@ YouTubeチャンネルの情報。
 | `senderId` | string? | — | 送信者ID |
 | `senderType` | string | ✅ | `"user"` / `"admin"` |
 | `body` | string | ✅ | メッセージ本文（2,000文字以内） |
+| `attachments` | map[]? | — | 添付画像（0〜3件、ユーザーのメッセージのみ。構造は下記「添付画像」） |
 | `sentAt` | Timestamp | ✅ | 送信日時 |
+
+**添付画像**（`attachments` の要素。ページ お問い合わせフォーム仕様書 §9、v1.24）
+
+| フィールド | 型 | 必須 | 説明 |
+|-----------|-----|:---:|------|
+| `id` | string | ✅ | ランダムな英数字20文字。Storage のファイル名 `inquiries/{inquiryId}/{id}.{ext}` に使う |
+| `format` | string | ✅ | 再エンコード後の形式。`"png"` / `"jpeg"` / `"webp"`（拡張子はそれぞれ `png`・`jpg`・`webp`） |
+| `width` / `height` | number | ✅ | 再エンコード後の画素数（表示前に枠を確保するため） |
+| `size` | number | ✅ | 再エンコード後のバイト数 |
+| `deletedAt` | Timestamp? | — | 保存期間を過ぎて Storage から削除した日時。削除前は null |
 
 > **設計注記（v1.19、フェーズ7ステップ7-3-1）**: 書き込みは API Route（Admin SDK）のみ。送信は `POST /api/inquiries`、管理操作
 > （ステータス変更・対応メモ・返信・クローズ・再オープン）は `PATCH /api/admin/inquiries/{inquiryId}`。フォームに件名欄が無いため
@@ -584,6 +600,9 @@ YouTubeチャンネルの情報。
 > **読み取り経路（v1.21、7-3-2）**: `operatorMemo` を送信者に渡さないため、`inquiries` と `messages` のクライアント読み取りは管理者のみとし、
 > 送信者本人は API（`GET /api/inquiries`・`GET /api/inquiries/{inquiryId}`、Admin SDK）経由で公開項目だけを受け取る。
 > ユーザーの返信・再オープンは `POST /api/inquiries/{inquiryId}`（管理 お問い合わせ管理仕様書 §1.1、2026-10-24 ユーザー決定）。
+> **添付画像（v1.24）**: 画像の本体は Cloud Storage（Firebase のデフォルトバケット）の `inquiries/{inquiryId}/` に置き、Firestore には添付情報だけを持つ。
+> `storage.rules` でクライアントの読み書きを全て拒否し、閲覧は本人用 `GET /api/inquiries/{inquiryId}/attachments/{fileName}` と管理者用
+> `GET /api/admin/inquiries/{inquiryId}/attachments/{fileName}` の API だけ。対応済みから180日で画像を削除する（管理 お問い合わせ管理仕様書 §6）。
 
 ---
 
@@ -703,7 +722,7 @@ YouTube API クォータ消費の記録。
 | `reviewComment` | string? | — | 却下理由など（自動却下時は `"not_public"` 等） |
 | `registeredPlaylistId` | string? | — | 登録した `playlists` のドキュメントID |
 
-> v1.24 で旧設計（ジャンル起点）の `genreId`・`genreName`・`aiOperatorId`・`aiResult`・`aiFlags`・`aiComment`・`latestVideoPublishedAt` と `approved` 状態を削除した。AI判定のフィールドは Gemini 導入時に追加する。
+> v1.25 で旧設計（ジャンル起点）の `genreId`・`genreName`・`aiOperatorId`・`aiResult`・`aiFlags`・`aiComment`・`latestVideoPublishedAt` と `approved` 状態を削除した。AI判定のフィールドは Gemini 導入時に追加する。
 
 ---
 
@@ -840,7 +859,25 @@ AI運営者（審査AI）の設定。プラットフォーム共通で1体のみ
 
 ---
 
-### 3.31 `exploration_channels`
+### 3.31 `inquiry_upload_counters`
+
+お問い合わせの画像添付の1日の上限（ユーザーごとに20枚、ページ お問い合わせフォーム仕様書 §9.2）を数えるカウンター。v1.24 で追加。
+
+**パス**: `inquiry_upload_counters/{userId}_{YYYYMMDD}`（日付は日本時間）
+
+| フィールド | 型 | 必須 | 説明 |
+|-----------|-----|:---:|------|
+| `userId` | string | ✅ | 対象ユーザー |
+| `date` | string | ✅ | `YYYYMMDD`（日本時間） |
+| `count` | number | ✅ | その日に保存した添付画像の枚数（フォームと返信の合計） |
+| `updatedAt` | Timestamp | ✅ | 最終更新日時 |
+
+> **設計注記**: 送信・返信の API がお問い合わせの書き込みと同じトランザクションで加算し、上限を超えるなら書き込まない。
+> クライアントからは読み書きしない（rules の既定の拒否に任せる）。7日より前の日付のものは添付画像の削除処理がついでに消す。
+
+---
+
+### 3.32 `exploration_channels`
 
 コンテンツ収集の探索対象チャンネル（AI運営者 コンテンツ収集機能仕様書 §3.1）。書き込みは API Route（Admin SDK）のみ。
 
@@ -913,6 +950,7 @@ ai_operators ──── (1) users
 | コレクション | インデックスフィールド | 用途 |
 |------------|-------------------|------|
 | `workflows` | `status` (asc) + `submittedAt` (desc) | ステータス別ワークフロー |
+| `inquiries` | `hasAttachments` (asc) + `resolvedAt` (asc) | 保存期間を過ぎた添付画像の削除対象（v1.24） |
 | `collection_candidates` | `status` (asc) + `collectedAt` (desc) | ステータス別候補一覧 |
 
 ---
@@ -923,7 +961,8 @@ ai_operators ──── (1) users
 - **個人データ**: `mylist`, `watch_progress`, `watch_history` は自分のみRW可。
 - **まとめ**: `collections` は公開・限定公開ならゲストR可、非公開は作成者本人と管理者のみR可。書き込みはAPI Route（Admin SDK）のみ（3.14節）。
   `saved_collections` は本人と管理者のみR可、書き込みはAPI Routeのみ（3.14.1節）。
-- **お問い合わせ**: `inquiries`（と `messages`）は管理者と送信者本人のみR可。書き込みはAPI Route（Admin SDK）のみ（3.17節）。
+- **お問い合わせ**: `inquiries`（と `messages`）は管理者のみR可（送信者本人は API 経由、v1.21）。書き込みはAPI Route（Admin SDK）のみ（3.17節）。
+  `inquiry_upload_counters` はクライアントから読み書き不可（3.31節）。添付画像の Cloud Storage は `storage.rules` でクライアントの読み書きを全て拒否する（v1.24）。
 - **管理データ**: `workflows`, `ai_operators`, `app_settings` は管理者のみRW可。
 - **不変ログ**: `operation_logs` はシステムのみW、管理者はRのみ。
 
@@ -976,4 +1015,5 @@ ai_operators ──── (1) users
 | v1.21 | 2026-10-24 | フェーズ7ステップ7-3-2（お問い合わせ履歴）。§3.17 `inquiries` に `lastAdminMessageAt`・`userLastReadAt`・`awaitingAdminReply` を追加し、送信者本人の読み取りを API 経由に変更。§3.30 `notifications` に `inquiry_reply` 種別と `inquiryId` を追加 |
 | v1.22 | 2026-10-25 | フェーズ7ステップ7-4（一般ユーザーの提案フロー）。§3.15 `workflows` に `proposalData`（`playlist_register`・`game_title_register`）と `editHistory` の構造を定義し、提案の作成を API 経由に限定。`playlists.proposedBy` を追加 |
 | v1.23 | 2026-10-25 | 再生リスト提案フローの作り込み。`workflows` の本人による直接読み取りを通報（`review_report`）に限定（提案は運営メモ・内部メモを含むため提案履歴 API 経由）。`games.aliases`（別名）、`workflows.proposalData` に `newGamePlatforms`・`newGameRakuten`・`rejectReasonCode`、`notifications` に `review_result` 種別と `workflowId` を追加 |
-| v1.24 | 2026-10-26 | フェーズ7-5（友人テスト前のコンテンツ充実）。コンテンツ収集をチャンネル起点に変更したことに合わせ、3.23 `collection_candidates` をタイトル・チャンネル起点のスキーマに改訂（ドキュメントIDを再生リストIDに、ゲーム推定・タグ候補を追加、ジャンル起点・AI判定のフィールドを削除）、3.24 `collection_batch_logs`・3.25 `collection_quota_logs` を改訂、3.31 `exploration_channels` を追加 |
+| v1.24 | 2026-10-27 | お問い合わせの画像添付。§3.17 `inquiries` に `attachments`・`hasAttachments`・`resolvedAt`、`messages` に `attachments` と添付画像の構造を追加。§3.31 `inquiry_upload_counters` を新設。§5.2 にインデックス、§6 に Storage のルール方針を追加 |
+| v1.25 | 2026-10-28 | フェーズ7-5（友人テスト前のコンテンツ充実）。コンテンツ収集をチャンネル起点に変更したことに合わせ、3.23 `collection_candidates` をタイトル・チャンネル起点のスキーマに改訂（ドキュメントIDを再生リストIDに、ゲーム推定・タグ候補を追加、ジャンル起点・AI判定のフィールドを削除）、3.24 `collection_batch_logs`・3.25 `collection_quota_logs` を改訂、3.32 `exploration_channels` を追加 |

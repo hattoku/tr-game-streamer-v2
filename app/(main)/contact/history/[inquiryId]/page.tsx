@@ -3,6 +3,7 @@
  * 取得・送信・再オープンはすべて本人専用の API（対応メモを渡さないため Firestore を直接読まない）。
  * 開いた時点でサーバー側が既読にする。リアルタイム更新はせず、自分の操作の後に取り直す。
  * スレッドの先頭にはお問い合わせ内容（body）を自分の最初のメッセージとして表示する（管理画面と同じ）。
+ * 返信には画像を添付でき、添付画像は本文の下にサムネイルで出す（フォーム仕様書 §9、2026-10-27）。
  */
 'use client';
 
@@ -10,7 +11,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { notFound, useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { InquiryApiError, fetchMyInquiry, postInquiryAction } from '@/lib/inquiries';
-import { INQUIRY_REPLY_MAX, inquiryCategoryLabel, inquiryStatusLabel, type UserInquiryDetailJson } from '@/lib/inquiry-shared';
+import {
+  INQUIRY_ATTACHMENT_ERRORS,
+  INQUIRY_REPLY_MAX,
+  inquiryCategoryLabel,
+  inquiryStatusLabel,
+  isInquiryAttachmentErrorCode,
+  type UserInquiryDetailJson,
+} from '@/lib/inquiry-shared';
 import { Card, CardDivider, SectionHeading } from '@/components/ui/Card';
 import { Button, LinkButton } from '@/components/ui/Button';
 import { Field, Textarea } from '@/components/ui/Input';
@@ -19,6 +27,8 @@ import { Tag } from '@/components/ui/Tag';
 import { useToast } from '@/components/ui/Toast';
 import { ChevronLeftIcon, ExternalLinkIcon } from '@/components/ui/icons';
 import { ThreadMessage, formatInquiryDate } from '@/components/contact/ThreadMessage';
+import { InquiryAttachments } from '@/components/contact/InquiryAttachments';
+import { AttachmentPicker, type PickedImage } from '@/components/contact/AttachmentPicker';
 
 export default function ContactThreadPage() {
   const { inquiryId } = useParams<{ inquiryId: string }>();
@@ -30,6 +40,8 @@ export default function ContactThreadPage() {
   const [missing, setMissing] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [reply, setReply] = useState('');
+  const [images, setImages] = useState<PickedImage[]>([]);
+  const [imageError, setImageError] = useState<string>();
   const [sending, setSending] = useState(false);
   const [reopening, setReopening] = useState(false);
 
@@ -61,11 +73,22 @@ export default function ContactThreadPage() {
     if (!text || text.length > INQUIRY_REPLY_MAX || sending) return;
     setSending(true);
     try {
-      await postInquiryAction(inquiryId, { action: 'reply', body: text });
+      await postInquiryAction(
+        inquiryId,
+        { action: 'reply', body: text },
+        images.map((i) => i.file),
+      );
       setReply('');
+      setImages([]);
       toast({ type: 'success', message: 'メッセージを送信しました' });
       await load();
     } catch (e) {
+      if (e instanceof InquiryApiError && isInquiryAttachmentErrorCode(e.code)) {
+        const message = INQUIRY_ATTACHMENT_ERRORS[e.code];
+        setImageError(message);
+        toast({ type: 'error', message });
+        return;
+      }
       const closed = e instanceof InquiryApiError && e.code === 'closed';
       toast({ type: 'error', message: closed ? 'このスレッドはクローズされています' : '送信に失敗しました。時間をおいて再試行してください' });
       if (closed) await load();
@@ -132,6 +155,7 @@ export default function ContactThreadPage() {
         <div className="flex flex-col gap-2">
           <p className="text-lg font-medium text-text-primary">お問い合わせ内容</p>
           <p className="whitespace-pre-wrap break-words text-base text-text-secondary">{inquiry.body}</p>
+          <InquiryAttachments inquiryId={inquiry.id} attachments={inquiry.attachments} scope="user" className="mt-1" />
           {inquiry.relatedUrls.length > 0 && (
             <div className="mt-2 flex flex-col gap-1">
               <p className="text-md text-text-tertiary">関連URL</p>
@@ -167,6 +191,7 @@ export default function ContactThreadPage() {
                 sentAt={m.sentAt}
                 body={m.body}
                 fromAdmin={m.senderType === 'admin'}
+                attachments={<InquiryAttachments inquiryId={inquiry.id} attachments={m.attachments} scope="user" />}
               />
             ))}
           </ol>
@@ -202,6 +227,7 @@ export default function ContactThreadPage() {
                 />
               )}
             </Field>
+            <AttachmentPicker images={images} onChange={setImages} error={imageError} onError={setImageError} disabled={sending} />
             <div className="flex justify-end">
               <Button variant="primary" onClick={sendReply} loading={sending} disabled={replyLength === 0 || replyLength > INQUIRY_REPLY_MAX}>
                 送信する

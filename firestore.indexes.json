@@ -90,6 +90,14 @@
         { "fieldPath": "status", "order": "ASCENDING" },
         { "fieldPath": "collectedAt", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "inquiries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "hasAttachments", "order": "ASCENDING" },
+        { "fieldPath": "resolvedAt", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

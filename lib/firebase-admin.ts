@@ -11,9 +11,12 @@ import { IS_PROD } from './app-env';
 // 接続先は lib/app-env.ts の判定に従う（明示的に prod と指定しない限りステージング）
 const projectId = IS_PROD ? 'tr-game-streamer' : 'tr-game-streamer-stg';
 
-const app = getApps().length === 0
-  ? initializeApp({ credential: applicationDefault(), projectId })
+// Cloud Storage はお問い合わせの添付画像だけに使う（lib/inquiry-attachments-server.ts）。バケットは Firebase のデフォルトバケット
+const storageBucket = `${projectId}.firebasestorage.app`;
+
+export const adminApp = getApps().length === 0
+  ? initializeApp({ credential: applicationDefault(), projectId, storageBucket })
   : getApps()[0];
 
-export const adminAuth = getAuth(app);
-export const adminDb = getFirestore(app);
+export const adminAuth = getAuth(adminApp);
+export const adminDb = getFirestore(adminApp);

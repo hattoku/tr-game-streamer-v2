@@ -6,7 +6,7 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './support/fixtures';
 import { uniqueText } from './support/env';
-import { e2eDb } from './support/cleanup';
+import { db as e2eDb } from './support/cleanup';
 
 function randomId(prefix: string): string {
   return `${prefix}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
