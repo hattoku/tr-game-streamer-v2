@@ -109,11 +109,12 @@ test('§3.7・§4.3 承認では、選んだ商品のJAN・楽天なし（null�
   test.setTimeout(120_000);
   const channelTitle = uniqueText('チャンネル');
   const explorationChannelId = randomId('e2e-ch-');
-  const rakutenSearch = { title: '野狗子', query: '野狗子', items: [SLITTERHEAD, SLITTERHEAD_MANIAC] };
+  // 検索済みの結果（ゲーム名で検索し、検索語「野狗子」で見つかった）を保存しておく
+  const rakutenSearchFor = (title: string) => ({ title, query: '野狗子', items: [SLITTERHEAD, SLITTERHEAD_MANIAC] });
   const pickedName = uniqueText('選んだゲーム');
   const noneName = uniqueText('楽天なしのゲーム');
-  const picked = await seedCandidate({ channelTitle, explorationChannelId, gameQuery: pickedName, rakutenSearch });
-  const none = await seedCandidate({ channelTitle, explorationChannelId, gameQuery: noneName, rakutenSearch });
+  const picked = await seedCandidate({ channelTitle, explorationChannelId, gameQuery: pickedName, rakutenSearch: rakutenSearchFor(pickedName) });
+  const none = await seedCandidate({ channelTitle, explorationChannelId, gameQuery: noneName, rakutenSearch: rakutenSearchFor(noneName) });
 
   await adminPage.goto('/admin/collection');
   await filterChannel(adminPage, channelTitle);
