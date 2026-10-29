@@ -4,10 +4,12 @@
 // 照合し、無ければ新規登録する。楽天ブックスでタイトルが一致する商品が見つかれば、パッケージ画像・商品ページURL・
 // 機種・ジャンル・テーマも入れる（見つからない・失敗したときは名前だけで登録する）。
 // 新規登録したのに、同じリクエストで再生リストを1件も登録できなかったゲームタイトルは discardUnused で消す。
+// v2.2 §3.7: 承認前に画面で楽天ブックスの商品を選べる。選んだ商品（JAN）を渡されたらそれを使い、
+// 「楽天なし」を渡されたら楽天を検索せず名前だけで登録する。何も渡されなければ従来どおり完全一致で探す。
 import { FieldValue } from 'firebase-admin/firestore';
 import { adminDb } from './firebase-admin';
 import { normalizeForMatch } from './exploration-rules';
-import { resolveRakutenGenre, searchRakutenGames, type RakutenGameSearchResult } from './rakuten';
+import { resolveRakutenGenre, searchRakutenGames, searchRakutenGamesByJan, type RakutenGameSearchResult } from './rakuten';
 import { normalizeRakutenBooksItemUrl, normalizeRakutenGameTitle, toMasterThemeName } from './rakuten-shared';
 import { PLATFORM_OPTIONS } from './game-shared';
 
@@ -17,9 +19,15 @@ export const MAX_GAME_TITLE_LENGTH = 100;
 // 楽天ブックスAPIのレートリミット（1req/秒）に掛からないよう、呼び出しの間隔をあける
 const RAKUTEN_INTERVAL_MS = 1100;
 
+/**
+ * 新規登録するゲームに結び付ける楽天ブックスの商品。
+ * undefined: 名前が完全一致する商品を探す／string: 画面で選んだ商品のJAN／null: 楽天なし（名前だけで登録）
+ */
+export type RakutenChoice = string | null | undefined;
+
 export interface CollectionGameResolver {
   /** ゲーム名から gameId を返す（既存に一致すればそのID、無ければ新規登録したID） */
-  resolve(title: string): Promise<{ gameId: string; created: boolean }>;
+  resolve(title: string, rakuten?: RakutenChoice): Promise<{ gameId: string; created: boolean }>;
   /** 再生リストの登録に成功したことを記録する（このリクエストで新規登録したゲームを残す対象にする） */
   markUsed(gameId: string): void;
   /** このリクエストで新規登録し、再生リストが1件も付かなかったゲームタイトルを消し、消したIDを返す */
@@ -75,13 +83,25 @@ export async function createCollectionGameResolver(): Promise<CollectionGameReso
     }
   }
 
-  async function resolve(rawTitle: string): Promise<{ gameId: string; created: boolean }> {
+  /** 画面で選んだ商品をJANで取り直す（見つからない・失敗したときは名前だけで登録する） */
+  async function findRakutenItemByJan(jan: string): Promise<RakutenGameSearchResult | null> {
+    try {
+      await throttle();
+      const results = await searchRakutenGamesByJan(jan);
+      return results.find((r) => r.jan === jan) ?? results[0] ?? null;
+    } catch (e) {
+      console.error('収集候補のゲーム登録で楽天ブックスのJAN検索に失敗', jan, e);
+      return null;
+    }
+  }
+
+  async function resolve(rawTitle: string, rakuten?: RakutenChoice): Promise<{ gameId: string; created: boolean }> {
     const title = rawTitle.trim();
     const key = normalizeForMatch(title);
     const existing = gameIdByNormalized.get(key);
     if (existing) return { gameId: existing, created: false };
 
-    const item = await findRakutenItem(title, key);
+    const item = rakuten === null ? null : rakuten ? await findRakutenItemByJan(rakuten) : await findRakutenItem(title, key);
     let genreId: string | null = null;
     let genreName: string | null = null;
     const themeIds: string[] = [];
@@ -154,4 +174,48 @@ export async function createCollectionGameResolver(): Promise<CollectionGameReso
   }
 
   return { resolve, markUsed: (gameId) => used.add(gameId), discardUnused };
+}
+
+// ---- 承認前の楽天ブックス検索（v2.2 §3.7） ----
+
+/** 候補に保存する楽天ブックスの商品（画面で選ぶのに必要な分だけ） */
+export interface RakutenPick {
+  jan: string;
+  title: string;
+  hardware: string;
+  imageUrl: string;
+  salesDate: string;
+}
+
+/**
+ * ゲーム名で楽天ブックスを検索するときの検索語。0件なら順に短くして探し直す。
+ * 再生リスト名由来のゲーム名には「デッドライジングDR」のような略称・副題が付いていることが多いため、
+ * 末尾の英数字の略称を外したもの、区切り（空白・コロン・中黒など）の前だけにしたものを続けて試す。
+ */
+export function rakutenQueriesFor(title: string): string[] {
+  const base = title.normalize('NFKC').trim();
+  const withoutSuffix = base.replace(/[\s\-_:・~〜]*[A-Za-z0-9]+$/, '').trim();
+  const firstSegment = base.split(/[\s:：・~〜\-–—|｜]/)[0]?.trim() ?? '';
+  const queries = [base];
+  // 英数字だけの名前（Pacific Drive 等）は短くすると別の語（Pacific）になるので、日本語を含む場合だけ短くする
+  if (withoutSuffix && /[^\x00-\x7F]/.test(withoutSuffix)) queries.push(withoutSuffix);
+  if (firstSegment.length >= 2 && /[^\x00-\x7F]/.test(firstSegment)) queries.push(firstSegment);
+  return [...new Set(queries.filter((q) => q.length >= 2))];
+}
+
+/** ゲーム名で楽天ブックスを検索する。0件なら検索語を短くして探し直す（呼び出しの間隔は1.1秒あける） */
+export async function searchRakutenForGameTitle(title: string): Promise<{ query: string; items: RakutenPick[] }> {
+  const queries = rakutenQueriesFor(title);
+  for (let i = 0; i < queries.length; i++) {
+    if (i > 0) await new Promise((resolve) => setTimeout(resolve, RAKUTEN_INTERVAL_MS));
+    const results = await searchRakutenGames(queries[i]);
+    if (results.some((r) => r.jan)) {
+      return {
+        query: queries[i],
+        // JAN で取り直して登録するため、JAN の無い商品は選べないので外す
+        items: results.filter((r) => r.jan).map((r) => ({ jan: r.jan, title: r.title, hardware: r.hardware, imageUrl: r.imageUrl, salesDate: r.salesDate })),
+      };
+    }
+  }
+  return { query: queries[0] ?? title, items: [] };
 }

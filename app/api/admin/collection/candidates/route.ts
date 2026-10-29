@@ -3,22 +3,31 @@ import { requireAdmin } from '@/lib/api-auth';
 import { adminDb } from '@/lib/firebase-admin';
 import { addCollectionQuotaUsage, checkCollectionQuota } from '@/lib/collection-quota';
 import { fetchOperatorTagIdsByName } from '@/lib/exploration-server';
-import { createCollectionGameResolver, MAX_GAME_TITLE_LENGTH, type CollectionGameResolver } from '@/lib/collection-game';
+import {
+  createCollectionGameResolver,
+  MAX_GAME_TITLE_LENGTH,
+  searchRakutenForGameTitle,
+  type CollectionGameResolver,
+  type RakutenChoice,
+} from '@/lib/collection-game';
+import { RakutenApiError } from '@/lib/rakuten';
 import { normalizeForMatch } from '@/lib/exploration-rules';
 import { registerPlaylist } from '@/lib/playlist-registration';
 import { getQuotaConsumed, resetQuotaCounter } from '@/lib/youtube';
 
-// 収集候補の承認・却下API（管理者専用。管理 AI運営者向け収集候補レビューUI仕様書 v2.1 §4・§5）。
+// 収集候補の承認・却下API（管理者専用。管理 AI運営者向け収集候補レビューUI仕様書 v2.2 §3.7・§4・§5）。
 // action:
-//   approve { items: [{ playlistId, gameId?, newGameTitle?, tagIds }] }  まとめて登録（最大50件、1件ずつ順に処理）
+//   approve { items: [{ playlistId, gameId?, newGameTitle?, rakutenJan?, tagIds }] }  まとめて登録（最大50件、1件ずつ順に処理）
 //           gameId が無い候補は newGameTitle のゲームを使う（既存に一致すればそれ、無ければ新規登録。§4.3）
+//           rakutenJan は新規登録するゲームに結び付ける楽天ブックスの商品（null は楽天なし、省略は完全一致で探す）
+//   rakuten_search { playlistId, title }                 新規のゲーム名で楽天ブックスを検索し、結果を候補に保存（§3.7）
 //   reject  { playlistIds }                              却下
 //   restore { playlistIds }                              却下済みを未処理に戻す
 // 登録処理は管理者用の再生リスト登録と共用（lib/playlist-registration.ts）。タグは運営者タグのみを固定タグとして付ける。
 const MAX_APPROVE_PER_REQUEST = 50;
 const MAX_STATUS_CHANGE_PER_REQUEST = 500;
 
-type ApproveItem = { playlistId: string; gameId: string | null; newGameTitle: string | null; tagIds: string[] };
+type ApproveItem = { playlistId: string; gameId: string | null; newGameTitle: string | null; rakutenJan: RakutenChoice; tagIds: string[] };
 
 type ApproveResult = { playlistId: string; ok: boolean; error?: string; createdGame?: { id: string; title: string } };
 
@@ -26,7 +35,7 @@ function parseApproveItems(value: unknown): ApproveItem[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((v) => {
     if (!v || typeof v !== 'object') return [];
-    const { playlistId, gameId, newGameTitle, tagIds } = v as Record<string, unknown>;
+    const { playlistId, gameId, newGameTitle, rakutenJan, tagIds } = v as Record<string, unknown>;
     if (typeof playlistId !== 'string' || !playlistId) return [];
     const id = typeof gameId === 'string' && gameId ? gameId : null;
     const title = typeof newGameTitle === 'string' && newGameTitle.trim() ? newGameTitle.trim() : null;
@@ -36,6 +45,7 @@ function parseApproveItems(value: unknown): ApproveItem[] {
       playlistId,
       gameId: id,
       newGameTitle: id ? null : title,
+      rakutenJan: rakutenJan === null ? null : typeof rakutenJan === 'string' && /^\d{8,14}$/.test(rakutenJan) ? rakutenJan : undefined,
       tagIds: Array.isArray(tagIds) ? tagIds.filter((t): t is string => typeof t === 'string') : [],
     }];
   });
@@ -49,9 +59,34 @@ export async function POST(request: NextRequest) {
   const auth = await requireAdmin(request);
   if ('errorResponse' in auth) return auth.errorResponse;
 
-  const body = (await request.json()) as { action?: unknown; items?: unknown; playlistIds?: unknown };
+  const body = (await request.json()) as { action?: unknown; items?: unknown; playlistIds?: unknown; playlistId?: unknown; title?: unknown };
   const now = new Date();
   const candidates = adminDb.collection('collection_candidates');
+
+  if (body.action === 'rakuten_search') {
+    const playlistId = typeof body.playlistId === 'string' ? body.playlistId : '';
+    const title = typeof body.title === 'string' ? body.title.trim() : '';
+    if (!playlistId || !title || title.length > MAX_GAME_TITLE_LENGTH) {
+      return NextResponse.json({ error: 'invalid_request' }, { status: 400 });
+    }
+    const ref = candidates.doc(playlistId);
+    const snap = await ref.get();
+    if (!snap.exists || snap.data()!.status !== 'pending') {
+      return NextResponse.json({ error: 'not_pending' }, { status: 404 });
+    }
+    try {
+      const result = await searchRakutenForGameTitle(title);
+      const rakutenSearch = { title, query: result.query, items: result.items, searchedAt: now };
+      await ref.update({ rakutenSearch });
+      return NextResponse.json({ title, query: result.query, items: result.items });
+    } catch (e) {
+      if (e instanceof RakutenApiError) {
+        console.error('収集候補の楽天ブックス検索に失敗', playlistId, e);
+        return NextResponse.json({ error: 'rakuten_api_error' }, { status: 502 });
+      }
+      throw e;
+    }
+  }
 
   if (body.action === 'reject' || body.action === 'restore') {
     const ids = parseIds(body.playlistIds);
@@ -113,7 +148,7 @@ export async function POST(request: NextRequest) {
       let createdGame: ApproveResult['createdGame'];
       if (!gameId) {
         try {
-          const resolved = await gameResolver!.resolve(item.newGameTitle!);
+          const resolved = await gameResolver!.resolve(item.newGameTitle!, item.rakutenJan);
           gameId = resolved.gameId;
           if (resolved.created) createdGame = { id: resolved.gameId, title: item.newGameTitle! };
         } catch (e) {

@@ -58,6 +58,23 @@ export async function fetchExplorationChannels(): Promise<ExplorationChannel[]> 
 
 export type CandidateStatus = 'pending' | 'registered' | 'rejected';
 
+/** 承認前に楽天ブックスを検索した結果（収集候補レビューUI仕様書 v2.2 §3.7）。lib/collection-game.ts の RakutenPick と同じ形 */
+export interface RakutenPick {
+  jan: string;
+  title: string;
+  hardware: string;
+  imageUrl: string;
+  salesDate: string;
+}
+
+export interface RakutenSearchResult {
+  /** 検索したときのゲーム名 */
+  title: string;
+  /** 実際に結果が出た検索語（0件のときは短くして探し直すため、ゲーム名と違うことがある） */
+  query: string;
+  items: RakutenPick[];
+}
+
 export interface CollectionCandidate {
   id: string;
   playlistTitle: string;
@@ -72,6 +89,7 @@ export interface CollectionCandidate {
   titleTagIds: string[];
   status: CandidateStatus;
   reviewComment: string | null;
+  rakutenSearch: RakutenSearchResult | null;
 }
 
 export async function fetchCandidates(status: CandidateStatus): Promise<CollectionCandidate[]> {
@@ -93,6 +111,9 @@ export async function fetchCandidates(status: CandidateStatus): Promise<Collecti
         titleTagIds: data.titleTagIds ?? [],
         status: data.status ?? 'pending',
         reviewComment: data.reviewComment ?? null,
+        rakutenSearch: data.rakutenSearch
+          ? { title: data.rakutenSearch.title ?? '', query: data.rakutenSearch.query ?? '', items: data.rakutenSearch.items ?? [] }
+          : null,
       };
     })
     .sort((a, b) => (b.playlistPublishedAt ?? 0) - (a.playlistPublishedAt ?? 0));

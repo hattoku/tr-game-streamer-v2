@@ -9,10 +9,12 @@
  * v2.1 §3.5・§4.3）。既存から選ぶ GameSelectModal・楽天を自動検索した GameCreateModal も引き続き使える。
  * 付与するタグ＝探索対象チャンネルのタグ＋タイトル由来のタグ（運営者タグのみ）。行ごとに×で外せる。
  * 承認は20件ずつ（新しいゲーム名を含む候補は5件ずつ）APIに送り、進捗を下部バーに表示する（§4）。
+ * v2.2 §3.7: 新規のゲーム名の候補は、表示したら順に（1秒に1件）楽天ブックスを検索して結果を候補に保存し、
+ * 名前が一致する商品を選んだ状態で行に出す。違えば候補から選び直すか、楽天なしにできる。
  */
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -29,9 +31,11 @@ import { ChevronRightIcon, InventoryIcon, XIcon } from '@/components/ui/icons';
 import { cn } from '@/components/ui/cn';
 import { GameSelectModal, type GameOption } from '@/components/playlists/GameSelectModal';
 import { GameCreateModal } from '@/components/games/GameCreateModal';
+import { RakutenPickModal } from '@/components/admin/collection/RakutenPickModal';
 import { fetchTagsMap, type TagInfo } from '@/lib/tags';
 import { guessGame, normalizeForMatch } from '@/lib/exploration-rules';
 import { COLLECTION_DAILY_QUOTA_LIMIT } from '@/lib/collection-quota-shared';
+import { normalizeRakutenGameTitle } from '@/lib/rakuten-shared';
 import {
   fetchCandidates,
   fetchCollectionQuotaUsedToday,
@@ -44,6 +48,8 @@ import {
   type CollectionBatchLog,
   type CollectionCandidate,
   type ExplorationChannel,
+  type RakutenPick,
+  type RakutenSearchResult,
 } from '@/lib/collection-admin';
 
 // 1回のリクエストの件数。新しいゲーム名を含む候補は、楽天ブックスの検索に1件2秒ほどかかるため少なくする
@@ -51,6 +57,8 @@ import {
 const APPROVE_CHUNK = 20;
 const APPROVE_CHUNK_NEW_GAMES = 5;
 const MAX_GAME_TITLE_LENGTH = 100;
+// 楽天ブックスAPIのレートリミット（1秒1回）に合わせ、自動検索は1件ずつ間隔をあける（v2.2 §3.7）
+const RAKUTEN_SEARCH_INTERVAL_MS = 1100;
 
 type GameFilter = 'all' | 'guessed' | 'none';
 
@@ -64,6 +72,11 @@ const APPROVE_ERROR_LABEL: Record<string, string> = {
   register_failed: '登録に失敗しました',
   game_create_failed: 'ゲームタイトルの登録に失敗しました',
 };
+
+/** 承認APIの rakutenJan。まだ検索していない候補は送らず、承認APIに名前の完全一致で探させる */
+function rakutenJanParam(pick: RakutenPick | null | undefined): { rakutenJan?: string | null } {
+  return pick === undefined ? {} : { rakutenJan: pick?.jan ?? null };
+}
 
 const STATUS_TABS: Array<{ value: CandidateStatus; label: string }> = [
   { value: 'pending', label: '未処理' },
@@ -90,6 +103,14 @@ export default function AdminCollectionPage() {
   const [removedTags, setRemovedTags] = useState<Map<string, Set<string>>>(new Map());
   const [rowErrors, setRowErrors] = useState<Map<string, string>>(new Map());
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  // 楽天ブックスの検索結果（候補に保存済みのものより新しい分）と、行ごとに選び直した商品（null は楽天なし）
+  const [rakutenResults, setRakutenResults] = useState<Map<string, RakutenSearchResult>>(new Map());
+  const [rakutenChoices, setRakutenChoices] = useState<Map<string, RakutenPick | null>>(new Map());
+  const [rakutenSearching, setRakutenSearching] = useState<Set<string>>(new Set());
+  const [rakutenFailed, setRakutenFailed] = useState<Set<string>>(new Set());
+  const [rakutenPickFor, setRakutenPickFor] = useState<CollectionCandidate | null>(null);
+  const rakutenQueueRunningRef = useRef(false);
+  const [rakutenQueueTick, setRakutenQueueTick] = useState(0);
 
   const [gameSelectFor, setGameSelectFor] = useState<CollectionCandidate | null>(null);
   const [gameCreateFor, setGameCreateFor] = useState<CollectionCandidate | null>(null);
@@ -146,6 +167,51 @@ export default function AdminCollectionPage() {
     return title && title.length <= MAX_GAME_TITLE_LENGTH && normalizeForMatch(title) ? title : null;
   }
 
+  function rakutenResultFor(c: CollectionCandidate): RakutenSearchResult | null {
+    return rakutenResults.get(c.id) ?? c.rakutenSearch;
+  }
+
+  /**
+   * 新規のゲームに結び付ける楽天ブックスの商品。選び直したものがあればそれ、無ければ検索結果のうちゲーム名と
+   * 一致する商品（承認APIの完全一致と同じ正規化）。null は楽天なし、undefined はまだ検索していない（承認APIが探す）
+   */
+  function rakutenPickOf(c: CollectionCandidate): RakutenPick | null | undefined {
+    if (rakutenChoices.has(c.id)) return rakutenChoices.get(c.id)!;
+    const result = rakutenResultFor(c);
+    if (!result) return undefined;
+    const key = normalizeForMatch(newGameTitleFor(c) ?? '');
+    return result.items.find((item) => key && normalizeForMatch(normalizeRakutenGameTitle(item.title)) === key) ?? null;
+  }
+
+  async function searchRakuten(c: CollectionCandidate, title: string): Promise<boolean> {
+    setRakutenSearching((prev) => new Set(prev).add(c.id));
+    try {
+      const res = await postAdminApi<Partial<RakutenSearchResult>>('/api/admin/collection/candidates', { action: 'rakuten_search', playlistId: c.id, title });
+      if (!res.ok || !Array.isArray(res.body.items)) throw new Error('rakuten_search_failed');
+      const result: RakutenSearchResult = { title, query: res.body.query ?? title, items: res.body.items };
+      setRakutenResults((prev) => new Map(prev).set(c.id, result));
+      setRakutenFailed((prev) => {
+        const next = new Set(prev);
+        next.delete(c.id);
+        return next;
+      });
+      return true;
+    } catch {
+      setRakutenFailed((prev) => new Set(prev).add(c.id));
+      return false;
+    } finally {
+      setRakutenSearching((prev) => {
+        const next = new Set(prev);
+        next.delete(c.id);
+        return next;
+      });
+    }
+  }
+
+  function chooseRakuten(candidateId: string, pick: RakutenPick | null) {
+    setRakutenChoices((prev) => new Map(prev).set(candidateId, pick));
+  }
+
   function tagIdsFor(c: CollectionCandidate): string[] {
     const channelTags = channels.get(c.explorationChannelId)?.tagIds ?? [];
     const removed = removedTags.get(c.id);
@@ -174,6 +240,27 @@ export default function AdminCollectionPage() {
     }
     return [...map.values()].sort((a, b) => a.title.localeCompare(b.title, 'ja'));
   }, [filtered]);
+
+  // 新規のゲーム名の候補を、表示順に1件ずつ楽天ブックスで検索する（v2.2 §3.7）。検索済み（候補に保存済み）・
+  // 失敗したものは飛ばす。承認中は止める。1件終わるごとに状態が変わり、この effect が次の1件を拾う
+  const nextRakutenTarget =
+    status === 'pending' && progress === null
+      ? groups.flatMap((g) => g.items).find((c) => !gameFor(c) && newGameTitleFor(c) && !rakutenResultFor(c) && !rakutenFailed.has(c.id) && !rakutenSearching.has(c.id))
+      : undefined;
+  const nextRakutenTitle = nextRakutenTarget ? newGameTitleFor(nextRakutenTarget) : null;
+  useEffect(() => {
+    if (!nextRakutenTarget || !nextRakutenTitle || rakutenQueueRunningRef.current) return;
+    rakutenQueueRunningRef.current = true;
+    (async () => {
+      await searchRakuten(nextRakutenTarget, nextRakutenTitle);
+      await new Promise((resolve) => setTimeout(resolve, RAKUTEN_SEARCH_INTERVAL_MS));
+      rakutenQueueRunningRef.current = false;
+      // 待っている間に状態が変わらなかったときも次の1件を拾えるよう、待ち終わりで1回描画し直す
+      setRakutenQueueTick((t) => t + 1);
+    })();
+    // searchRakuten は描画ごとに作り直されるが、対象が変わったときだけ動かせばよい
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nextRakutenTarget?.id, nextRakutenTitle, rakutenQueueTick]);
 
   const channelOptions = useMemo(() => {
     const seen = new Map<string, string>();
@@ -255,7 +342,15 @@ export default function AdminCollectionPage() {
   async function handleApprove() {
     const targets = (candidates ?? []).filter((c) => selected.has(c.id) && (gameFor(c) || newGameTitleFor(c)));
     if (targets.length === 0) return;
-    const newGameNames = [...new Map(targets.filter((c) => !gameFor(c)).map((c) => [normalizeForMatch(newGameTitleFor(c)!), newGameTitleFor(c)!])).values()];
+    // 同じ名前は1件にまとめる（承認APIも最初の1件の楽天の商品で登録する）。楽天の商品か「楽天なし」を添える
+    const newGameNameByKey = new Map<string, string>();
+    for (const c of targets) {
+      const title = newGameTitleFor(c);
+      if (gameFor(c) || !title || newGameNameByKey.has(normalizeForMatch(title))) continue;
+      const pick = rakutenPickOf(c);
+      newGameNameByKey.set(normalizeForMatch(title), `${title}${pick ? `（楽天: ${pick.title}）` : pick === null ? '（楽天なし）' : ''}`);
+    }
+    const newGameNames = [...newGameNameByKey.values()];
     const NAMES_SHOWN = 10;
     const newGameNotice =
       newGameNames.length > 0
@@ -300,7 +395,7 @@ export default function AdminCollectionPage() {
             const game = gameFor(c);
             return game
               ? { playlistId: c.id, gameId: game.id, tagIds: tagIdsFor(c) }
-              : { playlistId: c.id, newGameTitle: newGameTitleFor(c), tagIds: tagIdsFor(c) };
+              : { playlistId: c.id, newGameTitle: newGameTitleFor(c), ...rakutenJanParam(rakutenPickOf(c)), tagIds: tagIdsFor(c) };
           }),
         });
         if (res.status === 429) {
@@ -533,6 +628,19 @@ export default function AdminCollectionPage() {
                               ) : (
                                 c.reviewComment && <p className="text-md text-text-muted">理由: {APPROVE_ERROR_LABEL[c.reviewComment] ?? c.reviewComment}</p>
                               )}
+                              {status === 'pending' && !game && newGameTitleFor(c) && (
+                                <RakutenLine
+                                  pick={rakutenPickOf(c)}
+                                  explicit={rakutenChoices.has(c.id)}
+                                  result={rakutenResultFor(c)}
+                                  searching={rakutenSearching.has(c.id)}
+                                  failed={rakutenFailed.has(c.id)}
+                                  gameTitle={newGameTitleFor(c)!}
+                                  disabled={busy}
+                                  onOpen={() => setRakutenPickFor(c)}
+                                  onUseName={(name) => changeNewGameTitle(c, name)}
+                                />
+                              )}
                               {status === 'registered' && (
                                 <Link href={`/playlists/${c.id}`} className="text-md text-text-tertiary hover:text-text-primary">
                                   登録した再生リストを見る
@@ -613,6 +721,26 @@ export default function AdminCollectionPage() {
           setGameSelectFor(null);
         }}
       />
+      <RakutenPickModal
+        open={rakutenPickFor !== null}
+        onOpenChange={(open) => !open && setRakutenPickFor(null)}
+        gameTitle={rakutenPickFor ? (newGameTitleFor(rakutenPickFor) ?? '') : ''}
+        result={rakutenPickFor ? rakutenResultFor(rakutenPickFor) : null}
+        selectedJan={rakutenPickFor ? (rakutenPickOf(rakutenPickFor)?.jan ?? null) : null}
+        onSearch={async (q) => {
+          if (rakutenPickFor && !(await searchRakuten(rakutenPickFor, q))) {
+            toast({ type: 'error', message: '楽天ブックスの検索に失敗しました。時間をおいて再試行してください' });
+          }
+        }}
+        onPick={(item) => {
+          if (rakutenPickFor) chooseRakuten(rakutenPickFor.id, item);
+          setRakutenPickFor(null);
+        }}
+        onNone={() => {
+          if (rakutenPickFor) chooseRakuten(rakutenPickFor.id, null);
+          setRakutenPickFor(null);
+        }}
+      />
       <GameCreateModal
         open={gameCreateFor !== null}
         onOpenChange={(open) => !open && setGameCreateFor(null)}
@@ -624,5 +752,77 @@ export default function AdminCollectionPage() {
         }}
       />
     </div>
+  );
+}
+
+/** 新規のゲームに結び付ける楽天ブックスの商品の行（v2.2 §3.7） */
+function RakutenLine({
+  pick,
+  explicit,
+  result,
+  searching,
+  failed,
+  gameTitle,
+  disabled,
+  onOpen,
+  onUseName,
+}: {
+  pick: RakutenPick | null | undefined;
+  explicit: boolean;
+  result: RakutenSearchResult | null;
+  searching: boolean;
+  failed: boolean;
+  gameTitle: string;
+  disabled: boolean;
+  onOpen: () => void;
+  onUseName: (name: string) => void;
+}) {
+  const pickName = pick ? normalizeRakutenGameTitle(pick.title) : '';
+  let body: ReactNode;
+  let action = '候補から選ぶ';
+  if (searching) {
+    body = <span className="text-text-tertiary">検索中…</span>;
+  } else if (pick) {
+    action = '選び直す';
+    body = (
+      <span className="inline-flex min-w-0 items-center gap-2">
+        {pick.imageUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={pick.imageUrl} alt="" className="h-8 w-6 shrink-0 rounded-[2px] object-cover" />
+        )}
+        <span className="text-text-primary">
+          {pick.title}
+          {pick.hardware && <span className="text-text-tertiary">（{pick.hardware}）</span>}
+        </span>
+      </span>
+    );
+  } else if (failed && !result) {
+    action = '探し直す';
+    body = <span className="text-text-tertiary">検索に失敗しました</span>;
+  } else if (pick === undefined) {
+    body = <span className="text-text-tertiary">検索待ち</span>;
+  } else if (explicit) {
+    body = <span className="text-text-tertiary">使わない（名前だけで登録）</span>;
+  } else if (result && result.items.length > 0) {
+    body = <span className="text-text-tertiary">名前が一致する商品なし（候補{result.items.length}件）</span>;
+  } else {
+    action = '探し直す';
+    body = <span className="text-text-tertiary">見つかりませんでした（名前だけで登録）</span>;
+  }
+  return (
+    <p className="flex flex-wrap items-center gap-2 text-md" data-testid="rakuten-line">
+      <span className="text-text-tertiary">楽天:</span>
+      {body}
+      {!searching && (
+        <Button variant="ghost" size="sm" onClick={onOpen} disabled={disabled}>
+          {action}
+        </Button>
+      )}
+      {pick && pickName && normalizeForMatch(pickName) !== normalizeForMatch(gameTitle) && (
+        <Button variant="ghost" size="sm" onClick={() => onUseName(pickName)} disabled={disabled}>
+          「{pickName}」をゲーム名にする
+        </Button>
+      )}
+    </p>
   );
 }
