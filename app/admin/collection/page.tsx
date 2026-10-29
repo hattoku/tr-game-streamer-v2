@@ -178,15 +178,23 @@ export default function AdminCollectionPage() {
   function rakutenPickOf(c: CollectionCandidate): RakutenPick | null | undefined {
     if (rakutenChoices.has(c.id)) return rakutenChoices.get(c.id)!;
     const result = rakutenResultFor(c);
-    if (!result) return undefined;
+    // ゲーム名を書き換えた後の古い結果は使わず、未検索と同じく承認APIに新しい名前で探させる
+    if (!result || rakutenResultStale(c)) return undefined;
     const key = normalizeForMatch(newGameTitleFor(c) ?? '');
     return result.items.find((item) => key && normalizeForMatch(normalizeRakutenGameTitle(item.title)) === key) ?? null;
   }
 
-  async function searchRakuten(c: CollectionCandidate, title: string): Promise<boolean> {
+  /** 検索した後にゲーム名を書き換えたか */
+  function rakutenResultStale(c: CollectionCandidate): boolean {
+    const result = rakutenResultFor(c);
+    return !!result && normalizeForMatch(result.title) !== normalizeForMatch(newGameTitleFor(c) ?? '');
+  }
+
+  /** ゲーム名 title の候補として楽天ブックスを検索する。query を渡すとその語で検索する（モーダルの探し直し） */
+  async function searchRakuten(c: CollectionCandidate, title: string, query?: string): Promise<boolean> {
     setRakutenSearching((prev) => new Set(prev).add(c.id));
     try {
-      const res = await postAdminApi<Partial<RakutenSearchResult>>('/api/admin/collection/candidates', { action: 'rakuten_search', playlistId: c.id, title });
+      const res = await postAdminApi<Partial<RakutenSearchResult>>('/api/admin/collection/candidates', { action: 'rakuten_search', playlistId: c.id, title, query });
       if (!res.ok || !Array.isArray(res.body.items)) throw new Error('rakuten_search_failed');
       const result: RakutenSearchResult = { title, query: res.body.query ?? title, items: res.body.items };
       setRakutenResults((prev) => new Map(prev).set(c.id, result));
@@ -242,9 +250,9 @@ export default function AdminCollectionPage() {
   }, [filtered]);
 
   // 新規のゲーム名の候補を、表示順に1件ずつ楽天ブックスで検索する（v2.2 §3.7）。検索済み（候補に保存済み）・
-  // 失敗したものは飛ばす。承認中は止める。1件終わるごとに状態が変わり、この effect が次の1件を拾う
+  // 失敗したものは飛ばす。承認中・モーダルで探し直している間は止める（楽天APIの1秒1回を画面全体で守るため）。1件終わるごとに状態が変わり、この effect が次の1件を拾う
   const nextRakutenTarget =
-    status === 'pending' && progress === null
+    status === 'pending' && progress === null && rakutenPickFor === null
       ? groups.flatMap((g) => g.items).find((c) => !gameFor(c) && newGameTitleFor(c) && !rakutenResultFor(c) && !rakutenFailed.has(c.id) && !rakutenSearching.has(c.id))
       : undefined;
   const nextRakutenTitle = nextRakutenTarget ? newGameTitleFor(nextRakutenTarget) : null;
@@ -361,6 +369,12 @@ export default function AdminCollectionPage() {
         : '';
     if (!window.confirm(`${targets.length}件を登録します。${newGameNotice}よろしいですか？`)) return;
 
+    setProgress({ done: 0, total: targets.length });
+    // 自動検索の1件（と、その後の間隔）が終わるのを待ってから送る。承認APIも楽天ブックスを呼ぶため（1秒1回）
+    for (let waited = 0; rakutenQueueRunningRef.current && waited < 15_000; waited += 200) {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+
     // 件数で区切りつつ、新しいゲーム名を含む候補は APPROVE_CHUNK_NEW_GAMES 件までにする
     const chunks: CollectionCandidate[][] = [];
     let current: CollectionCandidate[] = [];
@@ -377,7 +391,6 @@ export default function AdminCollectionPage() {
     }
     if (current.length > 0) chunks.push(current);
 
-    setProgress({ done: 0, total: targets.length });
     const errors = new Map<string, string>();
     let okCount = 0;
     let stopped = false;
@@ -632,6 +645,7 @@ export default function AdminCollectionPage() {
                                 <RakutenLine
                                   pick={rakutenPickOf(c)}
                                   explicit={rakutenChoices.has(c.id)}
+                                  stale={rakutenResultStale(c)}
                                   result={rakutenResultFor(c)}
                                   searching={rakutenSearching.has(c.id)}
                                   failed={rakutenFailed.has(c.id)}
@@ -727,11 +741,7 @@ export default function AdminCollectionPage() {
         gameTitle={rakutenPickFor ? (newGameTitleFor(rakutenPickFor) ?? '') : ''}
         result={rakutenPickFor ? rakutenResultFor(rakutenPickFor) : null}
         selectedJan={rakutenPickFor ? (rakutenPickOf(rakutenPickFor)?.jan ?? null) : null}
-        onSearch={async (q) => {
-          if (rakutenPickFor && !(await searchRakuten(rakutenPickFor, q))) {
-            toast({ type: 'error', message: '楽天ブックスの検索に失敗しました。時間をおいて再試行してください' });
-          }
-        }}
+        onSearch={(q) => (rakutenPickFor ? searchRakuten(rakutenPickFor, newGameTitleFor(rakutenPickFor) ?? q, q) : Promise.resolve(false))}
         onPick={(item) => {
           if (rakutenPickFor) chooseRakuten(rakutenPickFor.id, item);
           setRakutenPickFor(null);
@@ -759,6 +769,7 @@ export default function AdminCollectionPage() {
 function RakutenLine({
   pick,
   explicit,
+  stale,
   result,
   searching,
   failed,
@@ -769,6 +780,7 @@ function RakutenLine({
 }: {
   pick: RakutenPick | null | undefined;
   explicit: boolean;
+  stale: boolean;
   result: RakutenSearchResult | null;
   searching: boolean;
   failed: boolean;
@@ -788,9 +800,9 @@ function RakutenLine({
       <span className="inline-flex min-w-0 items-center gap-2">
         {pick.imageUrl && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={pick.imageUrl} alt="" className="h-8 w-6 shrink-0 rounded-[2px] object-cover" />
+          <img src={pick.imageUrl} alt="" className="h-8 w-6 shrink-0 rounded-[4px] object-cover" />
         )}
-        <span className="text-text-primary">
+        <span className="line-clamp-2 min-w-0 text-text-primary">
           {pick.title}
           {pick.hardware && <span className="text-text-tertiary">（{pick.hardware}）</span>}
         </span>
@@ -799,12 +811,15 @@ function RakutenLine({
   } else if (failed && !result) {
     action = '探し直す';
     body = <span className="text-text-tertiary">検索に失敗しました</span>;
+  } else if (pick === undefined && stale) {
+    action = '探し直す';
+    body = <span className="text-text-tertiary">ゲーム名を変えました（承認時にこの名前で探します）</span>;
   } else if (pick === undefined) {
     body = <span className="text-text-tertiary">検索待ち</span>;
   } else if (explicit) {
     body = <span className="text-text-tertiary">使わない（名前だけで登録）</span>;
   } else if (result && result.items.length > 0) {
-    body = <span className="text-text-tertiary">名前が一致する商品なし（候補{result.items.length}件）</span>;
+    body = <span className="text-text-tertiary">名前が一致する商品なし（候補{result.items.length}件。このままなら名前だけで登録）</span>;
   } else {
     action = '探し直す';
     body = <span className="text-text-tertiary">見つかりませんでした（名前だけで登録）</span>;
@@ -812,15 +827,16 @@ function RakutenLine({
   return (
     <p className="flex flex-wrap items-center gap-2 text-md" data-testid="rakuten-line">
       <span className="text-text-tertiary">楽天:</span>
-      {body}
-      {!searching && (
-        <Button variant="ghost" size="sm" onClick={onOpen} disabled={disabled}>
-          {action}
-        </Button>
-      )}
+      <span aria-live="polite" className="min-w-0">
+        {body}
+      </span>
+      {/* 検索中も外さない（モーダルを閉じたときのフォーカスの戻り先にするため） */}
+      <Button variant="ghost" size="sm" onClick={onOpen} disabled={disabled || searching} aria-label={`${gameTitle}の楽天の商品を${action}`}>
+        {action}
+      </Button>
       {pick && pickName && normalizeForMatch(pickName) !== normalizeForMatch(gameTitle) && (
-        <Button variant="ghost" size="sm" onClick={() => onUseName(pickName)} disabled={disabled}>
-          「{pickName}」をゲーム名にする
+        <Button variant="ghost" size="sm" onClick={() => onUseName(pickName)} disabled={disabled} aria-label={`ゲーム名を「${pickName}」にする`}>
+          商品名をゲーム名にする
         </Button>
       )}
     </p>

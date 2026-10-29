@@ -9,6 +9,7 @@ import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { cn } from '@/components/ui/cn';
+import { SearchIcon } from '@/components/ui/icons';
 import type { RakutenPick, RakutenSearchResult } from '@/lib/collection-admin';
 
 interface RakutenPickModalProps {
@@ -18,8 +19,8 @@ interface RakutenPickModalProps {
   gameTitle: string;
   result: RakutenSearchResult | null;
   selectedJan: string | null;
-  /** 検索語で探し直す。結果は呼び出し側が result に反映する */
-  onSearch: (query: string) => Promise<void>;
+  /** 検索語で探し直す。結果は呼び出し側が result に反映する。失敗したら false */
+  onSearch: (query: string) => Promise<boolean>;
   onPick: (item: RakutenPick) => void;
   onNone: () => void;
 }
@@ -36,13 +37,15 @@ export function RakutenPickModal(props: RakutenPickModalProps) {
 function RakutenPickBody({ gameTitle, result, selectedJan, onSearch, onPick, onNone }: RakutenPickModalProps) {
   const [query, setQuery] = useState(result?.query || gameTitle);
   const [searching, setSearching] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function handleSearch() {
     const q = query.trim();
     if (!q) return;
     setSearching(true);
+    setError(null);
     try {
-      await onSearch(q);
+      if (!(await onSearch(q))) setError('楽天ブックスの検索に失敗しました。時間をおいて再試行してください');
     } finally {
       setSearching(false);
     }
@@ -60,23 +63,33 @@ function RakutenPickBody({ gameTitle, result, selectedJan, onSearch, onPick, onN
       >
         <Input aria-label="楽天ブックスの検索語" value={query} onChange={(e) => setQuery(e.target.value)} className="min-w-0 flex-1" disabled={searching} />
         <Button type="submit" variant="secondary" loading={searching} disabled={!query.trim()}>
+          <SearchIcon size={14} />
           検索
         </Button>
       </form>
 
-      {result && result.items.length === 0 ? (
+      {error && (
+        <p role="alert" className="text-md text-input-error">
+          {error}
+        </p>
+      )}
+
+      {!result ? (
+        <p className="text-md text-text-tertiary">まだ検索していません。検索語を入れて「検索」を押してください。</p>
+      ) : result.items.length === 0 ? (
         <p className="text-md text-text-tertiary">「{result.query}」では見つかりませんでした。検索語を変えるか、楽天なしで登録してください。</p>
       ) : (
-        <ul className="flex flex-col gap-2" aria-label="楽天ブックスの検索結果">
-          {result?.items.map((item) => (
+        // 見た目は GameCreateModal の楽天ブックス検索の候補一覧に揃える。選んでいる商品は枠で示す
+        <ul className="flex max-h-[320px] flex-col gap-1 overflow-y-auto rounded-[8px] border border-border-card p-1" aria-label="楽天ブックスの検索結果">
+          {result.items.map((item) => (
             <li key={item.jan}>
               <button
                 type="button"
                 onClick={() => onPick(item)}
                 aria-pressed={selectedJan === item.jan}
                 className={cn(
-                  'flex w-full items-center gap-3 rounded-[8px] border bg-bg-input p-2 text-left hover:bg-bg-hover',
-                  selectedJan === item.jan ? 'border-border-active' : 'border-border-card',
+                  'flex w-full items-center gap-3 rounded-[6px] border p-2 text-left hover:bg-bg-input',
+                  selectedJan === item.jan ? 'border-border-active' : 'border-transparent',
                 )}
               >
                 {item.imageUrl ? (
@@ -87,9 +100,7 @@ function RakutenPickBody({ gameTitle, result, selectedJan, onSearch, onPick, onN
                 )}
                 <span className="min-w-0 flex-1">
                   <span className="line-clamp-2 text-sm text-text-primary">{item.title}</span>
-                  <span className="text-xs text-text-tertiary">
-                    {[item.hardware, item.salesDate].filter(Boolean).join(' ・ ')}
-                  </span>
+                  <span className="block text-xs text-text-tertiary">{[item.hardware, item.salesDate].filter(Boolean).join(' / ')}</span>
                 </span>
               </button>
             </li>

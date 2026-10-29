@@ -88,7 +88,7 @@ export async function createCollectionGameResolver(): Promise<CollectionGameReso
     try {
       await throttle();
       const results = await searchRakutenGamesByJan(jan);
-      return results.find((r) => r.jan === jan) ?? results[0] ?? null;
+      return results.find((r) => r.jan === jan) ?? null;
     } catch (e) {
       console.error('収集候補のゲーム登録で楽天ブックスのJAN検索に失敗', jan, e);
       return null;

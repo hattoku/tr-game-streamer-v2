@@ -42,12 +42,17 @@ test('§3.7 新規のゲーム名は表示すると楽天ブックスを自動�
   const line = rakutenLine(adminPage, channelTitle);
   await expect(line).toContainText('野狗子: Slitterhead', { timeout: 60_000 });
   await expect(line).toContainText('PS5');
-  await expect(line.getByRole('button', { name: '選び直す' })).toBeVisible();
+  await expect(line.getByRole('button', { name: /選び直す$/ })).toBeVisible();
 
   const saved = (await e2eDb().collection('collection_candidates').doc(playlistId).get()).data()!.rakutenSearch;
   expect(saved.title).toBe('野狗子: Slitterhead');
   expect(saved.items.length).toBeGreaterThan(0);
   expect(saved.items.every((i: { jan: string }) => i.jan)).toBe(true);
+
+  // 検索した後にゲーム名を書き換えると、古い結果は使わず、承認時に新しい名前で探す
+  await section(adminPage, channelTitle).getByRole('textbox').fill('野狗子 改');
+  await expect(line).toContainText('ゲーム名を変えました（承認時にこの名前で探します）');
+  await expect(line.getByRole('button', { name: /探し直す$/ })).toBeVisible();
 });
 
 test('§3.7 0件なら末尾の略称を外して探し直す。名前が一致しなければ候補件数を出し、選ぶと商品名をゲーム名にできる', async ({ adminPage }) => {
@@ -58,21 +63,21 @@ test('§3.7 0件なら末尾の略称を外して探し直す。名前が一致�
   await adminPage.goto('/admin/collection');
   await filterChannel(adminPage, channelTitle);
   const line = rakutenLine(adminPage, channelTitle);
-  await expect(line).toContainText(/名前が一致する商品なし（候補\d+件）/, { timeout: 60_000 });
+  await expect(line).toContainText(/名前が一致する商品なし（候補\d+件。このままなら名前だけで登録）/, { timeout: 60_000 });
   const saved = (await e2eDb().collection('collection_candidates').doc(playlistId).get()).data()!.rakutenSearch;
   expect(saved.query).toBe('デッドライジング');
 
-  await line.getByRole('button', { name: '候補から選ぶ' }).click();
+  await line.getByRole('button', { name: /候補から選ぶ$/ }).click();
   const dialog = adminPage.getByRole('dialog', { name: '楽天ブックスの商品を選ぶ' });
   await expect(dialog.getByRole('textbox', { name: '楽天ブックスの検索語' })).toHaveValue('デッドライジング');
   const first = dialog.getByRole('list', { name: '楽天ブックスの検索結果' }).getByRole('button').first();
-  const firstTitle = (await first.locator('span > span').first().textContent())!.trim();
+  const firstTitle = (await first.locator('span.line-clamp-2').textContent())!.trim();
   await first.click();
   await expect(dialog).toBeHidden();
   await expect(line).toContainText(firstTitle);
 
   // 選んだ商品名がゲーム名と違うので、商品名をゲーム名にできる
-  const useName = line.getByRole('button', { name: /をゲーム名にする$/ });
+  const useName = line.getByRole('button', { name: /^ゲーム名を「.+」にする$/ });
   await expect(useName).toBeVisible();
   await useName.click();
   const input = section(adminPage, channelTitle).getByRole('textbox');
@@ -91,7 +96,7 @@ test('§3.7 見つからないときは「見つかりませんでした」を�
   const line = rakutenLine(adminPage, channelTitle);
   await expect(line).toContainText('見つかりませんでした（名前だけで登録）', { timeout: 60_000 });
 
-  await line.getByRole('button', { name: '探し直す' }).click();
+  await line.getByRole('button', { name: /探し直す$/ }).click();
   const dialog = adminPage.getByRole('dialog', { name: '楽天ブックスの商品を選ぶ' });
   await dialog.getByRole('textbox', { name: '楽天ブックスの検索語' }).fill('野狗子');
   await dialog.getByRole('button', { name: '検索' }).click();
@@ -117,13 +122,13 @@ test('§3.7・§4.3 承認では、選んだ商品のJAN・楽天なし（null�
   const noneRow = rows.filter({ has: adminPage.locator(`input[value="${noneName}"]`) });
 
   // 名前が一致しないので、どちらも未選択（候補2件）
-  await expect(pickedRow.getByTestId('rakuten-line')).toContainText('名前が一致する商品なし（候補2件）');
-  await pickedRow.getByRole('button', { name: '候補から選ぶ' }).click();
+  await expect(pickedRow.getByTestId('rakuten-line')).toContainText('名前が一致する商品なし（候補2件。');
+  await pickedRow.getByRole('button', { name: /候補から選ぶ$/ }).click();
   const dialog = adminPage.getByRole('dialog', { name: '楽天ブックスの商品を選ぶ' });
   await dialog.getByRole('button', { name: /マニアックエディション/ }).click();
   await expect(pickedRow.getByTestId('rakuten-line')).toContainText('マニアックエディション');
 
-  await noneRow.getByRole('button', { name: '候補から選ぶ' }).click();
+  await noneRow.getByRole('button', { name: /候補から選ぶ$/ }).click();
   await dialog.getByRole('button', { name: '楽天なしで登録する' }).click();
   await expect(noneRow.getByTestId('rakuten-line')).toContainText('使わない（名前だけで登録）');
 
