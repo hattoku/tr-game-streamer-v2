@@ -190,3 +190,15 @@ test('§3.3・§3.7 楽天の状態で絞り込め、各絞り込みに件数が
   await expect(rows.getByTestId('rakuten-line')).toContainText('野狗子: Slitterhead');
   await expect(rakutenFilter).toContainText('商品あり（1）');
 });
+
+test('§1.1 コンテンツ収集の2つの画面は、上の大きなタブで切り替えられる', async ({ adminPage }) => {
+  await adminPage.goto('/admin/collection');
+  const nav = adminPage.getByRole('navigation', { name: 'コンテンツ収集の画面' });
+  await expect(nav.getByRole('link', { name: /収集候補/ })).toHaveAttribute('aria-current', 'page');
+  await nav.getByRole('link', { name: /探索対象チャンネル/ }).click();
+  await expect(adminPage).toHaveURL(/\/admin\/collection\/channels$/);
+  await expect(adminPage.getByRole('heading', { name: '探索対象チャンネル', exact: true })).toBeVisible();
+  await expect(nav.getByRole('link', { name: /探索対象チャンネル/ })).toHaveAttribute('aria-current', 'page');
+  await nav.getByRole('link', { name: /収集候補/ }).click();
+  await expect(adminPage).toHaveURL(/\/admin\/collection$/);
+});

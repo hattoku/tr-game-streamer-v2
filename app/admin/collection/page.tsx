@@ -32,6 +32,7 @@ import { cn } from '@/components/ui/cn';
 import { GameSelectModal, type GameOption } from '@/components/playlists/GameSelectModal';
 import { GameCreateModal } from '@/components/games/GameCreateModal';
 import { RakutenPickModal } from '@/components/admin/collection/RakutenPickModal';
+import { CollectionNav } from '@/components/admin/collection/CollectionNav';
 import { fetchTagsMap, type TagInfo } from '@/lib/tags';
 import { guessGame, normalizeForMatch } from '@/lib/exploration-rules';
 import { COLLECTION_DAILY_QUOTA_LIMIT } from '@/lib/collection-quota-shared';
@@ -529,13 +530,8 @@ export default function AdminCollectionPage() {
 
   return (
     <div className="flex flex-col gap-5 pb-24">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <SectionHeading>コンテンツ収集</SectionHeading>
-        <Link href="/admin/collection/channels" className="inline-flex items-center gap-1 text-md text-text-tertiary hover:text-text-primary">
-          探索対象チャンネル
-          <ChevronRightIcon size={14} />
-        </Link>
-      </div>
+      <SectionHeading>コンテンツ収集</SectionHeading>
+      <CollectionNav />
 
       <Card className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-col gap-1 text-md text-text-tertiary">

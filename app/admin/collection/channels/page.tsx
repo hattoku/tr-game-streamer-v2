@@ -19,6 +19,7 @@ import { Modal } from '@/components/ui/Modal';
 import { SkeletonText } from '@/components/ui/Skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { Tag } from '@/components/ui/Tag';
+import { CollectionNav } from '@/components/admin/collection/CollectionNav';
 import { useToast } from '@/components/ui/Toast';
 import { ChevronLeftIcon, ExternalLinkIcon, UsersIcon } from '@/components/ui/icons';
 import { fetchTagsMap, type TagInfo } from '@/lib/tags';
@@ -169,11 +170,9 @@ export default function AdminExplorationChannelsPage() {
 
   return (
     <div className="flex flex-col gap-5">
-      <Link href="/admin/collection" className="inline-flex items-center gap-1 text-md text-text-tertiary hover:text-text-primary">
-        <ChevronLeftIcon size={14} />
-        収集候補に戻る
-      </Link>
-      <SectionHeading>探索対象チャンネル</SectionHeading>
+      <SectionHeading>コンテンツ収集</SectionHeading>
+      <CollectionNav />
+      <h2 className="text-xl font-medium text-text-primary">探索対象チャンネル</h2>
 
       <Card className="flex flex-col gap-3">
         <Field
