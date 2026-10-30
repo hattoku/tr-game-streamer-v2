@@ -117,6 +117,7 @@ export async function exploreChannels(options: {
             explorationChannelId: channelDoc.id,
             thumbnailUrl: p.thumbnailUrl,
             videoCount: p.itemCount,
+            videoCountCheckedAt: executedAt,
             playlistPublishedAt: p.publishedAt ? new Date(p.publishedAt) : null,
             guessedGameId: guessed?.id ?? null,
             guessedGameTitle: guessed?.title ?? null,
@@ -134,6 +135,17 @@ export async function exploreChannels(options: {
         await batch.commit();
       }
       summary.candidatesFound += fresh.length;
+
+      // 既に候補になっている再生リストは、動画数をこの探索の時点に合わせる（取得済みの一覧を使うのでクォータは増えない）。
+      // 承認時は YouTube から全動画を取り直すので登録内容は常に最新だが、一覧の「N本」を実態に近づけるため（レビューUI v2.2 §3.4）
+      const known = passed.filter((p) => candidated.has(p.youtubePlaylistId));
+      for (let i = 0; i < known.length; i += BATCH_LIMIT) {
+        const batch = adminDb.batch();
+        for (const p of known.slice(i, i + BATCH_LIMIT)) {
+          batch.update(adminDb.collection('collection_candidates').doc(p.youtubePlaylistId), { videoCount: p.itemCount, videoCountCheckedAt: executedAt });
+        }
+        await batch.commit();
+      }
 
       await channelDoc.ref.update({ lastExploredAt: executedAt, lastFoundCount: fresh.length, updatedAt: executedAt });
     }

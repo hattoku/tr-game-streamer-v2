@@ -83,6 +83,8 @@ export interface CollectionCandidate {
   explorationChannelId: string;
   thumbnailUrl: string;
   videoCount: number;
+  /** videoCount を数えた探索の日時（v2.2 より前の候補は collectedAt） */
+  videoCountCheckedAt: number | null;
   playlistPublishedAt: number | null;
   guessedGameId: string | null;
   gameQuery: string;
@@ -105,6 +107,7 @@ export async function fetchCandidates(status: CandidateStatus): Promise<Collecti
         explorationChannelId: data.explorationChannelId ?? '',
         thumbnailUrl: data.thumbnailUrl ?? '',
         videoCount: data.videoCount ?? 0,
+        videoCountCheckedAt: toMillis(data.videoCountCheckedAt) ?? toMillis(data.collectedAt),
         playlistPublishedAt: toMillis(data.playlistPublishedAt),
         guessedGameId: data.guessedGameId ?? null,
         gameQuery: data.gameQuery ?? '',

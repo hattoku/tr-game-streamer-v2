@@ -708,7 +708,8 @@ YouTube API クォータ消費の記録。
 | `channelTitle` | string | ✅ | チャンネル名 |
 | `explorationChannelId` | string | ✅ | 見つけた探索対象チャンネル（`exploration_channels` のドキュメントID） |
 | `thumbnailUrl` | string | ✅ | サムネイルURL |
-| `videoCount` | number | ✅ | 動画数（探索時点の `contentDetails.itemCount`） |
+| `videoCount` | number | ✅ | 動画数（探索時点の `contentDetails.itemCount`。v1.26 から、以後の探索でも更新する） |
+| `videoCountCheckedAt` | Timestamp? | — | `videoCount` を数えた探索の日時（v1.26。無ければ `collectedAt`） |
 | `playlistPublishedAt` | Timestamp? | — | 再生リストの作成日時（`snippet.publishedAt`） |
 | `guessedGameId` | string? | — | 推定したゲームタイトルID（推定なしは null） |
 | `guessedGameTitle` | string? | — | 推定したゲームタイトル名（denormalized） |
@@ -1018,4 +1019,4 @@ ai_operators ──── (1) users
 | v1.23 | 2026-10-25 | 再生リスト提案フローの作り込み。`workflows` の本人による直接読み取りを通報（`review_report`）に限定（提案は運営メモ・内部メモを含むため提案履歴 API 経由）。`games.aliases`（別名）、`workflows.proposalData` に `newGamePlatforms`・`newGameRakuten`・`rejectReasonCode`、`notifications` に `review_result` 種別と `workflowId` を追加 |
 | v1.24 | 2026-10-27 | お問い合わせの画像添付。§3.17 `inquiries` に `attachments`・`hasAttachments`・`resolvedAt`、`messages` に `attachments` と添付画像の構造を追加。§3.31 `inquiry_upload_counters` を新設。§5.2 にインデックス、§6 に Storage のルール方針を追加 |
 | v1.25 | 2026-10-28 | フェーズ7-5（友人テスト前のコンテンツ充実）。コンテンツ収集をチャンネル起点に変更したことに合わせ、3.23 `collection_candidates` をタイトル・チャンネル起点のスキーマに改訂（ドキュメントIDを再生リストIDに、ゲーム推定・タグ候補を追加、ジャンル起点・AI判定のフィールドを削除）、3.24 `collection_batch_logs`・3.25 `collection_quota_logs` を改訂、3.32 `exploration_channels` を追加 |
-| v1.26 | 2026-10-30 | 3.23 `collection_candidates` に `rakutenSearch`（承認前の楽天ブックス検索の結果）を追加 |
+| v1.26 | 2026-10-30 | 3.23 `collection_candidates` に `rakutenSearch`（承認前の楽天ブックス検索の結果）・`videoCountCheckedAt` を追加。`videoCount` を以後の探索でも更新する |

@@ -545,6 +545,9 @@ export default function AdminCollectionPage() {
           <p>
             本日のYouTube API消費（コンテンツ収集分）: {quotaUsed ?? '-'} / {COLLECTION_DAILY_QUOTA_LIMIT.toLocaleString('ja-JP')} ユニット
           </p>
+          <p className="text-sm text-text-muted">
+            「探索を実行」は、探索対象チャンネル（探索中）すべての再生リストを YouTube から読み、動画10本以上・公開・除外語（切り抜き等）なし・まだ登録も候補化もしていないものを、新しい候補としてここに追加します。既にある候補は本数だけ今の数に更新します。本番では毎週月曜5時にも自動で実行します。
+          </p>
         </div>
         <Button variant="secondary" onClick={handleExplore} loading={exploring} disabled={busy}>
           探索を実行
@@ -592,7 +595,7 @@ export default function AdminCollectionPage() {
 
       {status === 'pending' && (
         <p className="text-md text-text-tertiary">
-          ゲームが推定できなかった候補は、「新規」の欄の名前でゲームタイトルを登録してから承認します（同じ名前のゲームタイトルがあればそれを使い、楽天ブックスで見つかれば画像なども入れます）。ゲームではない再生リストはチェックを外すか却下してください。
+          ゲームが推定できなかった候補（「新しく登録する」）は、「登録するゲームタイトル名」の欄の名前でゲームタイトルを登録してから承認します（同じ名前のゲームタイトルがあればそれを使い、楽天ブックスで見つかれば画像なども入れます）。ゲームではない再生リストはチェックを外すか却下してください。
         </p>
       )}
 
@@ -658,118 +661,133 @@ export default function AdminCollectionPage() {
                       const error = rowErrors.get(c.id);
                       return (
                         <li key={c.id}>
-                          <Card className={cn('flex gap-3', selected.has(c.id) && 'border-border-active')}>
-                            {status !== 'registered' && (
-                              <input
-                                type="checkbox"
-                                className="mt-1 size-4 shrink-0"
-                                aria-label={`${c.playlistTitle}を選択`}
-                                checked={selected.has(c.id)}
-                                disabled={!canSelect || busy}
-                                onChange={() => toggleSelected(c.id)}
-                              />
-                            )}
-                            <a
-                              href={`https://www.youtube.com/playlist?list=${c.id}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="relative aspect-video w-28 shrink-0 self-start overflow-hidden rounded-[6px] bg-bg-hover md:w-40"
-                              aria-label={`${c.playlistTitle}をYouTubeで開く`}
-                            >
-                              {c.thumbnailUrl && (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img src={c.thumbnailUrl} alt="" className="absolute inset-0 size-full object-cover" loading="lazy" />
+                          {/* PCは左に再生リスト、右にゲーム（楽天のパッケージ）を並べる。スマホは縦に積む（v2.2 §3.4） */}
+                          <Card className={cn('flex flex-col gap-4 md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:gap-6', selected.has(c.id) && 'border-border-active')}>
+                            <div className="flex min-w-0 gap-3">
+                              {status !== 'registered' && (
+                                <input
+                                  type="checkbox"
+                                  className="mt-1 size-4 shrink-0"
+                                  aria-label={`${c.playlistTitle}を選択`}
+                                  checked={selected.has(c.id)}
+                                  disabled={!canSelect || busy}
+                                  onChange={() => toggleSelected(c.id)}
+                                />
                               )}
-                            </a>
-                            <div className="flex min-w-0 flex-1 flex-col gap-1">
-                              <p className="text-base text-text-primary">{c.playlistTitle}</p>
-                              <p className="text-md text-text-tertiary">
-                                {c.videoCount}本 ・ 作成 {formatDateTime(c.playlistPublishedAt)}
-                              </p>
-                              {status === 'pending' ? (
+                              <a
+                                href={`https://www.youtube.com/playlist?list=${c.id}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="relative aspect-video w-28 shrink-0 self-start overflow-hidden rounded-[6px] bg-bg-hover md:w-44"
+                                aria-label={`${c.playlistTitle}をYouTubeで開く`}
+                              >
+                                {c.thumbnailUrl && (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img src={c.thumbnailUrl} alt="" className="absolute inset-0 size-full object-cover" loading="lazy" />
+                                )}
+                              </a>
+                              <div className="flex min-w-0 flex-1 flex-col gap-1">
+                                <p className="text-base text-text-primary">{c.playlistTitle}</p>
+                                <p className="text-md text-text-tertiary">
+                                  {c.videoCount}本（{formatDateTime(c.videoCountCheckedAt)} の探索時点）
+                                </p>
+                                <p className="text-md text-text-tertiary">再生リスト作成日 {formatDateTime(c.playlistPublishedAt)}</p>
+                                {status !== 'pending' && c.reviewComment && (
+                                  <p className="text-md text-text-muted">理由: {APPROVE_ERROR_LABEL[c.reviewComment] ?? c.reviewComment}</p>
+                                )}
+                                {status === 'registered' && (
+                                  <Link href={`/playlists/${c.id}`} className="text-md text-text-tertiary hover:text-text-primary">
+                                    登録した再生リストを見る
+                                  </Link>
+                                )}
+                                {status === 'pending' && tagIds.length > 0 && (
+                                  <div className="mt-1 flex flex-col gap-1">
+                                    <p className="text-sm text-text-tertiary">承認時に付けるタグ（×で外せる）</p>
+                                    <div className="flex flex-wrap gap-1">
+                                      {tagIds.map((id) => (
+                                        <span key={id} className="inline-flex items-center gap-1 rounded-[4px] bg-bg-hover px-2 py-[2px] text-sm text-text-secondary">
+                                          {tagsMap.get(id)?.name}
+                                          <button
+                                            type="button"
+                                            aria-label={`${tagsMap.get(id)?.name}を外す`}
+                                            onClick={() => removeTag(c.id, id)}
+                                            className="text-text-muted hover:text-text-primary"
+                                            disabled={busy}
+                                          >
+                                            <XIcon size={10} />
+                                          </button>
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                                {error && (
+                                  <p role="alert" className="text-md text-input-error">
+                                    {error}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+
+                            {status === 'pending' && (
+                              <div className="flex min-w-0 flex-col gap-3 rounded-[8px] border border-surface-border bg-bg-base/40 p-3">
                                 <p className="flex flex-wrap items-center gap-2 text-md">
                                   <span className="text-text-tertiary">ゲーム:</span>
                                   {game ? (
-                                    <>
-                                      <span className="text-text-primary">{game.title}</span>
+                                    <StatusBadge>登録済みのゲームに付ける</StatusBadge>
+                                  ) : (
+                                    <StatusBadge>新しく登録する</StatusBadge>
+                                  )}
+                                </p>
+                                {game ? (
+                                  <div className="flex items-start gap-3">
+                                    <PackageImage url={game.packageImageUrl} />
+                                    <div className="flex min-w-0 flex-col items-start gap-2">
+                                      <p className="text-base text-text-primary">{game.title}</p>
                                       <AdminActionButton onClick={() => setGameSelectFor(c)} disabled={busy} aria-label={`${c.playlistTitle}のゲームを選び直す`}>
                                         別のゲームを選ぶ
                                       </AdminActionButton>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <StatusBadge>新規</StatusBadge>
-                                      <span className="hidden text-text-tertiary md:inline">承認時に、下の名前でゲームタイトルを登録します</span>
-                                    </>
-                                  )}
-                                </p>
-                              ) : (
-                                c.reviewComment && <p className="text-md text-text-muted">理由: {APPROVE_ERROR_LABEL[c.reviewComment] ?? c.reviewComment}</p>
-                              )}
-                              {status === 'pending' && !game && (
-                                <div className="flex flex-col gap-1">
-                                  <label htmlFor={`new-game-${c.id}`} className="text-sm text-text-secondary">
-                                    登録するゲームタイトル名（初期値は再生リスト名から推定）
-                                  </label>
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <Input
-                                      id={`new-game-${c.id}`}
-                                      aria-label={`${c.playlistTitle}のゲーム名`}
-                                      value={newGameTitles.get(c.id) ?? c.gameQuery}
-                                      maxLength={MAX_GAME_TITLE_LENGTH}
-                                      onChange={(e) => changeNewGameTitle(c, e.target.value)}
-                                      disabled={busy}
-                                      className="w-72 max-w-full"
-                                    />
-                                    <AdminActionButton onClick={() => setGameSelectFor(c)} disabled={busy} aria-label={`${c.playlistTitle}のゲームを既存から選ぶ`}>
-                                      既存のゲームから選ぶ
-                                    </AdminActionButton>
+                                    </div>
                                   </div>
-                                </div>
-                              )}
-                              {status === 'pending' && !game && newGameTitleFor(c) && (
-                                <RakutenLine
-                                  pick={rakutenPickOf(c)}
-                                  explicit={rakutenChoices.has(c.id)}
-                                  stale={rakutenResultStale(c)}
-                                  result={rakutenResultFor(c)}
-                                  searching={rakutenSearching.has(c.id)}
-                                  failed={rakutenFailed.has(c.id)}
-                                  gameTitle={newGameTitleFor(c)!}
-                                  disabled={busy}
-                                  onOpen={() => setRakutenPickFor(c)}
-                                  onUseName={(name) => changeNewGameTitle(c, name)}
-                                />
-                              )}
-                              {status === 'registered' && (
-                                <Link href={`/playlists/${c.id}`} className="text-md text-text-tertiary hover:text-text-primary">
-                                  登録した再生リストを見る
-                                </Link>
-                              )}
-                              {status === 'pending' && tagIds.length > 0 && (
-                                <div className="flex flex-wrap gap-1">
-                                  {tagIds.map((id) => (
-                                    <span key={id} className="inline-flex items-center gap-1 rounded-[4px] bg-bg-hover px-2 py-[2px] text-sm text-text-secondary">
-                                      {tagsMap.get(id)?.name}
-                                      <button
-                                        type="button"
-                                        aria-label={`${tagsMap.get(id)?.name}を外す`}
-                                        onClick={() => removeTag(c.id, id)}
-                                        className="text-text-muted hover:text-text-primary"
+                                ) : (
+                                  <>
+                                    <div className="flex flex-col gap-1">
+                                      <label htmlFor={`new-game-${c.id}`} className="text-sm text-text-secondary">
+                                        登録するゲームタイトル名（初期値は再生リスト名から推定）
+                                      </label>
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        <Input
+                                          id={`new-game-${c.id}`}
+                                          aria-label={`${c.playlistTitle}のゲーム名`}
+                                          value={newGameTitles.get(c.id) ?? c.gameQuery}
+                                          maxLength={MAX_GAME_TITLE_LENGTH}
+                                          onChange={(e) => changeNewGameTitle(c, e.target.value)}
+                                          disabled={busy}
+                                          className="min-w-0 flex-1 basis-56"
+                                        />
+                                        <AdminActionButton onClick={() => setGameSelectFor(c)} disabled={busy} aria-label={`${c.playlistTitle}のゲームを既存から選ぶ`}>
+                                          既存のゲームから選ぶ
+                                        </AdminActionButton>
+                                      </div>
+                                    </div>
+                                    {newGameTitleFor(c) && (
+                                      <RakutenLine
+                                        pick={rakutenPickOf(c)}
+                                        explicit={rakutenChoices.has(c.id)}
+                                        stale={rakutenResultStale(c)}
+                                        result={rakutenResultFor(c)}
+                                        searching={rakutenSearching.has(c.id)}
+                                        failed={rakutenFailed.has(c.id)}
+                                        gameTitle={newGameTitleFor(c)!}
                                         disabled={busy}
-                                      >
-                                        <XIcon size={10} />
-                                      </button>
-                                    </span>
-                                  ))}
-                                </div>
-                              )}
-                              {error && (
-                                <p role="alert" className="text-md text-input-error">
-                                  {error}
-                                </p>
-                              )}
-                            </div>
+                                        onOpen={() => setRakutenPickFor(c)}
+                                        onUseName={(name) => changeNewGameTitle(c, name)}
+                                      />
+                                    )}
+                                  </>
+                                )}
+                              </div>
+                            )}
                           </Card>
                         </li>
                       );
@@ -883,15 +901,9 @@ function RakutenLine({
   } else if (pick) {
     action = '選び直す';
     body = (
-      <span className="inline-flex min-w-0 items-center gap-2">
-        {pick.imageUrl && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={pick.imageUrl} alt="" className="h-8 w-6 shrink-0 rounded-[4px] object-cover" />
-        )}
-        <span className="line-clamp-2 min-w-0 text-text-primary">
-          {pick.title}
-          {pick.hardware && <span className="text-text-tertiary">（{pick.hardware}）</span>}
-        </span>
+      <span className="line-clamp-3 text-text-primary">
+        {pick.title}
+        {pick.hardware && <span className="text-text-tertiary">（{pick.hardware}）</span>}
       </span>
     );
   } else if (failed && !result) {
@@ -911,21 +923,38 @@ function RakutenLine({
     body = <span className="text-text-tertiary">見つかりませんでした（名前だけで登録）</span>;
   }
   return (
-    <p className="flex flex-wrap items-center gap-2 text-md" data-testid="rakuten-line">
-      <span className="text-text-tertiary">楽天:</span>
-      <span aria-live="polite" className="min-w-0">
-        {body}
-      </span>
-      {/* 検索中も外さない（モーダルを閉じたときのフォーカスの戻り先にするため） */}
-      <Button variant="rakuten" size="sm" onClick={onOpen} disabled={disabled || searching} aria-label={`${gameTitle}の楽天の商品を${action}`}>
-        {action}
-      </Button>
-      {pick && pickName && normalizeForMatch(pickName) !== normalizeForMatch(gameTitle) && (
-        <AdminActionButton onClick={() => onUseName(pickName)} disabled={disabled} aria-label={`ゲーム名を「${pickName}」にする`}>
-          商品名をゲーム名にする
-        </AdminActionButton>
-      )}
-    </p>
+    <div className="flex items-start gap-3 text-md" data-testid="rakuten-line">
+      <PackageImage url={pick?.imageUrl ?? null} />
+      <div className="flex min-w-0 flex-1 flex-col items-start gap-2">
+        <p className="text-sm text-text-tertiary">楽天ブックスの商品（パッケージ画像・機種・ジャンルを入れる）</p>
+        <span aria-live="polite" className="min-w-0">
+          {body}
+        </span>
+        <div className="flex flex-wrap gap-2">
+          {/* 検索中も外さない（モーダルを閉じたときのフォーカスの戻り先にするため） */}
+          <Button variant="rakuten" size="sm" onClick={onOpen} disabled={disabled || searching} aria-label={`${gameTitle}の楽天の商品を${action}`}>
+            {action}
+          </Button>
+          {pick && pickName && normalizeForMatch(pickName) !== normalizeForMatch(gameTitle) && (
+            <AdminActionButton onClick={() => onUseName(pickName)} disabled={disabled} aria-label={`ゲーム名を「${pickName}」にする`}>
+              商品名をゲーム名にする
+            </AdminActionButton>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** ゲームのパッケージ画像（無ければ「画像なし」の枠）。楽天の商品・登録済みのゲームで共用 */
+function PackageImage({ url }: { url: string | null }) {
+  return url ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={url} alt="" className="h-[112px] w-[84px] shrink-0 rounded-[4px] bg-bg-hover object-cover" loading="lazy" />
+  ) : (
+    <span aria-hidden className="flex h-[112px] w-[84px] shrink-0 items-center justify-center rounded-[4px] border border-dashed border-surface-border text-xs text-text-muted">
+      画像なし
+    </span>
   );
 }
 

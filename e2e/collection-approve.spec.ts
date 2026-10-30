@@ -23,7 +23,7 @@ test('§3.4・§3.5 推定なしの候補には、gameQuery を入れた新規�
   await adminPage.goto('/admin/collection');
   const group = section(adminPage, channelTitle);
   const row = group.getByRole('listitem');
-  await expect(row).toContainText('新規');
+  await expect(row).toContainText('新しく登録する');
   const input = row.getByRole('textbox');
   await expect(input).toHaveValue(gameQuery);
   await expect(row.getByRole('button', { name: '既存から選ぶ' })).toBeVisible();
