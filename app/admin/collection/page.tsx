@@ -673,7 +673,7 @@ export default function AdminCollectionPage() {
                               href={`https://www.youtube.com/playlist?list=${c.id}`}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="relative aspect-video w-28 shrink-0 overflow-hidden rounded-[6px] bg-bg-hover md:w-40"
+                              className="relative aspect-video w-28 shrink-0 self-start overflow-hidden rounded-[6px] bg-bg-hover md:w-40"
                               aria-label={`${c.playlistTitle}をYouTubeで開く`}
                             >
                               {c.thumbnailUrl && (
@@ -699,7 +699,7 @@ export default function AdminCollectionPage() {
                                   ) : (
                                     <>
                                       <StatusBadge>新規</StatusBadge>
-                                      <span className="text-text-tertiary">承認時に、下の名前でゲームタイトルを登録します</span>
+                                      <span className="hidden text-text-tertiary md:inline">承認時に、下の名前でゲームタイトルを登録します</span>
                                     </>
                                   )}
                                 </p>
