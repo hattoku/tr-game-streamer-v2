@@ -14,7 +14,7 @@
  */
 'use client';
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import Link from 'next/link';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -617,8 +617,9 @@ export default function AdminCollectionPage() {
             const allOn = selectableIds.length > 0 && selectableIds.every((id) => selected.has(id));
             const isCollapsed = collapsed.has(group.key);
             return (
-              <section key={group.key} className="flex flex-col gap-2">
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-surface-border pb-2">
+              // 管理画面は操作ミスを防ぐことを優先し、チャンネルごとに枠で囲んで、どのカードがどのチャンネルか分かるようにする
+              <section key={group.key} className="overflow-hidden rounded-[12px] border border-admin-border">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-admin-border bg-admin-header-bg px-4 py-3">
                   <button
                     type="button"
                     onClick={() =>
@@ -630,9 +631,19 @@ export default function AdminCollectionPage() {
                       })
                     }
                     aria-expanded={!isCollapsed}
-                    className="text-left text-lg font-medium text-text-primary"
+                    className="flex min-w-0 items-center gap-3 text-left text-lg font-medium text-text-primary"
                   >
-                    {group.title}（{group.items.length}件）
+                    <ChevronRightIcon size={14} className={cn('shrink-0 transition-transform', !isCollapsed && 'rotate-90')} />
+                    {channels.get(group.key)?.channelIconUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={channels.get(group.key)!.channelIconUrl!} alt="" className="size-9 shrink-0 rounded-full object-cover" />
+                    ) : (
+                      <span aria-hidden className="size-9 shrink-0 rounded-full bg-bg-hover" />
+                    )}
+                    <span className="min-w-0">
+                      {group.title}
+                      <span className="ml-1 text-md font-normal text-text-tertiary">（{group.items.length}件）</span>
+                    </span>
                   </button>
                   {status !== 'registered' && (
                     <label className="inline-flex items-center gap-2 text-md text-text-tertiary">
@@ -643,7 +654,7 @@ export default function AdminCollectionPage() {
                 </div>
 
                 {!isCollapsed && (
-                  <ul className="flex flex-col gap-2">
+                  <ul className="flex flex-col gap-2 bg-bg-base/40 p-3">
                     {group.items.map((c) => {
                       const game = gameFor(c);
                       const tagIds = tagIdsFor(c);
@@ -683,28 +694,42 @@ export default function AdminCollectionPage() {
                                 <p className="flex flex-wrap items-center gap-2 text-md">
                                   <span className="text-text-tertiary">ゲーム:</span>
                                   {game ? (
-                                    <button type="button" className="text-text-primary underline-offset-2 hover:underline" onClick={() => setGameSelectFor(c)} disabled={busy}>
-                                      {game.title}
-                                    </button>
+                                    <>
+                                      <span className="text-text-primary">{game.title}</span>
+                                      <AdminActionButton onClick={() => setGameSelectFor(c)} disabled={busy} aria-label={`${c.playlistTitle}のゲームを選び直す`}>
+                                        別のゲームを選ぶ
+                                      </AdminActionButton>
+                                    </>
                                   ) : (
                                     <>
                                       <StatusBadge>新規</StatusBadge>
-                                      <Input
-                                        aria-label={`${c.playlistTitle}のゲーム名`}
-                                        value={newGameTitles.get(c.id) ?? c.gameQuery}
-                                        maxLength={MAX_GAME_TITLE_LENGTH}
-                                        onChange={(e) => changeNewGameTitle(c, e.target.value)}
-                                        disabled={busy}
-                                        className="w-56 max-w-full"
-                                      />
-                                      <Button variant="ghost" size="sm" onClick={() => setGameSelectFor(c)} disabled={busy}>
-                                        既存から選ぶ
-                                      </Button>
+                                      <span className="text-text-tertiary">承認時に、下の名前でゲームタイトルを登録します</span>
                                     </>
                                   )}
                                 </p>
                               ) : (
                                 c.reviewComment && <p className="text-md text-text-muted">理由: {APPROVE_ERROR_LABEL[c.reviewComment] ?? c.reviewComment}</p>
+                              )}
+                              {status === 'pending' && !game && (
+                                <div className="flex flex-col gap-1">
+                                  <label htmlFor={`new-game-${c.id}`} className="text-sm text-text-secondary">
+                                    登録するゲームタイトル名（初期値は再生リスト名から推定）
+                                  </label>
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <Input
+                                      id={`new-game-${c.id}`}
+                                      aria-label={`${c.playlistTitle}のゲーム名`}
+                                      value={newGameTitles.get(c.id) ?? c.gameQuery}
+                                      maxLength={MAX_GAME_TITLE_LENGTH}
+                                      onChange={(e) => changeNewGameTitle(c, e.target.value)}
+                                      disabled={busy}
+                                      className="w-72 max-w-full"
+                                    />
+                                    <AdminActionButton onClick={() => setGameSelectFor(c)} disabled={busy} aria-label={`${c.playlistTitle}のゲームを既存から選ぶ`}>
+                                      既存のゲームから選ぶ
+                                    </AdminActionButton>
+                                  </div>
+                                </div>
                               )}
                               {status === 'pending' && !game && newGameTitleFor(c) && (
                                 <RakutenLine
@@ -896,14 +921,32 @@ function RakutenLine({
         {body}
       </span>
       {/* 検索中も外さない（モーダルを閉じたときのフォーカスの戻り先にするため） */}
-      <Button variant="ghost" size="sm" onClick={onOpen} disabled={disabled || searching} aria-label={`${gameTitle}の楽天の商品を${action}`}>
+      <Button variant="rakuten" size="sm" onClick={onOpen} disabled={disabled || searching} aria-label={`${gameTitle}の楽天の商品を${action}`}>
         {action}
       </Button>
       {pick && pickName && normalizeForMatch(pickName) !== normalizeForMatch(gameTitle) && (
-        <Button variant="ghost" size="sm" onClick={() => onUseName(pickName)} disabled={disabled} aria-label={`ゲーム名を「${pickName}」にする`}>
+        <AdminActionButton onClick={() => onUseName(pickName)} disabled={disabled} aria-label={`ゲーム名を「${pickName}」にする`}>
           商品名をゲーム名にする
-        </Button>
+        </AdminActionButton>
       )}
     </p>
+  );
+}
+
+/**
+ * 管理画面の行の中の操作ボタン（ゲームを選ぶ等）。管理画面は操作ミスを防ぐのを優先し、ユーザー向け画面の
+ * 白黒基調より目立つ管理用の色（admin-accent）で、押せる場所だと分かる見た目にする
+ */
+function AdminActionButton({ className, ...rest }: ComponentProps<'button'>) {
+  return (
+    <button
+      type="button"
+      className={cn(
+        'inline-flex items-center justify-center whitespace-nowrap rounded-[6px] border border-admin-accent bg-admin-accent/15 px-[10px] py-1 text-sm font-medium text-admin-accent-text',
+        'transition-colors duration-[120ms] not-disabled:hover:bg-admin-accent/30 disabled:opacity-50',
+        className,
+      )}
+      {...rest}
+    />
   );
 }
