@@ -156,3 +156,37 @@ test('§3.7・§4.3 承認では、選んだ商品のJAN・楽天なし（null�
     expect((await e2eDb().collection('collection_candidates').doc(id).get()).data()!.status).toBe('rejected');
   }
 });
+
+test('§3.3・§3.7 楽天の状態で絞り込め、各絞り込みに件数が出る。自動検索が終わると順番待ちは0件になる', async ({ adminPage }) => {
+  test.setTimeout(120_000);
+  const channelTitle = uniqueText('チャンネル');
+  const explorationChannelId = randomId('e2e-ch-');
+  const matchedName = '野狗子: Slitterhead';
+  await seedCandidate({ channelTitle, explorationChannelId, gameQuery: matchedName, rakutenSearch: { title: matchedName, query: matchedName, items: [SLITTERHEAD] } });
+  const unmatchedName = uniqueText('一致しないゲーム');
+  await seedCandidate({ channelTitle, explorationChannelId, gameQuery: unmatchedName, rakutenSearch: { title: unmatchedName, query: '野狗子', items: [SLITTERHEAD] } });
+  const zeroName = uniqueText('見つからないゲーム');
+  await seedCandidate({ channelTitle, explorationChannelId, gameQuery: zeroName, rakutenSearch: { title: zeroName, query: zeroName, items: [] } });
+  // 検索していない候補（自動検索で0件になる）
+  await seedCandidate({ channelTitle, explorationChannelId, gameQuery: uniqueText('未検索のゲーム') });
+
+  await adminPage.goto('/admin/collection');
+  await filterChannel(adminPage, channelTitle);
+  await expect(adminPage.getByRole('button', { name: 'チャンネルで絞り込み' })).toContainText(`${channelTitle}（4）`);
+  await expect(adminPage.getByRole('button', { name: 'ゲーム推定で絞り込み' })).toContainText('すべて（4）');
+
+  // 自動検索が終わると、順番待ちは0件、楽天なし・見つからないは2件
+  const rakutenFilter = adminPage.getByRole('button', { name: '楽天の商品で絞り込み' });
+  await expect(section(adminPage, channelTitle).getByTestId('rakuten-line').filter({ hasText: '自動検索の順番待ち' })).toHaveCount(0, { timeout: 60_000 });
+  await rakutenFilter.click();
+  await expect(adminPage.getByRole('menuitemradio', { name: '商品あり（1）' })).toBeVisible();
+  await expect(adminPage.getByRole('menuitemradio', { name: '一致なし（候補あり）（1）' })).toBeVisible();
+  await expect(adminPage.getByRole('menuitemradio', { name: '楽天なし・見つからない（2）' })).toBeVisible();
+  await expect(adminPage.getByRole('menuitemradio', { name: '自動検索の順番待ち（0）' })).toBeVisible();
+  await adminPage.getByRole('menuitemradio', { name: /^商品あり/ }).click();
+
+  const rows = section(adminPage, channelTitle).getByRole('listitem');
+  await expect(rows).toHaveCount(1);
+  await expect(rows.getByTestId('rakuten-line')).toContainText('野狗子: Slitterhead');
+  await expect(rakutenFilter).toContainText('商品あり（1）');
+});

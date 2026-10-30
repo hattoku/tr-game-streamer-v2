@@ -62,6 +62,22 @@ const RAKUTEN_SEARCH_INTERVAL_MS = 1100;
 
 type GameFilter = 'all' | 'guessed' | 'none';
 
+/**
+ * 新規のゲーム名の候補の、楽天ブックスの商品の決まり具合（v2.2 §3.7・§3.3）。推定ありの候補は 'not_new'。
+ * queued: 自動検索の順番待ち（検索中を含む）／ unconfirmed: 検索後にゲーム名を変えた・検索に失敗した（承認APIが名前で探す）
+ */
+type RakutenState = 'not_new' | 'matched' | 'unmatched' | 'none' | 'queued' | 'unconfirmed';
+type RakutenFilter = 'all' | Exclude<RakutenState, 'not_new'>;
+
+const RAKUTEN_FILTER_LABEL: Record<RakutenFilter, string> = {
+  all: 'すべて',
+  matched: '商品あり',
+  unmatched: '一致なし（候補あり）',
+  none: '楽天なし・見つからない',
+  queued: '自動検索の順番待ち',
+  unconfirmed: '要確認（名前変更・検索失敗）',
+};
+
 const APPROVE_ERROR_LABEL: Record<string, string> = {
   not_public: 'YouTubeで非公開になっていたため却下しました',
   playlist_not_found: 'YouTubeで削除されていたため却下しました',
@@ -96,6 +112,7 @@ export default function AdminCollectionPage() {
 
   const [channelFilter, setChannelFilter] = useState('all');
   const [gameFilter, setGameFilter] = useState<GameFilter>('all');
+  const [rakutenFilter, setRakutenFilter] = useState<RakutenFilter>('all');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [gameOverrides, setGameOverrides] = useState<Map<string, GameOption>>(new Map());
   // 推定なしの候補で、承認時に用意するゲーム名を書き換えたもの（既定は候補の gameQuery）
@@ -226,20 +243,46 @@ export default function AdminCollectionPage() {
     return [...new Set([...channelTags, ...c.titleTagIds])].filter((id) => tagsMap.has(id) && !removed?.has(id));
   }
 
-  const filtered = useMemo(() => {
-    if (!candidates) return [];
-    return candidates.filter((c) => {
-      if (channelFilter !== 'all' && c.explorationChannelId !== channelFilter) return false;
-      if (gameFilter !== 'all') {
-        const hasGame = !!(gameOverrides.get(c.id) ?? (c.guessedGameId && gamesById.get(c.guessedGameId)) ?? guessGame(c.playlistTitle, games));
-        if (gameFilter === 'guessed' ? !hasGame : hasGame) return false;
-      }
-      return true;
-    });
-  }, [candidates, channelFilter, gameFilter, gameOverrides, gamesById, games]);
+  function hasGameOf(c: CollectionCandidate): boolean {
+    return !!(gameOverrides.get(c.id) ?? (c.guessedGameId && gamesById.get(c.guessedGameId)) ?? guessGame(c.playlistTitle, games));
+  }
+
+  function rakutenStateOf(c: CollectionCandidate): RakutenState {
+    if (hasGameOf(c) || !newGameTitleFor(c)) return 'not_new';
+    const pick = rakutenPickOf(c);
+    if (pick) return 'matched';
+    if (pick === null) {
+      const result = rakutenResultFor(c);
+      return !rakutenChoices.has(c.id) && result && result.items.length > 0 ? 'unmatched' : 'none';
+    }
+    return rakutenResultStale(c) || rakutenFailed.has(c.id) ? 'unconfirmed' : 'queued';
+  }
+
+  // 絞り込み。各絞り込みの件数は、ほかの絞り込みを当てた件数を出す（v2.2 §3.3）。
+  // 楽天の状態は描画ごとに変わるので memo にはしない（候補は数百件なので毎回数えても軽い）
+  const matchesChannel = (c: CollectionCandidate) => channelFilter === 'all' || c.explorationChannelId === channelFilter;
+  const matchesGame = (c: CollectionCandidate) => gameFilter === 'all' || (gameFilter === 'guessed') === hasGameOf(c);
+  const matchesRakuten = (c: CollectionCandidate) => rakutenFilter === 'all' || rakutenStateOf(c) === rakutenFilter;
+  const allCandidates = candidates ?? [];
+  const filtered = allCandidates.filter((c) => matchesChannel(c) && (status !== 'pending' || (matchesGame(c) && matchesRakuten(c))));
+  const gameFilterCounts = (() => {
+    const base = allCandidates.filter((c) => matchesChannel(c) && matchesRakuten(c));
+    const guessed = base.filter(hasGameOf).length;
+    return { all: base.length, guessed, none: base.length - guessed };
+  })();
+  const rakutenFilterCounts = (() => {
+    const counts: Record<RakutenFilter, number> = { all: 0, matched: 0, unmatched: 0, none: 0, queued: 0, unconfirmed: 0 };
+    for (const c of allCandidates) {
+      if (!matchesChannel(c) || !matchesGame(c)) continue;
+      counts.all++;
+      const state = rakutenStateOf(c);
+      if (state !== 'not_new') counts[state]++;
+    }
+    return counts;
+  })();
 
   // チャンネルごとにまとめる（並びはチャンネル名順、チャンネル内は再生リストの作成日時の新しい順）
-  const groups = useMemo(() => {
+  const groups = (() => {
     const map = new Map<string, { key: string; title: string; items: CollectionCandidate[] }>();
     for (const c of filtered) {
       const group = map.get(c.explorationChannelId) ?? { key: c.explorationChannelId, title: c.channelTitle, items: [] };
@@ -247,7 +290,7 @@ export default function AdminCollectionPage() {
       map.set(c.explorationChannelId, group);
     }
     return [...map.values()].sort((a, b) => a.title.localeCompare(b.title, 'ja'));
-  }, [filtered]);
+  })();
 
   // 新規のゲーム名の候補を、表示順に1件ずつ楽天ブックスで検索する（v2.2 §3.7）。検索済み（候補に保存済み）・
   // 失敗したものは飛ばす。承認中・モーダルで探し直している間は止める（楽天APIの1秒1回を画面全体で守るため）。1件終わるごとに状態が変わり、この effect が次の1件を拾う
@@ -271,11 +314,17 @@ export default function AdminCollectionPage() {
   }, [nextRakutenTarget?.id, nextRakutenTitle, rakutenQueueTick]);
 
   const channelOptions = useMemo(() => {
-    const seen = new Map<string, string>();
-    candidates?.forEach((c) => seen.set(c.explorationChannelId, c.channelTitle));
+    const seen = new Map<string, { title: string; count: number }>();
+    candidates?.forEach((c) => {
+      const entry = seen.get(c.explorationChannelId) ?? { title: c.channelTitle, count: 0 };
+      entry.count++;
+      seen.set(c.explorationChannelId, entry);
+    });
     return [
-      { value: 'all', label: 'すべてのチャンネル' },
-      ...[...seen.entries()].sort((a, b) => a[1].localeCompare(b[1], 'ja')).map(([value, label]) => ({ value, label })),
+      { value: 'all', label: `すべてのチャンネル（${candidates?.length ?? 0}）` },
+      ...[...seen.entries()]
+        .sort((a, b) => a[1].title.localeCompare(b[1].title, 'ja'))
+        .map(([value, { title, count }]) => ({ value, label: `${title}（${count}）` })),
     ];
   }, [candidates]);
 
@@ -367,7 +416,11 @@ export default function AdminCollectionPage() {
             .map((n) => `・${n}`)
             .join('\n')}${newGameNames.length > NAMES_SHOWN ? `\nほか${newGameNames.length - NAMES_SHOWN}件` : ''}\n\n`
         : '';
-    if (!window.confirm(`${targets.length}件を登録します。${newGameNotice}よろしいですか？`)) return;
+    // 楽天の商品がまだ決まっていない（順番待ち・名前変更・検索失敗）候補は、承認APIが名前の完全一致で探す
+    const undecided = targets.filter((c) => ['queued', 'unconfirmed'].includes(rakutenStateOf(c))).length;
+    const undecidedNotice =
+      undecided > 0 ? `楽天の商品がまだ決まっていない候補が${undecided}件あります（自動検索の順番待ちなど。承認時に名前が完全一致する商品だけを探します）。\n\n` : '';
+    if (!window.confirm(`${targets.length}件を登録します。${newGameNotice}${undecidedNotice}よろしいですか？`)) return;
 
     setProgress({ done: 0, total: targets.length });
     // 自動検索の1件（と、その後の間隔）が終わるのを待ってから送る。承認APIも楽天ブックスを呼ぶため（1秒1回）
@@ -521,10 +574,22 @@ export default function AdminCollectionPage() {
             prefix="ゲーム推定:"
             aria-label="ゲーム推定で絞り込み"
             options={[
-              { value: 'all', label: 'すべて' },
-              { value: 'guessed', label: '推定あり' },
-              { value: 'none', label: '推定なし' },
+              { value: 'all', label: `すべて（${gameFilterCounts.all}）` },
+              { value: 'guessed', label: `推定あり（${gameFilterCounts.guessed}）` },
+              { value: 'none', label: `推定なし（${gameFilterCounts.none}）` },
             ]}
+          />
+        )}
+        {status === 'pending' && (
+          <SelectMenu<RakutenFilter>
+            value={rakutenFilter}
+            onValueChange={setRakutenFilter}
+            prefix="楽天:"
+            aria-label="楽天の商品で絞り込み"
+            options={(Object.keys(RAKUTEN_FILTER_LABEL) as RakutenFilter[]).map((value) => ({
+              value,
+              label: `${RAKUTEN_FILTER_LABEL[value]}（${rakutenFilterCounts[value]}）`,
+            }))}
           />
         )}
       </div>
@@ -815,7 +880,7 @@ function RakutenLine({
     action = '探し直す';
     body = <span className="text-text-tertiary">ゲーム名を変えました（承認時にこの名前で探します）</span>;
   } else if (pick === undefined) {
-    body = <span className="text-text-tertiary">検索待ち</span>;
+    body = <span className="text-text-tertiary">自動検索の順番待ち</span>;
   } else if (explicit) {
     body = <span className="text-text-tertiary">使わない（名前だけで登録）</span>;
   } else if (result && result.items.length > 0) {
