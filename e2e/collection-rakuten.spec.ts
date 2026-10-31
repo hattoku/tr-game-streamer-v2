@@ -3,7 +3,7 @@
 // 自動検索は実際の楽天ブックスAPIを呼ぶ（stg の未処理の候補もあるため、チャンネルで絞り込んでから待つ）。
 // 承認は YouTube に無い再生リストIDで行うので、候補は自動で却下され、用意したゲームタイトルは消える（§4.3）。
 import type { Page } from '@playwright/test';
-import { expect, test } from './support/fixtures';
+import { captureIdToken, expect, test } from './support/fixtures';
 import { uniqueText } from './support/env';
 import { db as e2eDb } from './support/cleanup';
 import { randomId, section, seedCandidate } from './support/collection';
@@ -234,4 +234,23 @@ test('§3.7 楽天ブックスの「ゲーム」の下でも、おもちゃ・�
   const saved = (await e2eDb().collection('collection_candidates').doc(playlistId).get()).data()!.rakutenSearch;
   expect(saved.items.filter((i: { hardware: string }) => i.hardware === '玩具')).toEqual([]);
   await expect(line).not.toContainText('水筒');
+});
+
+test('§3.7 探索の後に、未検索の新規のゲーム名の候補をサーバーで楽天ブックス検索して保存しておく（画面を開かなくてよい）', async ({ adminPage }) => {
+  test.setTimeout(120_000);
+  const playlistId = await seedCandidate({ channelTitle: uniqueText('チャンネル'), explorationChannelId: randomId('e2e-ch-'), gameQuery: '野狗子: Slitterhead' });
+  // 収集候補の画面を開くと画面の自動検索が動いてしまうので、別の画面でトークンを取る
+  const token = await captureIdToken(adminPage, '/contact/history');
+  // 存在しない探索対象チャンネルを指定して、YouTube を読まずに探索の後処理（楽天の先読み）だけを動かす
+  const res = await adminPage.request.post('/api/admin/collection/explore', {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { explorationChannelId: randomId('e2e-none-') },
+    timeout: 90_000,
+  });
+  expect(res.ok()).toBe(true);
+  expect((await res.json()).rakutenPrefetch.searched).toBeGreaterThan(0);
+
+  const saved = (await e2eDb().collection('collection_candidates').doc(playlistId).get()).data()!.rakutenSearch;
+  expect(saved.title).toBe('野狗子: Slitterhead');
+  expect(saved.items.some((i: { jan: string }) => i.jan === SLITTERHEAD.jan)).toBe(true);
 });
