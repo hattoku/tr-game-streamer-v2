@@ -220,7 +220,8 @@ test('§3.8 「動画一覧を見る」とサムネイルで、YouTube の再生
   await group.getByRole('button', { name: /動画一覧を見る$/ }).click();
   await expect(dialog.locator('iframe')).toHaveAttribute('src', embedSrc);
   await expect(dialog.getByRole('link', { name: /YouTube で開く/ })).toHaveAttribute('href', `https://www.youtube.com/playlist?list=${playlistId}`);
-  await adminPage.keyboard.press('Escape');
+  // フォーカスがプレイヤー（別オリジンの iframe）に入ると Esc が届かないため、閉じるボタンで閉じる
+  await dialog.getByRole('button', { name: '閉じる' }).click();
   await expect(dialog).toBeHidden();
 
   await group.getByRole('button', { name: /の再生リストを確認$/ }).click();
