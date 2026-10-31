@@ -273,3 +273,17 @@ test('§3.7 英語名で見つからないときは、カタカナで探し直�
   await dialog.getByRole('button', { name: '検索' }).click();
   await expect(dialog.getByRole('list', { name: '楽天ブックスの検索結果' }).getByRole('button').first()).toContainText('パシフィックドライブ', { timeout: 30_000 });
 });
+
+test('§3.7 末尾の数字（シリーズの番号）は外して探し直さない（「バイオハザード RE:2」を「バイオハザード RE」にして RE:4 に当てない）', async ({ adminPage }) => {
+  test.setTimeout(120_000);
+  const channelTitle = uniqueText('チャンネル');
+  const playlistId = await seedCandidate({ channelTitle, explorationChannelId: randomId('e2e-ch-'), gameQuery: 'バイオハザード RE:2' });
+
+  await adminPage.goto('/admin/collection');
+  await filterChannel(adminPage, channelTitle);
+  const line = rakutenLine(adminPage, channelTitle);
+  await expect(line).not.toContainText(/自動検索の順番待ち|検索中…/, { timeout: 60_000 });
+  const saved = (await e2eDb().collection('collection_candidates').doc(playlistId).get()).data()!.rakutenSearch;
+  expect(saved.query).not.toBe('バイオハザード RE');
+  await expect(line).not.toContainText('RE:4');
+});

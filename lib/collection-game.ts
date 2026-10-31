@@ -200,7 +200,9 @@ export function rakutenQueriesFor(title: string): string[] {
   const firstSegment = base.split(/[\s:：・~〜\-–—|｜]/)[0]?.trim() ?? '';
   const queries = [base];
   // 英数字だけの名前（Pacific Drive 等）は短くすると別の語（Pacific）になるので、日本語を含む場合だけ短くする
-  if (withoutSuffix && /[^\x00-\x7F]/.test(withoutSuffix)) queries.push(withoutSuffix);
+  // 末尾が数字だけ（「バイオハザード RE:2」の 2 など）はシリーズの番号なので外さない。外すと別の作品（RE:4）に当たる
+  const suffix = base.slice(withoutSuffix.length);
+  if (withoutSuffix && /[^\x00-\x7F]/.test(withoutSuffix) && /[A-Za-z]/.test(suffix)) queries.push(withoutSuffix);
   if (firstSegment.length >= 2 && /[^\x00-\x7F]/.test(firstSegment)) queries.push(firstSegment);
   return [...new Set(queries.filter((q) => q.length >= 2))];
 }
