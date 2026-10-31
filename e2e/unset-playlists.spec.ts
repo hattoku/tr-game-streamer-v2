@@ -50,7 +50,7 @@ test('§6.5 ゲーム未設定の画面に一覧が出て、ゲームを選ぶ�
 
     await item.getByRole('button', { name: /ゲームを選ぶ/ }).click();
     await adminPage.getByRole('dialog').getByText(gameTitle).click();
-    await expect(adminPage.getByText('ゲームを付けました')).toBeVisible();
+    await expect(adminPage.getByText('ゲームを付けました').first()).toBeVisible();
     await expect(item).toHaveCount(0);
 
     const playlist = (await e2eDb().collection('playlists').doc(id).get()).data()!;
@@ -75,7 +75,7 @@ test('§6.5 いますぐ照合で、ヒントがタイトル・別名と完全�
   try {
     await row(adminPage, matched.title);
     await adminPage.getByRole('button', { name: 'いますぐ照合' }).click();
-    await expect(adminPage.getByText(/件を照合し、\d+件にゲームを付けました/)).toBeVisible({ timeout: 30_000 });
+    await expect(adminPage.getByText(/件を照合し、\d+件にゲームを付けました/).first()).toBeVisible({ timeout: 30_000 });
 
     const a = (await e2eDb().collection('playlists').doc(matched.id).get()).data()!;
     expect(a.gameId).toBe(gameId);
