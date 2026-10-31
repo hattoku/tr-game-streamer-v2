@@ -9,10 +9,12 @@
  * v2.1 §3.5・§4.3）。既存から選ぶ GameSelectModal・楽天を自動検索した GameCreateModal も引き続き使える。
  * 付与するタグ＝探索対象チャンネルのタグ＋タイトル由来のタグ（運営者タグのみ）。行ごとに×で外せる。
  * 承認は20件ずつ（新しいゲーム名を含む候補は5件ずつ）APIに送り、進捗を下部バーに表示する（§4）。
+ * v2.2 §3.7: 新規のゲーム名の候補は、表示したら順に（1秒に1件）楽天ブックスを検索して結果を候補に保存し、
+ * 名前が一致する商品を選んだ状態で行に出す。違えば候補から選び直すか、楽天なしにできる。
  */
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import Link from 'next/link';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -25,13 +27,16 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { SkeletonText } from '@/components/ui/Skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { useToast } from '@/components/ui/Toast';
-import { ChevronRightIcon, InventoryIcon, XIcon } from '@/components/ui/icons';
+import { ChevronRightIcon, InventoryIcon, SearchIcon, XIcon } from '@/components/ui/icons';
 import { cn } from '@/components/ui/cn';
 import { GameSelectModal, type GameOption } from '@/components/playlists/GameSelectModal';
 import { GameCreateModal } from '@/components/games/GameCreateModal';
+import { RakutenPickModal } from '@/components/admin/collection/RakutenPickModal';
+import { CollectionNav } from '@/components/admin/collection/CollectionNav';
 import { fetchTagsMap, type TagInfo } from '@/lib/tags';
 import { guessGame, normalizeForMatch } from '@/lib/exploration-rules';
 import { COLLECTION_DAILY_QUOTA_LIMIT } from '@/lib/collection-quota-shared';
+import { matchRakutenItem, normalizeRakutenGameTitle } from '@/lib/rakuten-shared';
 import {
   fetchCandidates,
   fetchCollectionQuotaUsedToday,
@@ -40,10 +45,13 @@ import {
   formatDateTime,
   postAdminApi,
   quotaExceededMessage,
+  rakutenItemPageUrl,
   type CandidateStatus,
   type CollectionBatchLog,
   type CollectionCandidate,
   type ExplorationChannel,
+  type RakutenPick,
+  type RakutenSearchResult,
 } from '@/lib/collection-admin';
 
 // 1回のリクエストの件数。新しいゲーム名を含む候補は、楽天ブックスの検索に1件2秒ほどかかるため少なくする
@@ -51,8 +59,26 @@ import {
 const APPROVE_CHUNK = 20;
 const APPROVE_CHUNK_NEW_GAMES = 5;
 const MAX_GAME_TITLE_LENGTH = 100;
+// 楽天ブックスAPIのレートリミット（1秒1回）に合わせ、自動検索は1件ずつ間隔をあける（v2.2 §3.7）
+const RAKUTEN_SEARCH_INTERVAL_MS = 1100;
 
-type GameFilter = 'all' | 'guessed' | 'none';
+type GameFilter = 'all' | 'guessed' | 'none' | 'no_game';
+
+/**
+ * 新規のゲーム名の候補の、楽天ブックスの商品の決まり具合（v2.2 §3.7・§3.3）。推定ありの候補は 'not_new'。
+ * queued: 自動検索の順番待ち（検索中を含む）／ unconfirmed: 検索後にゲーム名を変えた・検索に失敗した（承認APIが名前で探す）
+ */
+type RakutenState = 'not_new' | 'matched' | 'unmatched' | 'none' | 'queued' | 'unconfirmed';
+type RakutenFilter = 'all' | Exclude<RakutenState, 'not_new'>;
+
+const RAKUTEN_FILTER_LABEL: Record<RakutenFilter, string> = {
+  all: 'すべて',
+  matched: '商品あり',
+  unmatched: '一致なし（候補あり）',
+  none: '楽天なし・見つからない',
+  queued: '自動検索の順番待ち',
+  unconfirmed: '要確認（名前変更・検索失敗）',
+};
 
 const APPROVE_ERROR_LABEL: Record<string, string> = {
   not_public: 'YouTubeで非公開になっていたため却下しました',
@@ -64,6 +90,11 @@ const APPROVE_ERROR_LABEL: Record<string, string> = {
   register_failed: '登録に失敗しました',
   game_create_failed: 'ゲームタイトルの登録に失敗しました',
 };
+
+/** 承認APIの rakutenJan。まだ検索していない候補は送らず、承認APIに名前の完全一致で探させる */
+function rakutenJanParam(pick: RakutenPick | null | undefined): { rakutenJan?: string | null } {
+  return pick === undefined ? {} : { rakutenJan: pick?.jan ?? null };
+}
 
 const STATUS_TABS: Array<{ value: CandidateStatus; label: string }> = [
   { value: 'pending', label: '未処理' },
@@ -83,13 +114,24 @@ export default function AdminCollectionPage() {
 
   const [channelFilter, setChannelFilter] = useState('all');
   const [gameFilter, setGameFilter] = useState<GameFilter>('all');
+  const [rakutenFilter, setRakutenFilter] = useState<RakutenFilter>('all');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [gameOverrides, setGameOverrides] = useState<Map<string, GameOption>>(new Map());
   // 推定なしの候補で、承認時に用意するゲーム名を書き換えたもの（既定は候補の gameQuery）
   const [newGameTitles, setNewGameTitles] = useState<Map<string, string>>(new Map());
+  // ゲーム未設定で登録すると決めた候補（推定なしのものだけ。この画面を開いている間だけ持つ。v2.4 §3.9）
+  const [noGameIds, setNoGameIds] = useState<Set<string>>(new Set());
   const [removedTags, setRemovedTags] = useState<Map<string, Set<string>>>(new Map());
   const [rowErrors, setRowErrors] = useState<Map<string, string>>(new Map());
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  // 楽天ブックスの検索結果（候補に保存済みのものより新しい分）と、行ごとに選び直した商品（null は楽天なし）
+  const [rakutenResults, setRakutenResults] = useState<Map<string, RakutenSearchResult>>(new Map());
+  const [rakutenChoices, setRakutenChoices] = useState<Map<string, RakutenPick | null>>(new Map());
+  const [rakutenSearching, setRakutenSearching] = useState<Set<string>>(new Set());
+  const [rakutenFailed, setRakutenFailed] = useState<Set<string>>(new Set());
+  const [rakutenPickFor, setRakutenPickFor] = useState<CollectionCandidate | null>(null);
+  const rakutenQueueRunningRef = useRef(false);
+  const [rakutenQueueTick, setRakutenQueueTick] = useState(0);
 
   const [gameSelectFor, setGameSelectFor] = useState<CollectionCandidate | null>(null);
   const [gameCreateFor, setGameCreateFor] = useState<CollectionCandidate | null>(null);
@@ -146,26 +188,112 @@ export default function AdminCollectionPage() {
     return title && title.length <= MAX_GAME_TITLE_LENGTH && normalizeForMatch(title) ? title : null;
   }
 
+  function rakutenResultFor(c: CollectionCandidate): RakutenSearchResult | null {
+    return rakutenResults.get(c.id) ?? c.rakutenSearch;
+  }
+
+  /**
+   * 新規のゲームに結び付ける楽天ブックスの商品。選び直したものがあればそれ、無ければ検索結果のうちゲーム名と
+   * 一致する商品（承認APIの完全一致と同じ正規化）。null は楽天なし、undefined はまだ検索していない（承認APIが探す）
+   */
+  function rakutenPickOf(c: CollectionCandidate): RakutenPick | null | undefined {
+    if (rakutenChoices.has(c.id)) return rakutenChoices.get(c.id)!;
+    const result = rakutenResultFor(c);
+    // ゲーム名を書き換えた後の古い結果は使わず、未検索と同じく承認APIに新しい名前で探させる
+    if (!result || rakutenResultStale(c)) return undefined;
+    return matchRakutenItem(result.items, newGameTitleFor(c) ?? '');
+  }
+
+  /** 検索した後にゲーム名を書き換えたか */
+  function rakutenResultStale(c: CollectionCandidate): boolean {
+    const result = rakutenResultFor(c);
+    return !!result && normalizeForMatch(result.title) !== normalizeForMatch(newGameTitleFor(c) ?? '');
+  }
+
+  /** ゲーム名 title の候補として楽天ブックスを検索する。query を渡すとその語で検索する（モーダルの探し直し） */
+  async function searchRakuten(c: CollectionCandidate, title: string, query?: string): Promise<boolean> {
+    setRakutenSearching((prev) => new Set(prev).add(c.id));
+    try {
+      const res = await postAdminApi<Partial<RakutenSearchResult>>('/api/admin/collection/candidates', { action: 'rakuten_search', playlistId: c.id, title, query });
+      if (!res.ok || !Array.isArray(res.body.items)) throw new Error('rakuten_search_failed');
+      const result: RakutenSearchResult = { title, query: res.body.query ?? title, items: res.body.items };
+      setRakutenResults((prev) => new Map(prev).set(c.id, result));
+      setRakutenFailed((prev) => {
+        const next = new Set(prev);
+        next.delete(c.id);
+        return next;
+      });
+      return true;
+    } catch {
+      setRakutenFailed((prev) => new Set(prev).add(c.id));
+      return false;
+    } finally {
+      setRakutenSearching((prev) => {
+        const next = new Set(prev);
+        next.delete(c.id);
+        return next;
+      });
+    }
+  }
+
+  function chooseRakuten(candidateId: string, pick: RakutenPick | null) {
+    setRakutenChoices((prev) => new Map(prev).set(candidateId, pick));
+  }
+
   function tagIdsFor(c: CollectionCandidate): string[] {
     const channelTags = channels.get(c.explorationChannelId)?.tagIds ?? [];
     const removed = removedTags.get(c.id);
     return [...new Set([...channelTags, ...c.titleTagIds])].filter((id) => tagsMap.has(id) && !removed?.has(id));
   }
 
-  const filtered = useMemo(() => {
-    if (!candidates) return [];
-    return candidates.filter((c) => {
-      if (channelFilter !== 'all' && c.explorationChannelId !== channelFilter) return false;
-      if (gameFilter !== 'all') {
-        const hasGame = !!(gameOverrides.get(c.id) ?? (c.guessedGameId && gamesById.get(c.guessedGameId)) ?? guessGame(c.playlistTitle, games));
-        if (gameFilter === 'guessed' ? !hasGame : hasGame) return false;
-      }
-      return true;
-    });
-  }, [candidates, channelFilter, gameFilter, gameOverrides, gamesById, games]);
+  function hasGameOf(c: CollectionCandidate): boolean {
+    return !!(gameOverrides.get(c.id) ?? (c.guessedGameId && gamesById.get(c.guessedGameId)) ?? guessGame(c.playlistTitle, games));
+  }
+
+  /** ゲーム未設定で登録する候補（ゲームが推定・選択されていれば対象外） */
+  function isNoGame(c: CollectionCandidate): boolean {
+    return status === 'pending' && noGameIds.has(c.id) && !hasGameOf(c);
+  }
+
+  function rakutenStateOf(c: CollectionCandidate): RakutenState {
+    if (hasGameOf(c) || isNoGame(c) || !newGameTitleFor(c)) return 'not_new';
+    const pick = rakutenPickOf(c);
+    if (pick) return 'matched';
+    if (pick === null) {
+      const result = rakutenResultFor(c);
+      return !rakutenChoices.has(c.id) && result && result.items.length > 0 ? 'unmatched' : 'none';
+    }
+    return rakutenResultStale(c) || rakutenFailed.has(c.id) ? 'unconfirmed' : 'queued';
+  }
+
+  // 絞り込み。各絞り込みの件数は、ほかの絞り込みを当てた件数を出す（v2.2 §3.3）。
+  // 楽天の状態は描画ごとに変わるので memo にはしない（候補は数百件なので毎回数えても軽い）
+  const matchesChannel = (c: CollectionCandidate) => channelFilter === 'all' || c.explorationChannelId === channelFilter;
+  const matchesGame = (c: CollectionCandidate) =>
+    gameFilter === 'all' ||
+    (gameFilter === 'guessed' ? hasGameOf(c) : gameFilter === 'no_game' ? isNoGame(c) : !hasGameOf(c) && !isNoGame(c));
+  const matchesRakuten = (c: CollectionCandidate) => rakutenFilter === 'all' || rakutenStateOf(c) === rakutenFilter;
+  const allCandidates = candidates ?? [];
+  const filtered = allCandidates.filter((c) => matchesChannel(c) && (status !== 'pending' || (matchesGame(c) && matchesRakuten(c))));
+  const gameFilterCounts = (() => {
+    const base = allCandidates.filter((c) => matchesChannel(c) && matchesRakuten(c));
+    const guessed = base.filter(hasGameOf).length;
+    const noGame = base.filter(isNoGame).length;
+    return { all: base.length, guessed, none: base.length - guessed - noGame, noGame };
+  })();
+  const rakutenFilterCounts = (() => {
+    const counts: Record<RakutenFilter, number> = { all: 0, matched: 0, unmatched: 0, none: 0, queued: 0, unconfirmed: 0 };
+    for (const c of allCandidates) {
+      if (!matchesChannel(c) || !matchesGame(c)) continue;
+      counts.all++;
+      const state = rakutenStateOf(c);
+      if (state !== 'not_new') counts[state]++;
+    }
+    return counts;
+  })();
 
   // チャンネルごとにまとめる（並びはチャンネル名順、チャンネル内は再生リストの作成日時の新しい順）
-  const groups = useMemo(() => {
+  const groups = (() => {
     const map = new Map<string, { key: string; title: string; items: CollectionCandidate[] }>();
     for (const c of filtered) {
       const group = map.get(c.explorationChannelId) ?? { key: c.explorationChannelId, title: c.channelTitle, items: [] };
@@ -173,14 +301,41 @@ export default function AdminCollectionPage() {
       map.set(c.explorationChannelId, group);
     }
     return [...map.values()].sort((a, b) => a.title.localeCompare(b.title, 'ja'));
-  }, [filtered]);
+  })();
+
+  // 新規のゲーム名の候補を、表示順に1件ずつ楽天ブックスで検索する（v2.2 §3.7）。検索済み（候補に保存済み）・
+  // 失敗したものは飛ばす。承認中・モーダルで探し直している間は止める（楽天APIの1秒1回を画面全体で守るため）。1件終わるごとに状態が変わり、この effect が次の1件を拾う
+  const nextRakutenTarget =
+    status === 'pending' && progress === null && rakutenPickFor === null
+      ? groups.flatMap((g) => g.items).find((c) => !gameFor(c) && !isNoGame(c) && newGameTitleFor(c) && !rakutenResultFor(c) && !rakutenFailed.has(c.id) && !rakutenSearching.has(c.id))
+      : undefined;
+  const nextRakutenTitle = nextRakutenTarget ? newGameTitleFor(nextRakutenTarget) : null;
+  useEffect(() => {
+    if (!nextRakutenTarget || !nextRakutenTitle || rakutenQueueRunningRef.current) return;
+    rakutenQueueRunningRef.current = true;
+    (async () => {
+      await searchRakuten(nextRakutenTarget, nextRakutenTitle);
+      await new Promise((resolve) => setTimeout(resolve, RAKUTEN_SEARCH_INTERVAL_MS));
+      rakutenQueueRunningRef.current = false;
+      // 待っている間に状態が変わらなかったときも次の1件を拾えるよう、待ち終わりで1回描画し直す
+      setRakutenQueueTick((t) => t + 1);
+    })();
+    // searchRakuten は描画ごとに作り直されるが、対象が変わったときだけ動かせばよい
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nextRakutenTarget?.id, nextRakutenTitle, rakutenQueueTick]);
 
   const channelOptions = useMemo(() => {
-    const seen = new Map<string, string>();
-    candidates?.forEach((c) => seen.set(c.explorationChannelId, c.channelTitle));
+    const seen = new Map<string, { title: string; count: number }>();
+    candidates?.forEach((c) => {
+      const entry = seen.get(c.explorationChannelId) ?? { title: c.channelTitle, count: 0 };
+      entry.count++;
+      seen.set(c.explorationChannelId, entry);
+    });
     return [
-      { value: 'all', label: 'すべてのチャンネル' },
-      ...[...seen.entries()].sort((a, b) => a[1].localeCompare(b[1], 'ja')).map(([value, label]) => ({ value, label })),
+      { value: 'all', label: `すべてのチャンネル（${candidates?.length ?? 0}）` },
+      ...[...seen.entries()]
+        .sort((a, b) => a[1].title.localeCompare(b[1].title, 'ja'))
+        .map(([value, { title, count }]) => ({ value, label: `${title}（${count}）` })),
     ];
   }, [candidates]);
 
@@ -195,13 +350,13 @@ export default function AdminCollectionPage() {
 
   /** 承認できる（＝ゲームが決まっているか、用意するゲーム名がある）候補のみ。却下済みタブでは全件 */
   function selectable(c: CollectionCandidate): boolean {
-    return status === 'rejected' || (status === 'pending' && (!!gameFor(c) || !!newGameTitleFor(c)));
+    return status === 'rejected' || (status === 'pending' && (!!gameFor(c) || !!newGameTitleFor(c) || isNoGame(c)));
   }
 
   function changeNewGameTitle(c: CollectionCandidate, title: string) {
     setNewGameTitles((prev) => new Map(prev).set(c.id, title));
     const valid = title.trim() && title.trim().length <= MAX_GAME_TITLE_LENGTH && normalizeForMatch(title);
-    if (!valid) {
+    if (!valid && !noGameIds.has(c.id)) {
       setSelected((prev) => {
         const next = new Set(prev);
         next.delete(c.id);
@@ -228,7 +383,37 @@ export default function AdminCollectionPage() {
     });
   }
 
+  /** 候補をゲーム未設定で登録する／しないに切り替える（切り替えた候補は選択も入れる／外す） */
+  function setNoGame(ids: string[], on: boolean) {
+    setNoGameIds((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => (on ? next.add(id) : next.delete(id)));
+      return next;
+    });
+    setSelected((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => {
+        if (on) next.add(id);
+        else if (!newGameTitleFor(allCandidates.find((c) => c.id === id)!)) next.delete(id);
+      });
+      return next;
+    });
+  }
+
+  /** 選んでいる推定なしの候補すべてを、ゲーム未設定にする（下部バーの一括操作） */
+  function handleSetNoGameForSelected() {
+    const ids = allCandidates.filter((c) => selected.has(c.id) && !hasGameOf(c)).map((c) => c.id);
+    if (ids.length === 0) return;
+    setNoGame(ids, true);
+    toast({ type: 'success', message: `${ids.length}件をゲーム未設定にしました。承認すると、ゲームタイトルを作らずに登録します` });
+  }
+
   function setGame(candidateId: string, game: GameOption) {
+    setNoGameIds((prev) => {
+      const next = new Set(prev);
+      next.delete(candidateId);
+      return next;
+    });
     setGameOverrides((prev) => new Map(prev).set(candidateId, game));
     setSelected((prev) => new Set(prev).add(candidateId));
   }
@@ -253,9 +438,17 @@ export default function AdminCollectionPage() {
   }
 
   async function handleApprove() {
-    const targets = (candidates ?? []).filter((c) => selected.has(c.id) && (gameFor(c) || newGameTitleFor(c)));
+    const targets = (candidates ?? []).filter((c) => selected.has(c.id) && (gameFor(c) || newGameTitleFor(c) || isNoGame(c)));
     if (targets.length === 0) return;
-    const newGameNames = [...new Map(targets.filter((c) => !gameFor(c)).map((c) => [normalizeForMatch(newGameTitleFor(c)!), newGameTitleFor(c)!])).values()];
+    // 同じ名前は1件にまとめる（承認APIも最初の1件の楽天の商品で登録する）。楽天の商品か「楽天なし」を添える
+    const newGameNameByKey = new Map<string, string>();
+    for (const c of targets) {
+      const title = newGameTitleFor(c);
+      if (gameFor(c) || isNoGame(c) || !title || newGameNameByKey.has(normalizeForMatch(title))) continue;
+      const pick = rakutenPickOf(c);
+      newGameNameByKey.set(normalizeForMatch(title), `${title}${pick ? `（楽天: ${pick.title}）` : pick === null ? '（楽天なし）' : ''}`);
+    }
+    const newGameNames = [...newGameNameByKey.values()];
     const NAMES_SHOWN = 10;
     const newGameNotice =
       newGameNames.length > 0
@@ -264,14 +457,26 @@ export default function AdminCollectionPage() {
             .map((n) => `・${n}`)
             .join('\n')}${newGameNames.length > NAMES_SHOWN ? `\nほか${newGameNames.length - NAMES_SHOWN}件` : ''}\n\n`
         : '';
-    if (!window.confirm(`${targets.length}件を登録します。${newGameNotice}よろしいですか？`)) return;
+    const noGameCount = targets.filter(isNoGame).length;
+    const noGameNotice = noGameCount > 0 ? `\n\nゲーム未設定で登録するもの: ${noGameCount}件（ゲームタイトルは作らず、あとで紐づけます）\n\n` : '';
+    // 楽天の商品がまだ決まっていない（順番待ち・名前変更・検索失敗）候補は、承認APIが名前の完全一致で探す
+    const undecided = targets.filter((c) => ['queued', 'unconfirmed'].includes(rakutenStateOf(c))).length;
+    const undecidedNotice =
+      undecided > 0 ? `楽天の商品がまだ決まっていない候補が${undecided}件あります（自動検索の順番待ちなど。承認時に名前が完全一致する商品だけを探します）。\n\n` : '';
+    if (!window.confirm(`${targets.length}件を登録します。${noGameNotice}${newGameNotice}${undecidedNotice}よろしいですか？`)) return;
+
+    setProgress({ done: 0, total: targets.length });
+    // 自動検索の1件（と、その後の間隔）が終わるのを待ってから送る。承認APIも楽天ブックスを呼ぶため（1秒1回）
+    for (let waited = 0; rakutenQueueRunningRef.current && waited < 15_000; waited += 200) {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
 
     // 件数で区切りつつ、新しいゲーム名を含む候補は APPROVE_CHUNK_NEW_GAMES 件までにする
     const chunks: CollectionCandidate[][] = [];
     let current: CollectionCandidate[] = [];
     let currentNew = 0;
     for (const c of targets) {
-      const isNew = !gameFor(c);
+      const isNew = !gameFor(c) && !isNoGame(c);
       if (current.length >= APPROVE_CHUNK || (isNew && currentNew >= APPROVE_CHUNK_NEW_GAMES)) {
         chunks.push(current);
         current = [];
@@ -282,7 +487,6 @@ export default function AdminCollectionPage() {
     }
     if (current.length > 0) chunks.push(current);
 
-    setProgress({ done: 0, total: targets.length });
     const errors = new Map<string, string>();
     let okCount = 0;
     let stopped = false;
@@ -298,9 +502,10 @@ export default function AdminCollectionPage() {
           action: 'approve',
           items: chunk.map((c) => {
             const game = gameFor(c);
+            if (!game && isNoGame(c)) return { playlistId: c.id, noGame: true, gameHint: (newGameTitles.get(c.id) ?? c.gameQuery).trim(), tagIds: tagIdsFor(c) };
             return game
               ? { playlistId: c.id, gameId: game.id, tagIds: tagIdsFor(c) }
-              : { playlistId: c.id, newGameTitle: newGameTitleFor(c), tagIds: tagIdsFor(c) };
+              : { playlistId: c.id, newGameTitle: newGameTitleFor(c), ...rakutenJanParam(rakutenPickOf(c)), tagIds: tagIdsFor(c) };
           }),
         });
         if (res.status === 429) {
@@ -368,31 +573,44 @@ export default function AdminCollectionPage() {
 
   return (
     <div className="flex flex-col gap-5 pb-24">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <SectionHeading>コンテンツ収集</SectionHeading>
-        <Link href="/admin/collection/channels" className="inline-flex items-center gap-1 text-md text-text-tertiary hover:text-text-primary">
-          探索対象チャンネル
-          <ChevronRightIcon size={14} />
-        </Link>
-      </div>
+      <SectionHeading>コンテンツ収集</SectionHeading>
+      <CollectionNav />
 
-      <Card className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-col gap-1 text-md text-text-tertiary">
-          <p>
-            最終探索: {lastBatch
-              ? `${formatDateTime(lastBatch.executedAt)}（${lastBatch.trigger === 'cron' ? '週1自動' : '手動'}、${
-                  lastBatch.status === 'skipped' ? 'APIの枠不足でスキップ' : `新規候補 ${lastBatch.candidatesFound}件${lastBatch.status === 'success' ? '' : '、一部エラーあり'}`
-                }）`
-              : 'まだありません'}
-          </p>
-          <p>
-            本日のYouTube API消費（コンテンツ収集分）: {quotaUsed ?? '-'} / {COLLECTION_DAILY_QUOTA_LIMIT.toLocaleString('ja-JP')} ユニット
-          </p>
-        </div>
-        <Button variant="secondary" onClick={handleExplore} loading={exploring} disabled={busy}>
-          探索を実行
-        </Button>
-      </Card>
+      {/* 状態の表示と、探索の操作を別のカードに分ける（v2.2 §3.1） */}
+      <div className="grid gap-3 md:grid-cols-2">
+        <Card className="flex flex-col gap-2">
+          <h2 className="text-base font-medium text-text-primary">収集の状況</h2>
+          <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-md">
+            <dt className="text-text-tertiary">最終探索</dt>
+            <dd className="text-text-secondary">
+              {lastBatch
+                ? `${formatDateTime(lastBatch.executedAt)}（${lastBatch.trigger === 'cron' ? '週1自動' : '手動'}、${
+                    lastBatch.status === 'skipped' ? 'APIの枠不足でスキップ' : `新規候補 ${lastBatch.candidatesFound}件${lastBatch.status === 'success' ? '' : '、一部エラーあり'}`
+                  }）`
+                : 'まだありません'}
+            </dd>
+            <dt className="text-text-tertiary">本日のAPI消費</dt>
+            <dd className="text-text-secondary">
+              {quotaUsed ?? '-'} / {COLLECTION_DAILY_QUOTA_LIMIT.toLocaleString('ja-JP')} ユニット（YouTube API のうちコンテンツ収集の分）
+            </dd>
+          </dl>
+        </Card>
+        <Card className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-base font-medium text-text-primary">探索を実行</h2>
+            <Button variant="secondary" onClick={handleExplore} loading={exploring} disabled={busy}>
+              探索を実行
+            </Button>
+          </div>
+          <ul className="list-disc pl-5 text-sm text-text-tertiary">
+            <li>探索対象チャンネル（探索中）すべての再生リストを YouTube から読みます</li>
+            <li>動画10本以上・公開・除外語（切り抜き等）なし・まだ登録も候補化もしていないものを、新しい候補として下に追加します</li>
+            <li>既にある候補は、本数だけ今の数に更新します</li>
+            <li>続けて、「新しく登録する」候補の楽天ブックスの商品を探しておきます（ボタンでは数十件まで。残りはこの画面を開くと続きを探します）</li>
+            <li>本番では毎週月曜5時にも自動で実行します</li>
+          </ul>
+        </Card>
+      </div>
 
       <Tabs value={status} onValueChange={(v) => changeStatus(v as CandidateStatus)}>
         <TabsList aria-label="状態で絞り込み">
@@ -410,20 +628,33 @@ export default function AdminCollectionPage() {
           <SelectMenu<GameFilter>
             value={gameFilter}
             onValueChange={setGameFilter}
-            prefix="ゲーム推定:"
-            aria-label="ゲーム推定で絞り込み"
+            prefix="ゲーム:"
+            aria-label="ゲームで絞り込み"
             options={[
-              { value: 'all', label: 'すべて' },
-              { value: 'guessed', label: '推定あり' },
-              { value: 'none', label: '推定なし' },
+              { value: 'all', label: `すべて（${gameFilterCounts.all}）` },
+              { value: 'guessed', label: `登録済みのゲームに付ける（${gameFilterCounts.guessed}）` },
+              { value: 'none', label: `新しく登録する（${gameFilterCounts.none}）` },
+              { value: 'no_game', label: `ゲーム未設定で登録（${gameFilterCounts.noGame}）` },
             ]}
+          />
+        )}
+        {status === 'pending' && (
+          <SelectMenu<RakutenFilter>
+            value={rakutenFilter}
+            onValueChange={setRakutenFilter}
+            prefix="楽天:"
+            aria-label="楽天の商品で絞り込み"
+            options={(Object.keys(RAKUTEN_FILTER_LABEL) as RakutenFilter[]).map((value) => ({
+              value,
+              label: `${RAKUTEN_FILTER_LABEL[value]}（${rakutenFilterCounts[value]}）`,
+            }))}
           />
         )}
       </div>
 
       {status === 'pending' && (
         <p className="text-md text-text-tertiary">
-          ゲームが推定できなかった候補は、「新規」の欄の名前でゲームタイトルを登録してから承認します（同じ名前のゲームタイトルがあればそれを使い、楽天ブックスで見つかれば画像なども入れます）。ゲームではない再生リストはチェックを外すか却下してください。
+          ゲームが推定できなかった候補（「新しく登録する」）は、「登録するゲームタイトル名」の欄の名前でゲームタイトルを登録してから承認します（同じ名前のゲームタイトルがあればそれを使い、楽天ブックスで見つかれば画像なども入れます）。ゲームではない再生リストはチェックを外すか却下してください。ゲームが分からないもの・楽天に無いものは「ゲーム未設定で登録」にすると、ゲームタイトルを作らずに登録できます。
         </p>
       )}
 
@@ -444,8 +675,9 @@ export default function AdminCollectionPage() {
             const allOn = selectableIds.length > 0 && selectableIds.every((id) => selected.has(id));
             const isCollapsed = collapsed.has(group.key);
             return (
-              <section key={group.key} className="flex flex-col gap-2">
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-surface-border pb-2">
+              // 管理画面は操作ミスを防ぐことを優先し、チャンネルごとに枠で囲んで、どのカードがどのチャンネルか分かるようにする
+              <section key={group.key} className="overflow-hidden rounded-[12px] border border-admin-border">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-admin-border bg-admin-header-bg px-4 py-3">
                   <button
                     type="button"
                     onClick={() =>
@@ -457,9 +689,19 @@ export default function AdminCollectionPage() {
                       })
                     }
                     aria-expanded={!isCollapsed}
-                    className="text-left text-lg font-medium text-text-primary"
+                    className="flex min-w-0 items-center gap-3 text-left text-lg font-medium text-text-primary"
                   >
-                    {group.title}（{group.items.length}件）
+                    <ChevronRightIcon size={14} className={cn('shrink-0 transition-transform', !isCollapsed && 'rotate-90')} />
+                    {channels.get(group.key)?.channelIconUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={channels.get(group.key)!.channelIconUrl!} alt="" className="size-9 shrink-0 rounded-full object-cover" />
+                    ) : (
+                      <span aria-hidden className="size-9 shrink-0 rounded-full bg-bg-hover" />
+                    )}
+                    <span className="min-w-0">
+                      {group.title}
+                      <span className="ml-1 text-md font-normal text-text-tertiary">（{group.items.length}件）</span>
+                    </span>
                   </button>
                   {status !== 'registered' && (
                     <label className="inline-flex items-center gap-2 text-md text-text-tertiary">
@@ -470,7 +712,7 @@ export default function AdminCollectionPage() {
                 </div>
 
                 {!isCollapsed && (
-                  <ul className="flex flex-col gap-2">
+                  <ul className="flex flex-col gap-2 bg-bg-base/40 p-3">
                     {group.items.map((c) => {
                       const game = gameFor(c);
                       const tagIds = tagIdsFor(c);
@@ -478,90 +720,158 @@ export default function AdminCollectionPage() {
                       const error = rowErrors.get(c.id);
                       return (
                         <li key={c.id}>
-                          <Card className={cn('flex gap-3', selected.has(c.id) && 'border-border-active')}>
-                            {status !== 'registered' && (
-                              <input
-                                type="checkbox"
-                                className="mt-1 size-4 shrink-0"
-                                aria-label={`${c.playlistTitle}を選択`}
-                                checked={selected.has(c.id)}
-                                disabled={!canSelect || busy}
-                                onChange={() => toggleSelected(c.id)}
-                              />
-                            )}
-                            <a
-                              href={`https://www.youtube.com/playlist?list=${c.id}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="relative aspect-video w-28 shrink-0 overflow-hidden rounded-[6px] bg-bg-hover md:w-40"
-                              aria-label={`${c.playlistTitle}をYouTubeで開く`}
-                            >
-                              {c.thumbnailUrl && (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img src={c.thumbnailUrl} alt="" className="absolute inset-0 size-full object-cover" loading="lazy" />
+                          {/* PCは左に再生リスト、右にゲーム（楽天のパッケージ）を並べる。スマホは縦に積む（v2.2 §3.4） */}
+                          <Card className={cn('flex flex-col gap-4 md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:gap-6', selected.has(c.id) && 'border-border-active')}>
+                            <div className="flex min-w-0 gap-3">
+                              {status !== 'registered' && (
+                                <input
+                                  type="checkbox"
+                                  className="mt-1 size-4 shrink-0"
+                                  aria-label={`${c.playlistTitle}を選択`}
+                                  checked={selected.has(c.id)}
+                                  disabled={!canSelect || busy}
+                                  onChange={() => toggleSelected(c.id)}
+                                />
                               )}
-                            </a>
-                            <div className="flex min-w-0 flex-1 flex-col gap-1">
-                              <p className="text-base text-text-primary">{c.playlistTitle}</p>
-                              <p className="text-md text-text-tertiary">
-                                {c.videoCount}本 ・ 作成 {formatDateTime(c.playlistPublishedAt)}
-                              </p>
-                              {status === 'pending' ? (
+                              <a
+                                href={`https://www.youtube.com/playlist?list=${c.id}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="relative aspect-video w-28 shrink-0 self-start overflow-hidden rounded-[6px] bg-bg-hover md:w-44"
+                                aria-label={`${c.playlistTitle}をYouTubeで開く`}
+                              >
+                                {c.thumbnailUrl && (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img src={c.thumbnailUrl} alt="" className="absolute inset-0 size-full object-cover" loading="lazy" />
+                                )}
+                              </a>
+                              <div className="flex min-w-0 flex-1 flex-col gap-1">
+                                <p className="text-base text-text-primary">{c.playlistTitle}</p>
+                                <p className="text-md text-text-tertiary">
+                                  {c.videoCount}本（{formatDateTime(c.videoCountCheckedAt)} の探索時点）
+                                </p>
+                                <p className="text-md text-text-tertiary">再生リスト作成日 {formatDateTime(c.playlistPublishedAt)}</p>
+                                <div>
+                                  {/* YouTube の再生リストのページは埋め込みを禁止しているため（X-Frame-Options）、別タブで開く（v2.3 §3.8） */}
+                                  <a
+                                    href={`https://www.youtube.com/playlist?list=${c.id}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className={ADMIN_ACTION_CLASS}
+                                    aria-label={`${c.playlistTitle}の動画一覧をYouTubeで見る`}
+                                  >
+                                    動画一覧を見る（YouTube）
+                                  </a>
+                                </div>
+                                {status !== 'pending' && c.reviewComment && (
+                                  <p className="text-md text-text-muted">理由: {APPROVE_ERROR_LABEL[c.reviewComment] ?? c.reviewComment}</p>
+                                )}
+                                {status === 'registered' && (
+                                  <Link href={`/playlists/${c.id}`} className="text-md text-text-tertiary hover:text-text-primary">
+                                    登録した再生リストを見る
+                                  </Link>
+                                )}
+                                {status === 'pending' && tagIds.length > 0 && (
+                                  <div className="mt-1 flex flex-col gap-1">
+                                    <p className="text-sm text-text-tertiary">承認時に付けるタグ（×で外せる）</p>
+                                    <div className="flex flex-wrap gap-1">
+                                      {tagIds.map((id) => (
+                                        <span key={id} className="inline-flex items-center gap-1 rounded-[4px] bg-bg-hover px-2 py-[2px] text-sm text-text-secondary">
+                                          {tagsMap.get(id)?.name}
+                                          <button
+                                            type="button"
+                                            aria-label={`${tagsMap.get(id)?.name}を外す`}
+                                            onClick={() => removeTag(c.id, id)}
+                                            className="text-text-muted hover:text-text-primary"
+                                            disabled={busy}
+                                          >
+                                            <XIcon size={10} />
+                                          </button>
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                                {error && (
+                                  <p role="alert" className="text-md text-input-error">
+                                    {error}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+
+                            {status === 'pending' && (
+                              <div className="flex min-w-0 flex-col gap-3 rounded-[8px] border border-surface-border bg-bg-base/40 p-3">
                                 <p className="flex flex-wrap items-center gap-2 text-md">
                                   <span className="text-text-tertiary">ゲーム:</span>
                                   {game ? (
-                                    <button type="button" className="text-text-primary underline-offset-2 hover:underline" onClick={() => setGameSelectFor(c)} disabled={busy}>
-                                      {game.title}
-                                    </button>
+                                    <StatusBadge>登録済みのゲームに付ける</StatusBadge>
+                                  ) : isNoGame(c) ? (
+                                    <StatusBadge>ゲーム未設定で登録</StatusBadge>
                                   ) : (
-                                    <>
-                                      <StatusBadge>新規</StatusBadge>
-                                      <Input
-                                        aria-label={`${c.playlistTitle}のゲーム名`}
-                                        value={newGameTitles.get(c.id) ?? c.gameQuery}
-                                        maxLength={MAX_GAME_TITLE_LENGTH}
-                                        onChange={(e) => changeNewGameTitle(c, e.target.value)}
-                                        disabled={busy}
-                                        className="w-56 max-w-full"
-                                      />
-                                      <Button variant="ghost" size="sm" onClick={() => setGameSelectFor(c)} disabled={busy}>
-                                        既存から選ぶ
-                                      </Button>
-                                    </>
+                                    <StatusBadge>新しく登録する</StatusBadge>
                                   )}
                                 </p>
-                              ) : (
-                                c.reviewComment && <p className="text-md text-text-muted">理由: {APPROVE_ERROR_LABEL[c.reviewComment] ?? c.reviewComment}</p>
-                              )}
-                              {status === 'registered' && (
-                                <Link href={`/playlists/${c.id}`} className="text-md text-text-tertiary hover:text-text-primary">
-                                  登録した再生リストを見る
-                                </Link>
-                              )}
-                              {status === 'pending' && tagIds.length > 0 && (
-                                <div className="flex flex-wrap gap-1">
-                                  {tagIds.map((id) => (
-                                    <span key={id} className="inline-flex items-center gap-1 rounded-[4px] bg-bg-hover px-2 py-[2px] text-sm text-text-secondary">
-                                      {tagsMap.get(id)?.name}
-                                      <button
-                                        type="button"
-                                        aria-label={`${tagsMap.get(id)?.name}を外す`}
-                                        onClick={() => removeTag(c.id, id)}
-                                        className="text-text-muted hover:text-text-primary"
+                                {game ? (
+                                  <div className="flex items-start gap-3">
+                                    <PackageImage url={game.packageImageUrl} />
+                                    <div className="flex min-w-0 flex-col items-start gap-2">
+                                      <p className="text-base text-text-primary">{game.title}</p>
+                                      <AdminActionButton onClick={() => setGameSelectFor(c)} disabled={busy} aria-label={`${c.playlistTitle}のゲームを選び直す`}>
+                                        別のゲームを選ぶ
+                                      </AdminActionButton>
+                                    </div>
+                                  </div>
+                                ) : isNoGame(c) ? (
+                                  <div className="flex flex-col items-start gap-2" data-testid="no-game-panel">
+                                    <p className="text-md text-text-secondary">ゲームは決めずに登録します。あとでゲームタイトルが登録されたときに紐づけます。</p>
+                                    <p className="text-sm text-text-tertiary">検索に使う名前（メモ）: {(newGameTitles.get(c.id) ?? c.gameQuery).trim() || '（なし）'}</p>
+                                    <AdminActionButton onClick={() => setNoGame([c.id], false)} disabled={busy} aria-label={`${c.playlistTitle}を新しく登録するに戻す`}>
+                                      新しく登録するに戻す
+                                    </AdminActionButton>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <div className="flex flex-col gap-1">
+                                      <label htmlFor={`new-game-${c.id}`} className="text-sm text-text-secondary">
+                                        登録するゲームタイトル名（初期値は再生リスト名から推定）
+                                      </label>
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        <Input
+                                          id={`new-game-${c.id}`}
+                                          aria-label={`${c.playlistTitle}のゲーム名`}
+                                          value={newGameTitles.get(c.id) ?? c.gameQuery}
+                                          maxLength={MAX_GAME_TITLE_LENGTH}
+                                          onChange={(e) => changeNewGameTitle(c, e.target.value)}
+                                          disabled={busy}
+                                          className="min-w-0 flex-1 basis-56"
+                                        />
+                                        <AdminActionButton onClick={() => setGameSelectFor(c)} disabled={busy} aria-label={`${c.playlistTitle}のゲームを既存から選ぶ`}>
+                                          既存のゲームから選ぶ
+                                        </AdminActionButton>
+                                        <AdminActionButton onClick={() => setNoGame([c.id], true)} disabled={busy} aria-label={`${c.playlistTitle}をゲーム未設定にする`}>
+                                          ゲーム未設定で登録
+                                        </AdminActionButton>
+                                      </div>
+                                    </div>
+                                    {newGameTitleFor(c) && (
+                                      <RakutenLine
+                                        pick={rakutenPickOf(c)}
+                                        explicit={rakutenChoices.has(c.id)}
+                                        stale={rakutenResultStale(c)}
+                                        result={rakutenResultFor(c)}
+                                        searching={rakutenSearching.has(c.id)}
+                                        failed={rakutenFailed.has(c.id)}
+                                        gameTitle={newGameTitleFor(c)!}
                                         disabled={busy}
-                                      >
-                                        <XIcon size={10} />
-                                      </button>
-                                    </span>
-                                  ))}
-                                </div>
-                              )}
-                              {error && (
-                                <p role="alert" className="text-md text-input-error">
-                                  {error}
-                                </p>
-                              )}
-                            </div>
+                                        onOpen={() => setRakutenPickFor(c)}
+                                        onUseName={(name) => changeNewGameTitle(c, name)}
+                                      />
+                                    )}
+                                  </>
+                                )}
+                              </div>
+                            )}
                           </Card>
                         </li>
                       );
@@ -580,9 +890,12 @@ export default function AdminCollectionPage() {
             <p className="text-base text-text-secondary">
               {progress ? `登録中… ${progress.done} / ${progress.total} 件` : `選択中 ${selected.size}件`}
             </p>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               {status === 'pending' ? (
                 <>
+                  <Button variant="secondary" onClick={handleSetNoGameForSelected} disabled={selected.size === 0 || busy}>
+                    選択をゲーム未設定にする
+                  </Button>
                   <Button variant="ghost" onClick={() => handleStatusChange('reject')} disabled={selected.size === 0 || busy} loading={rejecting}>
                     選択を却下
                   </Button>
@@ -613,6 +926,22 @@ export default function AdminCollectionPage() {
           setGameSelectFor(null);
         }}
       />
+      <RakutenPickModal
+        open={rakutenPickFor !== null}
+        onOpenChange={(open) => !open && setRakutenPickFor(null)}
+        gameTitle={rakutenPickFor ? (newGameTitleFor(rakutenPickFor) ?? '') : ''}
+        result={rakutenPickFor ? rakutenResultFor(rakutenPickFor) : null}
+        selectedJan={rakutenPickFor ? (rakutenPickOf(rakutenPickFor)?.jan ?? null) : null}
+        onSearch={(q) => (rakutenPickFor ? searchRakuten(rakutenPickFor, newGameTitleFor(rakutenPickFor) ?? q, q) : Promise.resolve(false))}
+        onPick={(item) => {
+          if (rakutenPickFor) chooseRakuten(rakutenPickFor.id, item);
+          setRakutenPickFor(null);
+        }}
+        onNone={() => {
+          if (rakutenPickFor) chooseRakuten(rakutenPickFor.id, null);
+          setRakutenPickFor(null);
+        }}
+      />
       <GameCreateModal
         open={gameCreateFor !== null}
         onOpenChange={(open) => !open && setGameCreateFor(null)}
@@ -625,4 +954,138 @@ export default function AdminCollectionPage() {
       />
     </div>
   );
+}
+
+/** 新規のゲームに結び付ける楽天ブックスの商品の行（v2.2 §3.7） */
+function RakutenLine({
+  pick,
+  explicit,
+  stale,
+  result,
+  searching,
+  failed,
+  gameTitle,
+  disabled,
+  onOpen,
+  onUseName,
+}: {
+  pick: RakutenPick | null | undefined;
+  explicit: boolean;
+  stale: boolean;
+  result: RakutenSearchResult | null;
+  searching: boolean;
+  failed: boolean;
+  gameTitle: string;
+  disabled: boolean;
+  onOpen: () => void;
+  onUseName: (name: string) => void;
+}) {
+  const pickName = pick ? normalizeRakutenGameTitle(pick.title) : '';
+  let body: ReactNode;
+  let action = '候補から選ぶ';
+  if (searching) {
+    body = <span className="text-text-tertiary">検索中…</span>;
+  } else if (pick) {
+    action = '選び直す';
+    // 確認用に、商品名から楽天ブックスの商品ページを別タブで開く（v2.3 §3.7）
+    body = (
+      <a
+        href={rakutenItemPageUrl(pick)}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="line-clamp-3 text-text-primary underline decoration-text-muted underline-offset-2 hover:decoration-text-primary"
+        aria-label={`${pick.title}を楽天ブックスで開く`}
+      >
+        {pick.title}
+        {pick.hardware && <span className="text-text-tertiary">（{pick.hardware}）</span>}
+      </a>
+    );
+  } else if (failed && !result) {
+    action = '探し直す';
+    body = <span className="text-text-tertiary">検索に失敗しました</span>;
+  } else if (pick === undefined && stale) {
+    action = '探し直す';
+    body = <span className="text-text-tertiary">ゲーム名を変えました（承認時にこの名前で探します）</span>;
+  } else if (pick === undefined) {
+    body = <span className="text-text-tertiary">自動検索の順番待ち</span>;
+  } else if (explicit) {
+    body = <span className="text-text-tertiary">使わない（名前だけで登録）</span>;
+  } else if (result && result.items.length > 0) {
+    body = <span className="text-text-tertiary">名前が一致する商品なし（候補{result.items.length}件。このままなら名前だけで登録）</span>;
+  } else {
+    action = '探し直す';
+    body = (
+      <span className="text-text-tertiary">
+        見つかりませんでした（名前だけで登録）
+        {/* 楽天ブックスは英語名のゲームもカタカナで登録していることが多い（Pacific Drive → パシフィックドライブ。v2.3 §3.7） */}
+        {isAsciiOnly(gameTitle) && <span className="block">英語名は楽天ではカタカナのことが多いです。「探し直す」でカタカナで探してください</span>}
+      </span>
+    );
+  }
+  return (
+    <div className="flex items-start gap-3 text-md" data-testid="rakuten-line">
+      {pick ? (
+        <a href={rakutenItemPageUrl(pick)} target="_blank" rel="noopener noreferrer" tabIndex={-1} aria-hidden className="shrink-0 hover:opacity-80">
+          <PackageImage url={pick.imageUrl} />
+        </a>
+      ) : (
+        <PackageImage url={null} />
+      )}
+      <div className="flex min-w-0 flex-1 flex-col items-start gap-2">
+        <p className="text-sm text-text-tertiary">楽天ブックスの商品（パッケージ画像・機種・ジャンルを入れる）</p>
+        <span aria-live="polite" className="min-w-0">
+          {body}
+        </span>
+        <div className="flex flex-wrap gap-2">
+          {/* 検索中も外さない（モーダルを閉じたときのフォーカスの戻り先にするため） */}
+          {/* 「探し直す」（検索し直す操作）は、「候補から選ぶ」「選び直す」（結果から選ぶ操作）と色を分ける */}
+          <Button
+            variant={action === '探し直す' ? 'secondary' : 'rakuten'}
+            size="sm"
+            onClick={onOpen}
+            disabled={disabled || searching}
+            aria-label={`${gameTitle}の楽天の商品を${action}`}
+          >
+            {action === '探し直す' && <SearchIcon size={12} />}
+            {action}
+          </Button>
+          {pick && pickName && normalizeForMatch(pickName) !== normalizeForMatch(gameTitle) && (
+            <AdminActionButton onClick={() => onUseName(pickName)} disabled={disabled} aria-label={`ゲーム名を「${pickName}」にする`}>
+              商品名をゲーム名にする
+            </AdminActionButton>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** 英数字・記号だけの名前か（楽天ブックスでカタカナで探すよう案内するため） */
+function isAsciiOnly(text: string): boolean {
+  return /^[\x20-\x7E]+$/.test(text.trim());
+}
+
+/** ゲームのパッケージ画像（無ければ「画像なし」の枠）。楽天の商品・登録済みのゲームで共用 */
+function PackageImage({ url }: { url: string | null }) {
+  return url ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={url} alt="" className="h-[112px] w-[84px] shrink-0 rounded-[4px] bg-bg-hover object-cover" loading="lazy" />
+  ) : (
+    <span aria-hidden className="flex h-[112px] w-[84px] shrink-0 items-center justify-center rounded-[4px] border border-dashed border-surface-border text-xs text-text-muted">
+      画像なし
+    </span>
+  );
+}
+
+/**
+ * 管理画面の行の中の操作ボタン（ゲームを選ぶ等）。管理画面は操作ミスを防ぐのを優先し、ユーザー向け画面の
+ * 白黒基調より目立つ管理用の色（admin-accent）で、押せる場所だと分かる見た目にする
+ */
+const ADMIN_ACTION_CLASS = cn(
+  'inline-flex items-center justify-center whitespace-nowrap rounded-[6px] border border-admin-accent bg-admin-accent/15 px-[10px] py-1 text-sm font-medium text-admin-accent-text',
+  'transition-colors duration-[120ms] not-disabled:hover:bg-admin-accent/30 disabled:opacity-50',
+);
+
+function AdminActionButton({ className, ...rest }: ComponentProps<'button'>) {
+  return <button type="button" className={cn(ADMIN_ACTION_CLASS, className)} {...rest} />;
 }

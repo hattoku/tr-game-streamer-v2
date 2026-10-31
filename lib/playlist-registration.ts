@@ -78,7 +78,10 @@ export interface RegisteredPlaylist {
  */
 export async function registerPlaylist(params: {
   playlistUrl: string;
-  gameId: string;
+  /** null は「ゲーム未設定」（ゲームタイトルを紐づけずに登録する。収集候補レビューUI仕様書 v2.4 §3.9） */
+  gameId: string | null;
+  /** ゲーム未設定のときの、未確定のゲーム名（`playlists.gameHint`。キーワード検索とあとの自動照合に使う） */
+  gameHint?: string | null;
   channelDescription?: unknown;
   sourceChannelId?: unknown;
   registeredBy: string;
@@ -87,6 +90,7 @@ export async function registerPlaylist(params: {
   fixedTagIds?: string[];
 }): Promise<RegisteredPlaylist | PlaylistApiError> {
   const { playlistUrl, gameId, channelDescription, sourceChannelId, registeredBy, proposedBy } = params;
+  const gameHint = gameId ? null : params.gameHint?.trim().slice(0, 100) || null;
   const fixedTagIds = [...new Set(params.fixedTagIds ?? [])];
 
   const valid = await fetchValidPlaylist(playlistUrl);
@@ -95,22 +99,22 @@ export async function registerPlaylist(params: {
 
   const playlistRef = adminDb.collection('playlists').doc(playlist.youtubePlaylistId);
   const channelRef = adminDb.collection('channels').doc(channel.youtubeChannelId);
-  const gameRef = adminDb.collection('games').doc(gameId);
+  const gameRef = gameId ? adminDb.collection('games').doc(gameId) : null;
 
   const [playlistDoc, channelDoc, gameDoc] = await Promise.all([
     playlistRef.get(),
     channelRef.get(),
-    gameRef.get(),
+    gameRef ? gameRef.get() : Promise.resolve(null),
   ]);
 
   if (playlistDoc.exists) return { error: 'already_registered', status: 409 };
-  if (!gameDoc.exists) return { error: 'game_not_found', status: 404 };
+  if (gameDoc && !gameDoc.exists) return { error: 'game_not_found', status: 404 };
   // チェック順序（5.2節）: URL形式 → API取得 → 公開状態 → チャンネル一致 → ゲームタイトル選択 →
   // （チャンネル詳細流入時のみ）流入元チャンネル一致。この判定を最後に置くのはその順序に合わせるため
   if (typeof sourceChannelId === 'string' && sourceChannelId && sourceChannelId !== channel.youtubeChannelId) {
     return { error: 'channel_mismatch', status: 422 };
   }
-  const game = gameDoc.data()!;
+  const game = gameDoc ? gameDoc.data()! : null;
 
   const items = await fetchPlaylistItems(playlist.youtubePlaylistId);
   const durations = await fetchVideoDurations(items.map((i) => i.youtubeVideoId));
@@ -164,8 +168,11 @@ export async function registerPlaylist(params: {
     channelName: channel.name,
     channelIconUrl: channel.iconUrl,
     gameId,
-    gameName: game.title,
-    gameGenreIds: game.genreId ? [game.genreId] : [],
+    gameName: game?.title ?? '',
+    gameGenreIds: game?.genreId ? [game.genreId] : [],
+    gameHint,
+    gameSetBy: gameId ? 'admin' : null,
+    gameSetAt: gameId ? now : null,
     videoCount: items.length,
     latestVideoPublishedAt: items.length > 0
       ? items.reduce((latest, i) => (i.publishedAt > latest ? i.publishedAt : latest), items[0].publishedAt)
@@ -187,7 +194,7 @@ export async function registerPlaylist(params: {
     batch.update(adminDb.collection('tags').doc(tagId), { usagePlaylistCount: FieldValue.increment(1) });
   }
 
-  batch.update(gameRef, { playlistCount: (game.playlistCount ?? 0) + 1 });
+  if (gameRef && game) batch.update(gameRef, { playlistCount: (game.playlistCount ?? 0) + 1 });
 
   await batch.commit();
 
@@ -197,7 +204,7 @@ export async function registerPlaylist(params: {
     thumbnailUrl: playlist.thumbnailUrl,
     channelName: channel.name,
     channelIconUrl: channel.iconUrl,
-    gameName: game.title,
+    gameName: game?.title ?? '',
     videoCount: items.length,
   };
 }

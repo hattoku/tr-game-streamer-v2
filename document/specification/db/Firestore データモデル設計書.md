@@ -1,6 +1,6 @@
 # プレミテ Firestore データモデル設計書
 
-**バージョン**: v1.25  
+**バージョン**: v1.28  
 **作成日**: 2026年3月30日（更新）  
 **対象**: 開発チーム  
 **関連ドキュメント**: プレミテ企画書 / プレミテ_技術スタック仕様書 / 各機能仕様書
@@ -189,8 +189,11 @@ Firestoreはテーブル結合（JOIN）ができないため、一覧表示や�
 | `channelId` | string | ✅ | 紐づくチャンネルのドキュメントID |
 | `channelName` | string | ✅ | チャンネル名（denormalized） |
 | `channelIconUrl` | string | ✅ | チャンネルアイコンURL（denormalized） |
-| `gameId` | string? | — | 紐づくゲームタイトルのドキュメントID（未登録の場合はnull） |
-| `gameName` | string? | — | ゲームタイトル名（denormalized） |
+| `gameId` | string? | — | 紐づくゲームタイトルのドキュメントID。**null ＝ ゲーム未設定**（v1.28。収集画面の「ゲーム未設定で登録」で登録した再生リストなど。ゲームのページ・ジャンル別の一覧には出ない） |
+| `gameName` | string? | — | ゲームタイトル名（denormalized。ゲーム未設定は空文字） |
+| `gameHint` | string? | — | 未確定のゲーム名（v1.28。収集の `gameQuery` や承認時に入力した名前。マスタには入れない。再生リスト一覧のキーワード検索の対象で、あとの自動照合にも使う。無ければ null） |
+| `gameSetBy` | string? | — | 今のゲームを決めた者（v1.28。`admin`（管理者の登録・承認）／`auto`・`user` は段階B・Cで追加。ゲーム未設定・旧データは null） |
+| `gameSetAt` | Timestamp? | — | 同上の日時（v1.28） |
 | `gameGenreIds` | string[] | ✅ | ゲームのジャンルIDリスト（ランキング・フィルタ用） |
 | `videoCount` | number | ✅ | 動画数（YouTubeから取得） |
 | `latestVideoPublishedAt` | Timestamp? | — | 最新動画の公開日時（新着順ソート用） |
@@ -708,7 +711,8 @@ YouTube API クォータ消費の記録。
 | `channelTitle` | string | ✅ | チャンネル名 |
 | `explorationChannelId` | string | ✅ | 見つけた探索対象チャンネル（`exploration_channels` のドキュメントID） |
 | `thumbnailUrl` | string | ✅ | サムネイルURL |
-| `videoCount` | number | ✅ | 動画数（探索時点の `contentDetails.itemCount`） |
+| `videoCount` | number | ✅ | 動画数（探索時点の `contentDetails.itemCount`。v1.26 から、以後の探索でも更新する） |
+| `videoCountCheckedAt` | Timestamp? | — | `videoCount` を数えた探索の日時（v1.26。無ければ `collectedAt`） |
 | `playlistPublishedAt` | Timestamp? | — | 再生リストの作成日時（`snippet.publishedAt`） |
 | `guessedGameId` | string? | — | 推定したゲームタイトルID（推定なしは null） |
 | `guessedGameTitle` | string? | — | 推定したゲームタイトル名（denormalized） |
@@ -721,6 +725,7 @@ YouTube API クォータ消費の記録。
 | `reviewedBy` | string? | — | 承認・却下した管理者のuserId |
 | `reviewComment` | string? | — | 却下理由など（自動却下時は `"not_public"` 等） |
 | `registeredPlaylistId` | string? | — | 登録した `playlists` のドキュメントID |
+| `rakutenSearch` | map? | — | 承認前の楽天ブックス検索の結果（収集候補レビューUI仕様書 v2.2 §3.7）。`title`（検索したゲーム名・検索語）・`query`（結果が出た検索語）・`items`（最大10件。各 `jan`・`title`・`hardware`・`imageUrl`・`salesDate`・`itemUrl`（v1.27 で追加。商品ページ。それより前の結果には無い））・`searchedAt`。未検索は無し |
 
 > v1.25 で旧設計（ジャンル起点）の `genreId`・`genreName`・`aiOperatorId`・`aiResult`・`aiFlags`・`aiComment`・`latestVideoPublishedAt` と `approved` 状態を削除した。AI判定のフィールドは Gemini 導入時に追加する。
 
@@ -1017,3 +1022,6 @@ ai_operators ──── (1) users
 | v1.23 | 2026-10-25 | 再生リスト提案フローの作り込み。`workflows` の本人による直接読み取りを通報（`review_report`）に限定（提案は運営メモ・内部メモを含むため提案履歴 API 経由）。`games.aliases`（別名）、`workflows.proposalData` に `newGamePlatforms`・`newGameRakuten`・`rejectReasonCode`、`notifications` に `review_result` 種別と `workflowId` を追加 |
 | v1.24 | 2026-10-27 | お問い合わせの画像添付。§3.17 `inquiries` に `attachments`・`hasAttachments`・`resolvedAt`、`messages` に `attachments` と添付画像の構造を追加。§3.31 `inquiry_upload_counters` を新設。§5.2 にインデックス、§6 に Storage のルール方針を追加 |
 | v1.25 | 2026-10-28 | フェーズ7-5（友人テスト前のコンテンツ充実）。コンテンツ収集をチャンネル起点に変更したことに合わせ、3.23 `collection_candidates` をタイトル・チャンネル起点のスキーマに改訂（ドキュメントIDを再生リストIDに、ゲーム推定・タグ候補を追加、ジャンル起点・AI判定のフィールドを削除）、3.24 `collection_batch_logs`・3.25 `collection_quota_logs` を改訂、3.32 `exploration_channels` を追加 |
+| v1.26 | 2026-10-30 | 3.23 `collection_candidates` に `rakutenSearch`（承認前の楽天ブックス検索の結果）・`videoCountCheckedAt` を追加。`videoCount` を以後の探索でも更新する |
+| v1.27 | 2026-10-31 | 3.23 `collection_candidates.rakutenSearch.items` に `itemUrl`（楽天ブックスの商品ページ）を追加 |
+| v1.28 | 2026-10-31 | 3.2 `playlists` に `gameHint`・`gameSetBy`・`gameSetAt` を追加し、`gameId` が null ＝ ゲーム未設定と明記（収集画面の「ゲーム未設定で登録」。収集候補レビューUI仕様書 v2.4 §3.9） |

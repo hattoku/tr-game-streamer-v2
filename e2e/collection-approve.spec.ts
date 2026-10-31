@@ -7,48 +7,7 @@ import type { Page } from '@playwright/test';
 import { expect, test } from './support/fixtures';
 import { uniqueText } from './support/env';
 import { db as e2eDb } from './support/cleanup';
-
-function randomId(prefix: string): string {
-  return `${prefix}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
-}
-
-/** 推定なしの収集候補を作る。同じ channelTitle の候補は一覧で1つのチャンネルにまとまる */
-async function seedCandidate(params: { channelTitle: string; explorationChannelId: string; gameQuery: string }): Promise<string> {
-  const playlistId = randomId('PLE2E');
-  await e2eDb()
-    .collection('collection_candidates')
-    .doc(playlistId)
-    .set({
-      playlistId,
-      playlistTitle: uniqueText('収集候補'),
-      channelId: 'UCE2E',
-      channelTitle: params.channelTitle,
-      explorationChannelId: params.explorationChannelId,
-      thumbnailUrl: '',
-      videoCount: 12,
-      playlistPublishedAt: new Date(),
-      guessedGameId: null,
-      guessedGameTitle: null,
-      gameQuery: params.gameQuery,
-      titleTagIds: [],
-      source: 'channel',
-      status: 'pending',
-      collectedAt: new Date(),
-      reviewedAt: null,
-      reviewedBy: null,
-      reviewComment: null,
-      registeredPlaylistId: null,
-    });
-  return playlistId;
-}
-
-async function gamesTitled(title: string) {
-  return (await e2eDb().collection('games').where('title', '==', title).get()).docs;
-}
-
-function section(page: Page, channelTitle: string) {
-  return page.locator('section').filter({ hasText: channelTitle });
-}
+import { gamesTitled, randomId, section, seedCandidate } from './support/collection';
 
 async function approveAll(page: Page, channelTitle: string) {
   await section(page, channelTitle).getByLabel('全選択').check();
@@ -64,7 +23,7 @@ test('§3.4・§3.5 推定なしの候補には、gameQuery を入れた新規�
   await adminPage.goto('/admin/collection');
   const group = section(adminPage, channelTitle);
   const row = group.getByRole('listitem');
-  await expect(row).toContainText('新規');
+  await expect(row).toContainText('新しく登録する');
   const input = row.getByRole('textbox');
   await expect(input).toHaveValue(gameQuery);
   await expect(row.getByRole('button', { name: '既存から選ぶ' })).toBeVisible();

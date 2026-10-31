@@ -78,6 +78,18 @@ async function callApi<T>(endpoint: string, params: Record<string, string>): Pro
   return body as T;
 }
 
+/**
+ * ページ送りを続けるかどうか。YouTube は再生リストによって、0件のページと同じ nextPageToken を
+ * 返し続けることがある（例: playlistItems で総数12件の再生リストが、11件の後に空ページを無限に返す）。
+ * そのまま続けると処理が終わらずクォータを使い続けるため、空ページ・同じトークン・上限ページ数で打ち切る。
+ */
+const MAX_PAGES = 100;
+
+function nextPageTokenOrStop(prevToken: string | undefined, nextToken: string | undefined, pageItemCount: number, pageCount: number): string | undefined {
+  if (!nextToken || pageItemCount === 0 || nextToken === prevToken || pageCount >= MAX_PAGES) return undefined;
+  return nextToken;
+}
+
 export interface PlaylistSnippet {
   youtubePlaylistId: string;
   title: string;
@@ -160,6 +172,7 @@ export async function fetchChannelSnippet(channelId: string): Promise<ChannelSni
 export async function fetchPlaylistItems(playlistId: string): Promise<PlaylistItemSnippet[]> {
   const items: PlaylistItemSnippet[] = [];
   let pageToken: string | undefined;
+  let pageCount = 0;
 
   do {
     const data = await callApi<{
@@ -189,7 +202,7 @@ export async function fetchPlaylistItems(playlistId: string): Promise<PlaylistIt
         publishedAt: item.snippet.publishedAt,
       });
     }
-    pageToken = data.nextPageToken;
+    pageToken = nextPageTokenOrStop(pageToken, data.nextPageToken, data.items.length, ++pageCount);
   } while (pageToken);
 
   return items;
@@ -241,6 +254,7 @@ export interface ChannelPlaylist {
 export async function fetchChannelPlaylists(channelId: string): Promise<ChannelPlaylist[]> {
   const playlists: ChannelPlaylist[] = [];
   let pageToken: string | undefined;
+  let pageCount = 0;
 
   do {
     const data = await callApi<{
@@ -270,7 +284,7 @@ export async function fetchChannelPlaylists(channelId: string): Promise<ChannelP
         publishedAt: item.snippet.publishedAt ?? null,
       });
     }
-    pageToken = data.nextPageToken;
+    pageToken = nextPageTokenOrStop(pageToken, data.nextPageToken, data.items.length, ++pageCount);
   } while (pageToken);
 
   return playlists;
