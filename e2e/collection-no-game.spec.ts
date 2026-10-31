@@ -25,7 +25,9 @@ test('§3.9 ゲーム未設定にすると名前欄・楽天欄が畳まれ、�
   await expect(row.getByRole('checkbox')).toBeChecked();
 
   // 絞り込みに「ゲーム未設定で登録（N）」が出て、行がそちらへ移る
+  await adminPage.getByRole('button', { name: 'ゲームで絞り込み' }).click();
   await expect(adminPage.getByText(/ゲーム未設定で登録（\d+）/).first()).toBeVisible();
+  await adminPage.keyboard.press('Escape');
 
   // 元に戻すと、名前欄が戻る
   await row.getByRole('button', { name: /新しく登録するに戻す/ }).click();
@@ -104,7 +106,10 @@ test('v1.10 §4.2 ゲーム未設定の再生リストが一覧・詳細で崩�
   });
   try {
     await guestPage.goto('/playlists');
-    await guestPage.getByLabel('ゲームタイトル・チャンネル名で検索').fill(hint);
+    // モバイルでは検索条件がアコーディオンに畳まれている
+    const toggle = guestPage.locator('button[aria-expanded]').filter({ hasText: '検索条件' });
+    if (await toggle.isVisible()) await toggle.click();
+    await guestPage.getByLabel('ゲームタイトル・チャンネル名で検索').filter({ visible: true }).fill(hint);
     const card = guestPage.locator(`a[href="/playlists/${playlistId}"]`);
     await expect(card.first()).toBeVisible({ timeout: 30_000 });
 
