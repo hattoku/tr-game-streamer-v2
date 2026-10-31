@@ -203,28 +203,16 @@ test('§1.1 コンテンツ収集の2つの画面は、上の大きなタブで�
   await expect(adminPage).toHaveURL(/\/admin\/collection$/);
 });
 
-test('§3.8 「動画一覧を見る」とサムネイルで、YouTube の再生リストの埋め込みプレイヤーを開く（API は使わない）', async ({ adminPage }) => {
+test('§3.8 「動画一覧を見る（YouTube）」とサムネイルは、YouTube の再生リストのページを別タブで開くリンク', async ({ adminPage }) => {
   const channelTitle = uniqueText('チャンネル');
   const playlistId = await seedCandidate({ channelTitle, explorationChannelId: randomId('e2e-ch-'), gameQuery: uniqueText('動画一覧のゲーム') });
-  const apiCalls: string[] = [];
-  adminPage.on('request', (r) => {
-    if (r.url().includes('/api/admin/collection/candidates') && r.postData()?.includes('"videos"')) apiCalls.push(r.url());
-  });
 
   await adminPage.goto('/admin/collection');
   await filterChannel(adminPage, channelTitle);
   const group = section(adminPage, channelTitle);
-  const dialog = adminPage.getByRole('dialog', { name: '再生リストを確認' });
-  const embedSrc = `https://www.youtube.com/embed/videoseries?list=${playlistId}`;
-
-  await group.getByRole('button', { name: /動画一覧を見る$/ }).click();
-  await expect(dialog.locator('iframe')).toHaveAttribute('src', embedSrc);
-  await expect(dialog.getByRole('link', { name: /YouTube で開く/ })).toHaveAttribute('href', `https://www.youtube.com/playlist?list=${playlistId}`);
-  // フォーカスがプレイヤー（別オリジンの iframe）に入ると Esc が届かないため、閉じるボタンで閉じる
-  await dialog.getByRole('button', { name: '閉じる' }).click();
-  await expect(dialog).toBeHidden();
-
-  await group.getByRole('button', { name: /の再生リストを確認$/ }).click();
-  await expect(dialog.locator('iframe')).toHaveAttribute('src', embedSrc);
-  expect(apiCalls).toEqual([]);
+  const url = `https://www.youtube.com/playlist?list=${playlistId}`;
+  for (const link of [group.getByRole('link', { name: /の動画一覧をYouTubeで見る$/ }), group.getByRole('link', { name: /をYouTubeで開く$/ })]) {
+    await expect(link).toHaveAttribute('href', url);
+    await expect(link).toHaveAttribute('target', '_blank');
+  }
 });

@@ -33,7 +33,6 @@ import { GameSelectModal, type GameOption } from '@/components/playlists/GameSel
 import { GameCreateModal } from '@/components/games/GameCreateModal';
 import { RakutenPickModal } from '@/components/admin/collection/RakutenPickModal';
 import { CollectionNav } from '@/components/admin/collection/CollectionNav';
-import { PlaylistVideosModal } from '@/components/admin/collection/PlaylistVideosModal';
 import { fetchTagsMap, type TagInfo } from '@/lib/tags';
 import { guessGame, normalizeForMatch } from '@/lib/exploration-rules';
 import { COLLECTION_DAILY_QUOTA_LIMIT } from '@/lib/collection-quota-shared';
@@ -128,7 +127,6 @@ export default function AdminCollectionPage() {
   const [rakutenSearching, setRakutenSearching] = useState<Set<string>>(new Set());
   const [rakutenFailed, setRakutenFailed] = useState<Set<string>>(new Set());
   const [rakutenPickFor, setRakutenPickFor] = useState<CollectionCandidate | null>(null);
-  const [videosFor, setVideosFor] = useState<CollectionCandidate | null>(null);
   const rakutenQueueRunningRef = useRef(false);
   const [rakutenQueueTick, setRakutenQueueTick] = useState(0);
 
@@ -690,17 +688,18 @@ export default function AdminCollectionPage() {
                                   onChange={() => toggleSelected(c.id)}
                                 />
                               )}
-                              <button
-                                type="button"
-                                onClick={() => setVideosFor(c)}
+                              <a
+                                href={`https://www.youtube.com/playlist?list=${c.id}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
                                 className="relative aspect-video w-28 shrink-0 self-start overflow-hidden rounded-[6px] bg-bg-hover md:w-44"
-                                aria-label={`${c.playlistTitle}の再生リストを確認`}
+                                aria-label={`${c.playlistTitle}をYouTubeで開く`}
                               >
                                 {c.thumbnailUrl && (
                                   // eslint-disable-next-line @next/next/no-img-element
                                   <img src={c.thumbnailUrl} alt="" className="absolute inset-0 size-full object-cover" loading="lazy" />
                                 )}
-                              </button>
+                              </a>
                               <div className="flex min-w-0 flex-1 flex-col gap-1">
                                 <p className="text-base text-text-primary">{c.playlistTitle}</p>
                                 <p className="text-md text-text-tertiary">
@@ -708,9 +707,16 @@ export default function AdminCollectionPage() {
                                 </p>
                                 <p className="text-md text-text-tertiary">再生リスト作成日 {formatDateTime(c.playlistPublishedAt)}</p>
                                 <div>
-                                  <AdminActionButton onClick={() => setVideosFor(c)} aria-label={`${c.playlistTitle}の動画一覧を見る`}>
-                                    動画一覧を見る
-                                  </AdminActionButton>
+                                  {/* YouTube の再生リストのページは埋め込みを禁止しているため（X-Frame-Options）、別タブで開く（v2.3 §3.8） */}
+                                  <a
+                                    href={`https://www.youtube.com/playlist?list=${c.id}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className={ADMIN_ACTION_CLASS}
+                                    aria-label={`${c.playlistTitle}の動画一覧をYouTubeで見る`}
+                                  >
+                                    動画一覧を見る（YouTube）
+                                  </a>
                                 </div>
                                 {status !== 'pending' && c.reviewComment && (
                                   <p className="text-md text-text-muted">理由: {APPROVE_ERROR_LABEL[c.reviewComment] ?? c.reviewComment}</p>
@@ -859,7 +865,6 @@ export default function AdminCollectionPage() {
           setGameSelectFor(null);
         }}
       />
-      <PlaylistVideosModal candidate={videosFor} onClose={() => setVideosFor(null)} />
       <RakutenPickModal
         open={rakutenPickFor !== null}
         onOpenChange={(open) => !open && setRakutenPickFor(null)}
@@ -991,16 +996,11 @@ function PackageImage({ url }: { url: string | null }) {
  * 管理画面の行の中の操作ボタン（ゲームを選ぶ等）。管理画面は操作ミスを防ぐのを優先し、ユーザー向け画面の
  * 白黒基調より目立つ管理用の色（admin-accent）で、押せる場所だと分かる見た目にする
  */
+const ADMIN_ACTION_CLASS = cn(
+  'inline-flex items-center justify-center whitespace-nowrap rounded-[6px] border border-admin-accent bg-admin-accent/15 px-[10px] py-1 text-sm font-medium text-admin-accent-text',
+  'transition-colors duration-[120ms] not-disabled:hover:bg-admin-accent/30 disabled:opacity-50',
+);
+
 function AdminActionButton({ className, ...rest }: ComponentProps<'button'>) {
-  return (
-    <button
-      type="button"
-      className={cn(
-        'inline-flex items-center justify-center whitespace-nowrap rounded-[6px] border border-admin-accent bg-admin-accent/15 px-[10px] py-1 text-sm font-medium text-admin-accent-text',
-        'transition-colors duration-[120ms] not-disabled:hover:bg-admin-accent/30 disabled:opacity-50',
-        className,
-      )}
-      {...rest}
-    />
-  );
+  return <button type="button" className={cn(ADMIN_ACTION_CLASS, className)} {...rest} />;
 }
