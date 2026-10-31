@@ -185,6 +185,8 @@ export interface RakutenPick {
   hardware: string;
   imageUrl: string;
   salesDate: string;
+  /** 楽天ブックスの商品ページ（v2.3 で追加。それより前に保存した結果には無い） */
+  itemUrl?: string;
 }
 
 /**
@@ -213,7 +215,7 @@ export async function searchRakutenForGameTitle(title: string): Promise<{ query:
       return {
         query: queries[i],
         // JAN で取り直して登録するため、JAN の無い商品は選べないので外す
-        items: results.filter((r) => r.jan).map((r) => ({ jan: r.jan, title: r.title, hardware: r.hardware, imageUrl: r.imageUrl, salesDate: r.salesDate })),
+        items: results.filter((r) => r.jan).map((r) => ({ jan: r.jan, title: r.title, hardware: r.hardware, imageUrl: r.imageUrl, salesDate: r.salesDate, itemUrl: r.itemUrl })),
       };
     }
   }

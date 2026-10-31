@@ -45,6 +45,7 @@ import {
   formatDateTime,
   postAdminApi,
   quotaExceededMessage,
+  rakutenItemPageUrl,
   type CandidateStatus,
   type CollectionBatchLog,
   type CollectionCandidate,
@@ -926,11 +927,18 @@ function RakutenLine({
     body = <span className="text-text-tertiary">検索中…</span>;
   } else if (pick) {
     action = '選び直す';
+    // 確認用に、商品名から楽天ブックスの商品ページを別タブで開く（v2.3 §3.7）
     body = (
-      <span className="line-clamp-3 text-text-primary">
+      <a
+        href={rakutenItemPageUrl(pick)}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="line-clamp-3 text-text-primary underline decoration-text-muted underline-offset-2 hover:decoration-text-primary"
+        aria-label={`${pick.title}を楽天ブックスで開く`}
+      >
         {pick.title}
         {pick.hardware && <span className="text-text-tertiary">（{pick.hardware}）</span>}
-      </span>
+      </a>
     );
   } else if (failed && !result) {
     action = '探し直す';
@@ -950,7 +958,13 @@ function RakutenLine({
   }
   return (
     <div className="flex items-start gap-3 text-md" data-testid="rakuten-line">
-      <PackageImage url={pick?.imageUrl ?? null} />
+      {pick ? (
+        <a href={rakutenItemPageUrl(pick)} target="_blank" rel="noopener noreferrer" tabIndex={-1} aria-hidden className="shrink-0 hover:opacity-80">
+          <PackageImage url={pick.imageUrl} />
+        </a>
+      ) : (
+        <PackageImage url={null} />
+      )}
       <div className="flex min-w-0 flex-1 flex-col items-start gap-2">
         <p className="text-sm text-text-tertiary">楽天ブックスの商品（パッケージ画像・機種・ジャンルを入れる）</p>
         <span aria-live="polite" className="min-w-0">

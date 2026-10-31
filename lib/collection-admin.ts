@@ -65,6 +65,13 @@ export interface RakutenPick {
   hardware: string;
   imageUrl: string;
   salesDate: string;
+  /** 楽天ブックスの商品ページ（v2.3 で追加。それより前に保存した結果には無い） */
+  itemUrl?: string;
+}
+
+/** 楽天ブックスの商品ページ。itemUrl の無い古い結果は JAN で楽天ブックスを検索するページにする */
+export function rakutenItemPageUrl(item: RakutenPick): string {
+  return item.itemUrl || `https://books.rakuten.co.jp/search?sitem=${encodeURIComponent(item.jan)}`;
 }
 
 export interface RakutenSearchResult {

@@ -1,6 +1,6 @@
 # プレミテ Firestore データモデル設計書
 
-**バージョン**: v1.26  
+**バージョン**: v1.27  
 **作成日**: 2026年3月30日（更新）  
 **対象**: 開発チーム  
 **関連ドキュメント**: プレミテ企画書 / プレミテ_技術スタック仕様書 / 各機能仕様書
@@ -722,7 +722,7 @@ YouTube API クォータ消費の記録。
 | `reviewedBy` | string? | — | 承認・却下した管理者のuserId |
 | `reviewComment` | string? | — | 却下理由など（自動却下時は `"not_public"` 等） |
 | `registeredPlaylistId` | string? | — | 登録した `playlists` のドキュメントID |
-| `rakutenSearch` | map? | — | 承認前の楽天ブックス検索の結果（収集候補レビューUI仕様書 v2.2 §3.7）。`title`（検索したゲーム名・検索語）・`query`（結果が出た検索語）・`items`（最大10件。各 `jan`・`title`・`hardware`・`imageUrl`・`salesDate`）・`searchedAt`。未検索は無し |
+| `rakutenSearch` | map? | — | 承認前の楽天ブックス検索の結果（収集候補レビューUI仕様書 v2.2 §3.7）。`title`（検索したゲーム名・検索語）・`query`（結果が出た検索語）・`items`（最大10件。各 `jan`・`title`・`hardware`・`imageUrl`・`salesDate`・`itemUrl`（v1.27 で追加。商品ページ。それより前の結果には無い））・`searchedAt`。未検索は無し |
 
 > v1.25 で旧設計（ジャンル起点）の `genreId`・`genreName`・`aiOperatorId`・`aiResult`・`aiFlags`・`aiComment`・`latestVideoPublishedAt` と `approved` 状態を削除した。AI判定のフィールドは Gemini 導入時に追加する。
 
@@ -1020,3 +1020,4 @@ ai_operators ──── (1) users
 | v1.24 | 2026-10-27 | お問い合わせの画像添付。§3.17 `inquiries` に `attachments`・`hasAttachments`・`resolvedAt`、`messages` に `attachments` と添付画像の構造を追加。§3.31 `inquiry_upload_counters` を新設。§5.2 にインデックス、§6 に Storage のルール方針を追加 |
 | v1.25 | 2026-10-28 | フェーズ7-5（友人テスト前のコンテンツ充実）。コンテンツ収集をチャンネル起点に変更したことに合わせ、3.23 `collection_candidates` をタイトル・チャンネル起点のスキーマに改訂（ドキュメントIDを再生リストIDに、ゲーム推定・タグ候補を追加、ジャンル起点・AI判定のフィールドを削除）、3.24 `collection_batch_logs`・3.25 `collection_quota_logs` を改訂、3.32 `exploration_channels` を追加 |
 | v1.26 | 2026-10-30 | 3.23 `collection_candidates` に `rakutenSearch`（承認前の楽天ブックス検索の結果）・`videoCountCheckedAt` を追加。`videoCount` を以後の探索でも更新する |
+| v1.27 | 2026-10-31 | 3.23 `collection_candidates.rakutenSearch.items` に `itemUrl`（楽天ブックスの商品ページ）を追加 |

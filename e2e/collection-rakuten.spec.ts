@@ -43,11 +43,15 @@ test('§3.7 新規のゲーム名は表示すると楽天ブックスを自動�
   await expect(line).toContainText('野狗子: Slitterhead', { timeout: 60_000 });
   await expect(line).toContainText('PS5');
   await expect(line.getByRole('button', { name: /選び直す$/ })).toBeVisible();
+  // 確認用に、商品名は楽天ブックスの商品ページを別タブで開くリンク（v2.3）
+  const itemLink = line.getByRole('link', { name: /を楽天ブックスで開く$/ });
+  await expect(itemLink).toHaveAttribute('href', /^https:\/\/books\.rakuten\.co\.jp\//);
+  await expect(itemLink).toHaveAttribute('target', '_blank');
 
   const saved = (await e2eDb().collection('collection_candidates').doc(playlistId).get()).data()!.rakutenSearch;
   expect(saved.title).toBe('野狗子: Slitterhead');
   expect(saved.items.length).toBeGreaterThan(0);
-  expect(saved.items.every((i: { jan: string }) => i.jan)).toBe(true);
+  expect(saved.items.every((i: { jan: string; itemUrl: string }) => i.jan && i.itemUrl)).toBe(true);
 
   // 検索した後にゲーム名を書き換えると、古い結果は使わず、承認時に新しい名前で探す
   await section(adminPage, channelTitle).getByRole('textbox').fill('野狗子 改');
