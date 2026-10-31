@@ -13,13 +13,14 @@ import {
 import { RakutenApiError } from '@/lib/rakuten';
 import { normalizeForMatch } from '@/lib/exploration-rules';
 import { registerPlaylist } from '@/lib/playlist-registration';
-import { getQuotaConsumed, resetQuotaCounter } from '@/lib/youtube';
+import { fetchPlaylistItems, fetchVideoDurations, getQuotaConsumed, resetQuotaCounter, YouTubeApiError } from '@/lib/youtube';
 
 // 収集候補の承認・却下API（管理者専用。管理 AI運営者向け収集候補レビューUI仕様書 v2.2 §3.7・§4・§5）。
 // action:
 //   approve { items: [{ playlistId, gameId?, newGameTitle?, rakutenJan?, tagIds }] }  まとめて登録（最大50件、1件ずつ順に処理）
 //           gameId が無い候補は newGameTitle のゲームを使う（既存に一致すればそれ、無ければ新規登録。§4.3）
 //           rakutenJan は新規登録するゲームに結び付ける楽天ブックスの商品（null は楽天なし、省略は完全一致で探す）
+//   videos { playlistId }                                再生リストの全動画（タイトル・長さ・公開日）を取得（承認前の確認用。§3.8）
 //   rakuten_search { playlistId, title, query? }         新規のゲーム名（query があればその語）で楽天ブックスを検索し、結果を候補に保存（§3.7）
 //   reject  { playlistIds }                              却下
 //   restore { playlistIds }                              却下済みを未処理に戻す
@@ -63,6 +64,39 @@ export async function POST(request: NextRequest) {
   const body = (await request.json()) as { action?: unknown; items?: unknown; playlistIds?: unknown; playlistId?: unknown; title?: unknown; query?: unknown };
   const now = new Date();
   const candidates = adminDb.collection('collection_candidates');
+
+  if (body.action === 'videos') {
+    const playlistId = typeof body.playlistId === 'string' ? body.playlistId : '';
+    if (!/^[\w-]+$/.test(playlistId)) return NextResponse.json({ error: 'invalid_request' }, { status: 400 });
+    const snap = await candidates.doc(playlistId).get();
+    if (!snap.exists) return NextResponse.json({ error: 'not_found' }, { status: 404 });
+    // playlistItems・videos とも50本ごとに1ユニット
+    const quota = await checkCollectionQuota(Math.ceil(((snap.data()!.videoCount as number) ?? 0) / 50) * 2 + 2);
+    if (!quota.ok) return NextResponse.json({ error: 'quota_exceeded', remaining: quota.remaining }, { status: 429 });
+    resetQuotaCounter();
+    try {
+      const items = await fetchPlaylistItems(playlistId);
+      const durations = await fetchVideoDurations(items.map((i) => i.youtubeVideoId));
+      return NextResponse.json({
+        videos: items.map((i) => ({
+          videoId: i.youtubeVideoId,
+          title: i.title,
+          thumbnailUrl: i.thumbnailUrl,
+          position: i.position,
+          publishedAt: i.publishedAt,
+          durationSeconds: durations.get(i.youtubeVideoId) ?? null,
+        })),
+      });
+    } catch (e) {
+      if (e instanceof YouTubeApiError) {
+        console.error('収集候補の動画一覧の取得に失敗', playlistId, e);
+        return NextResponse.json({ error: 'youtube_api_error' }, { status: 502 });
+      }
+      throw e;
+    } finally {
+      await addCollectionQuotaUsage(getQuotaConsumed());
+    }
+  }
 
   if (body.action === 'rakuten_search') {
     const playlistId = typeof body.playlistId === 'string' ? body.playlistId : '';

@@ -13,10 +13,12 @@ export async function seedCandidate(params: {
   channelTitle: string;
   explorationChannelId: string;
   gameQuery: string;
+  /** 実在の再生リストIDで作る（動画一覧の確認用）。既存の収集候補と重ならないIDを使うこと。省略時は YouTube に無いID */
+  playlistId?: string;
   /** 承認前の楽天ブックス検索の結果を保存済みにする（v2.2 §3.7。自動検索を待たずに済む） */
   rakutenSearch?: { title: string; query: string; items: Array<{ jan: string; title: string; hardware: string; imageUrl: string; salesDate: string }> };
 }): Promise<string> {
-  const playlistId = randomId('PLE2E');
+  const playlistId = params.playlistId ?? randomId('PLE2E');
   await e2eDb()
     .collection('collection_candidates')
     .doc(playlistId)

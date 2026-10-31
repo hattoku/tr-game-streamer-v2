@@ -173,7 +173,7 @@ test('§3.3・§3.7 楽天の状態で絞り込め、各絞り込みに件数が
   await adminPage.goto('/admin/collection');
   await filterChannel(adminPage, channelTitle);
   await expect(adminPage.getByRole('button', { name: 'チャンネルで絞り込み' })).toContainText(`${channelTitle}（4）`);
-  await expect(adminPage.getByRole('button', { name: 'ゲーム推定で絞り込み' })).toContainText('すべて（4）');
+  await expect(adminPage.getByRole('button', { name: 'ゲームで絞り込み' })).toContainText('すべて（4）');
 
   // 自動検索が終わると、順番待ちは0件、楽天なし・見つからないは2件
   const rakutenFilter = adminPage.getByRole('button', { name: '楽天の商品で絞り込み' });
@@ -201,4 +201,24 @@ test('§1.1 コンテンツ収集の2つの画面は、上の大きなタブで�
   await expect(nav.getByRole('link', { name: /探索対象チャンネル/ })).toHaveAttribute('aria-current', 'page');
   await nav.getByRole('link', { name: /収集候補/ }).click();
   await expect(adminPage).toHaveURL(/\/admin\/collection$/);
+});
+
+// stg に登録済み（収集候補ではない）の実在の再生リスト。SILENT HILL f（公開・14本）
+const REAL_PLAYLIST_ID = 'PLEQchj72pK57vf1T71qItIYlAyO6meW7y';
+
+test('§3.8 カードの「動画一覧を見る」で、再生リストの全動画を番号・タイトル・長さつきで確認できる', async ({ adminPage }) => {
+  test.setTimeout(120_000);
+  const channelTitle = uniqueText('チャンネル');
+  await seedCandidate({ channelTitle, explorationChannelId: randomId('e2e-ch-'), gameQuery: uniqueText('動画一覧のゲーム'), playlistId: REAL_PLAYLIST_ID });
+
+  await adminPage.goto('/admin/collection');
+  await filterChannel(adminPage, channelTitle);
+  await section(adminPage, channelTitle).getByRole('button', { name: /動画一覧を見る$/ }).click();
+  const dialog = adminPage.getByRole('dialog', { name: '再生リストの動画一覧' });
+  const items = dialog.getByRole('list', { name: '動画一覧' }).getByRole('listitem');
+  await expect(items.first()).toBeVisible({ timeout: 30_000 });
+  expect(await items.count()).toBeGreaterThan(5);
+  await expect(dialog).toContainText(/今の時点で \d+本・合計/);
+  await expect(items.first()).toContainText(/\d+:\d{2}/);
+  await expect(items.first().getByRole('link')).toHaveAttribute('href', /youtube\.com\/watch\?v=/);
 });

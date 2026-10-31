@@ -27,12 +27,13 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { SkeletonText } from '@/components/ui/Skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { useToast } from '@/components/ui/Toast';
-import { ChevronRightIcon, InventoryIcon, XIcon } from '@/components/ui/icons';
+import { ChevronRightIcon, InventoryIcon, SearchIcon, XIcon } from '@/components/ui/icons';
 import { cn } from '@/components/ui/cn';
 import { GameSelectModal, type GameOption } from '@/components/playlists/GameSelectModal';
 import { GameCreateModal } from '@/components/games/GameCreateModal';
 import { RakutenPickModal } from '@/components/admin/collection/RakutenPickModal';
 import { CollectionNav } from '@/components/admin/collection/CollectionNav';
+import { PlaylistVideosModal } from '@/components/admin/collection/PlaylistVideosModal';
 import { fetchTagsMap, type TagInfo } from '@/lib/tags';
 import { guessGame, normalizeForMatch } from '@/lib/exploration-rules';
 import { COLLECTION_DAILY_QUOTA_LIMIT } from '@/lib/collection-quota-shared';
@@ -127,6 +128,7 @@ export default function AdminCollectionPage() {
   const [rakutenSearching, setRakutenSearching] = useState<Set<string>>(new Set());
   const [rakutenFailed, setRakutenFailed] = useState<Set<string>>(new Set());
   const [rakutenPickFor, setRakutenPickFor] = useState<CollectionCandidate | null>(null);
+  const [videosFor, setVideosFor] = useState<CollectionCandidate | null>(null);
   const rakutenQueueRunningRef = useRef(false);
   const [rakutenQueueTick, setRakutenQueueTick] = useState(0);
 
@@ -533,26 +535,40 @@ export default function AdminCollectionPage() {
       <SectionHeading>コンテンツ収集</SectionHeading>
       <CollectionNav />
 
-      <Card className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-col gap-1 text-md text-text-tertiary">
-          <p>
-            最終探索: {lastBatch
-              ? `${formatDateTime(lastBatch.executedAt)}（${lastBatch.trigger === 'cron' ? '週1自動' : '手動'}、${
-                  lastBatch.status === 'skipped' ? 'APIの枠不足でスキップ' : `新規候補 ${lastBatch.candidatesFound}件${lastBatch.status === 'success' ? '' : '、一部エラーあり'}`
-                }）`
-              : 'まだありません'}
-          </p>
-          <p>
-            本日のYouTube API消費（コンテンツ収集分）: {quotaUsed ?? '-'} / {COLLECTION_DAILY_QUOTA_LIMIT.toLocaleString('ja-JP')} ユニット
-          </p>
-          <p className="text-sm text-text-muted">
-            「探索を実行」は、探索対象チャンネル（探索中）すべての再生リストを YouTube から読み、動画10本以上・公開・除外語（切り抜き等）なし・まだ登録も候補化もしていないものを、新しい候補としてここに追加します。既にある候補は本数だけ今の数に更新します。本番では毎週月曜5時にも自動で実行します。
-          </p>
-        </div>
-        <Button variant="secondary" onClick={handleExplore} loading={exploring} disabled={busy}>
-          探索を実行
-        </Button>
-      </Card>
+      {/* 状態の表示と、探索の操作を別のカードに分ける（v2.2 §3.1） */}
+      <div className="grid gap-3 md:grid-cols-2">
+        <Card className="flex flex-col gap-2">
+          <h2 className="text-base font-medium text-text-primary">収集の状況</h2>
+          <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-md">
+            <dt className="text-text-tertiary">最終探索</dt>
+            <dd className="text-text-secondary">
+              {lastBatch
+                ? `${formatDateTime(lastBatch.executedAt)}（${lastBatch.trigger === 'cron' ? '週1自動' : '手動'}、${
+                    lastBatch.status === 'skipped' ? 'APIの枠不足でスキップ' : `新規候補 ${lastBatch.candidatesFound}件${lastBatch.status === 'success' ? '' : '、一部エラーあり'}`
+                  }）`
+                : 'まだありません'}
+            </dd>
+            <dt className="text-text-tertiary">本日のAPI消費</dt>
+            <dd className="text-text-secondary">
+              {quotaUsed ?? '-'} / {COLLECTION_DAILY_QUOTA_LIMIT.toLocaleString('ja-JP')} ユニット（YouTube API のうちコンテンツ収集の分）
+            </dd>
+          </dl>
+        </Card>
+        <Card className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-base font-medium text-text-primary">探索を実行</h2>
+            <Button variant="secondary" onClick={handleExplore} loading={exploring} disabled={busy}>
+              探索を実行
+            </Button>
+          </div>
+          <ul className="list-disc pl-5 text-sm text-text-tertiary">
+            <li>探索対象チャンネル（探索中）すべての再生リストを YouTube から読みます</li>
+            <li>動画10本以上・公開・除外語（切り抜き等）なし・まだ登録も候補化もしていないものを、新しい候補として下に追加します</li>
+            <li>既にある候補は、本数だけ今の数に更新します</li>
+            <li>本番では毎週月曜5時にも自動で実行します</li>
+          </ul>
+        </Card>
+      </div>
 
       <Tabs value={status} onValueChange={(v) => changeStatus(v as CandidateStatus)}>
         <TabsList aria-label="状態で絞り込み">
@@ -570,12 +586,12 @@ export default function AdminCollectionPage() {
           <SelectMenu<GameFilter>
             value={gameFilter}
             onValueChange={setGameFilter}
-            prefix="ゲーム推定:"
-            aria-label="ゲーム推定で絞り込み"
+            prefix="ゲーム:"
+            aria-label="ゲームで絞り込み"
             options={[
               { value: 'all', label: `すべて（${gameFilterCounts.all}）` },
-              { value: 'guessed', label: `推定あり（${gameFilterCounts.guessed}）` },
-              { value: 'none', label: `推定なし（${gameFilterCounts.none}）` },
+              { value: 'guessed', label: `登録済みのゲームに付ける（${gameFilterCounts.guessed}）` },
+              { value: 'none', label: `新しく登録する（${gameFilterCounts.none}）` },
             ]}
           />
         )}
@@ -692,6 +708,11 @@ export default function AdminCollectionPage() {
                                   {c.videoCount}本（{formatDateTime(c.videoCountCheckedAt)} の探索時点）
                                 </p>
                                 <p className="text-md text-text-tertiary">再生リスト作成日 {formatDateTime(c.playlistPublishedAt)}</p>
+                                <div>
+                                  <AdminActionButton onClick={() => setVideosFor(c)} aria-label={`${c.playlistTitle}の動画一覧を見る`}>
+                                    動画一覧を見る
+                                  </AdminActionButton>
+                                </div>
                                 {status !== 'pending' && c.reviewComment && (
                                   <p className="text-md text-text-muted">理由: {APPROVE_ERROR_LABEL[c.reviewComment] ?? c.reviewComment}</p>
                                 )}
@@ -839,6 +860,7 @@ export default function AdminCollectionPage() {
           setGameSelectFor(null);
         }}
       />
+      <PlaylistVideosModal candidate={videosFor} onClose={() => setVideosFor(null)} />
       <RakutenPickModal
         open={rakutenPickFor !== null}
         onOpenChange={(open) => !open && setRakutenPickFor(null)}
@@ -932,7 +954,15 @@ function RakutenLine({
         </span>
         <div className="flex flex-wrap gap-2">
           {/* 検索中も外さない（モーダルを閉じたときのフォーカスの戻り先にするため） */}
-          <Button variant="rakuten" size="sm" onClick={onOpen} disabled={disabled || searching} aria-label={`${gameTitle}の楽天の商品を${action}`}>
+          {/* 「探し直す」（検索し直す操作）は、「候補から選ぶ」「選び直す」（結果から選ぶ操作）と色を分ける */}
+          <Button
+            variant={action === '探し直す' ? 'secondary' : 'rakuten'}
+            size="sm"
+            onClick={onOpen}
+            disabled={disabled || searching}
+            aria-label={`${gameTitle}の楽天の商品を${action}`}
+          >
+            {action === '探し直す' && <SearchIcon size={12} />}
             {action}
           </Button>
           {pick && pickName && normalizeForMatch(pickName) !== normalizeForMatch(gameTitle) && (
