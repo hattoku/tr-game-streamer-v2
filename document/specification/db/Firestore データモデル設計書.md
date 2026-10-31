@@ -1,6 +1,6 @@
 # プレミテ Firestore データモデル設計書
 
-**バージョン**: v1.27  
+**バージョン**: v1.28  
 **作成日**: 2026年3月30日（更新）  
 **対象**: 開発チーム  
 **関連ドキュメント**: プレミテ企画書 / プレミテ_技術スタック仕様書 / 各機能仕様書
@@ -189,8 +189,11 @@ Firestoreはテーブル結合（JOIN）ができないため、一覧表示や�
 | `channelId` | string | ✅ | 紐づくチャンネルのドキュメントID |
 | `channelName` | string | ✅ | チャンネル名（denormalized） |
 | `channelIconUrl` | string | ✅ | チャンネルアイコンURL（denormalized） |
-| `gameId` | string? | — | 紐づくゲームタイトルのドキュメントID（未登録の場合はnull） |
-| `gameName` | string? | — | ゲームタイトル名（denormalized） |
+| `gameId` | string? | — | 紐づくゲームタイトルのドキュメントID。**null ＝ ゲーム未設定**（v1.28。収集画面の「ゲーム未設定で登録」で登録した再生リストなど。ゲームのページ・ジャンル別の一覧には出ない） |
+| `gameName` | string? | — | ゲームタイトル名（denormalized。ゲーム未設定は空文字） |
+| `gameHint` | string? | — | 未確定のゲーム名（v1.28。収集の `gameQuery` や承認時に入力した名前。マスタには入れない。再生リスト一覧のキーワード検索の対象で、あとの自動照合にも使う。無ければ null） |
+| `gameSetBy` | string? | — | 今のゲームを決めた者（v1.28。`admin`（管理者の登録・承認）／`auto`・`user` は段階B・Cで追加。ゲーム未設定・旧データは null） |
+| `gameSetAt` | Timestamp? | — | 同上の日時（v1.28） |
 | `gameGenreIds` | string[] | ✅ | ゲームのジャンルIDリスト（ランキング・フィルタ用） |
 | `videoCount` | number | ✅ | 動画数（YouTubeから取得） |
 | `latestVideoPublishedAt` | Timestamp? | — | 最新動画の公開日時（新着順ソート用） |
@@ -1021,3 +1024,4 @@ ai_operators ──── (1) users
 | v1.25 | 2026-10-28 | フェーズ7-5（友人テスト前のコンテンツ充実）。コンテンツ収集をチャンネル起点に変更したことに合わせ、3.23 `collection_candidates` をタイトル・チャンネル起点のスキーマに改訂（ドキュメントIDを再生リストIDに、ゲーム推定・タグ候補を追加、ジャンル起点・AI判定のフィールドを削除）、3.24 `collection_batch_logs`・3.25 `collection_quota_logs` を改訂、3.32 `exploration_channels` を追加 |
 | v1.26 | 2026-10-30 | 3.23 `collection_candidates` に `rakutenSearch`（承認前の楽天ブックス検索の結果）・`videoCountCheckedAt` を追加。`videoCount` を以後の探索でも更新する |
 | v1.27 | 2026-10-31 | 3.23 `collection_candidates.rakutenSearch.items` に `itemUrl`（楽天ブックスの商品ページ）を追加 |
+| v1.28 | 2026-10-31 | 3.2 `playlists` に `gameHint`・`gameSetBy`・`gameSetAt` を追加し、`gameId` が null ＝ ゲーム未設定と明記（収集画面の「ゲーム未設定で登録」。収集候補レビューUI仕様書 v2.4 §3.9） |

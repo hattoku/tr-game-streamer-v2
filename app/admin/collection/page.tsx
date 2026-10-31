@@ -62,7 +62,7 @@ const MAX_GAME_TITLE_LENGTH = 100;
 // 楽天ブックスAPIのレートリミット（1秒1回）に合わせ、自動検索は1件ずつ間隔をあける（v2.2 §3.7）
 const RAKUTEN_SEARCH_INTERVAL_MS = 1100;
 
-type GameFilter = 'all' | 'guessed' | 'none';
+type GameFilter = 'all' | 'guessed' | 'none' | 'no_game';
 
 /**
  * 新規のゲーム名の候補の、楽天ブックスの商品の決まり具合（v2.2 §3.7・§3.3）。推定ありの候補は 'not_new'。
@@ -119,6 +119,8 @@ export default function AdminCollectionPage() {
   const [gameOverrides, setGameOverrides] = useState<Map<string, GameOption>>(new Map());
   // 推定なしの候補で、承認時に用意するゲーム名を書き換えたもの（既定は候補の gameQuery）
   const [newGameTitles, setNewGameTitles] = useState<Map<string, string>>(new Map());
+  // ゲーム未設定で登録すると決めた候補（推定なしのものだけ。この画面を開いている間だけ持つ。v2.4 §3.9）
+  const [noGameIds, setNoGameIds] = useState<Set<string>>(new Set());
   const [removedTags, setRemovedTags] = useState<Map<string, Set<string>>>(new Map());
   const [rowErrors, setRowErrors] = useState<Map<string, string>>(new Map());
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -248,8 +250,13 @@ export default function AdminCollectionPage() {
     return !!(gameOverrides.get(c.id) ?? (c.guessedGameId && gamesById.get(c.guessedGameId)) ?? guessGame(c.playlistTitle, games));
   }
 
+  /** ゲーム未設定で登録する候補（ゲームが推定・選択されていれば対象外） */
+  function isNoGame(c: CollectionCandidate): boolean {
+    return status === 'pending' && noGameIds.has(c.id) && !hasGameOf(c);
+  }
+
   function rakutenStateOf(c: CollectionCandidate): RakutenState {
-    if (hasGameOf(c) || !newGameTitleFor(c)) return 'not_new';
+    if (hasGameOf(c) || isNoGame(c) || !newGameTitleFor(c)) return 'not_new';
     const pick = rakutenPickOf(c);
     if (pick) return 'matched';
     if (pick === null) {
@@ -262,14 +269,17 @@ export default function AdminCollectionPage() {
   // 絞り込み。各絞り込みの件数は、ほかの絞り込みを当てた件数を出す（v2.2 §3.3）。
   // 楽天の状態は描画ごとに変わるので memo にはしない（候補は数百件なので毎回数えても軽い）
   const matchesChannel = (c: CollectionCandidate) => channelFilter === 'all' || c.explorationChannelId === channelFilter;
-  const matchesGame = (c: CollectionCandidate) => gameFilter === 'all' || (gameFilter === 'guessed') === hasGameOf(c);
+  const matchesGame = (c: CollectionCandidate) =>
+    gameFilter === 'all' ||
+    (gameFilter === 'guessed' ? hasGameOf(c) : gameFilter === 'no_game' ? isNoGame(c) : !hasGameOf(c) && !isNoGame(c));
   const matchesRakuten = (c: CollectionCandidate) => rakutenFilter === 'all' || rakutenStateOf(c) === rakutenFilter;
   const allCandidates = candidates ?? [];
   const filtered = allCandidates.filter((c) => matchesChannel(c) && (status !== 'pending' || (matchesGame(c) && matchesRakuten(c))));
   const gameFilterCounts = (() => {
     const base = allCandidates.filter((c) => matchesChannel(c) && matchesRakuten(c));
     const guessed = base.filter(hasGameOf).length;
-    return { all: base.length, guessed, none: base.length - guessed };
+    const noGame = base.filter(isNoGame).length;
+    return { all: base.length, guessed, none: base.length - guessed - noGame, noGame };
   })();
   const rakutenFilterCounts = (() => {
     const counts: Record<RakutenFilter, number> = { all: 0, matched: 0, unmatched: 0, none: 0, queued: 0, unconfirmed: 0 };
@@ -297,7 +307,7 @@ export default function AdminCollectionPage() {
   // 失敗したものは飛ばす。承認中・モーダルで探し直している間は止める（楽天APIの1秒1回を画面全体で守るため）。1件終わるごとに状態が変わり、この effect が次の1件を拾う
   const nextRakutenTarget =
     status === 'pending' && progress === null && rakutenPickFor === null
-      ? groups.flatMap((g) => g.items).find((c) => !gameFor(c) && newGameTitleFor(c) && !rakutenResultFor(c) && !rakutenFailed.has(c.id) && !rakutenSearching.has(c.id))
+      ? groups.flatMap((g) => g.items).find((c) => !gameFor(c) && !isNoGame(c) && newGameTitleFor(c) && !rakutenResultFor(c) && !rakutenFailed.has(c.id) && !rakutenSearching.has(c.id))
       : undefined;
   const nextRakutenTitle = nextRakutenTarget ? newGameTitleFor(nextRakutenTarget) : null;
   useEffect(() => {
@@ -340,13 +350,13 @@ export default function AdminCollectionPage() {
 
   /** 承認できる（＝ゲームが決まっているか、用意するゲーム名がある）候補のみ。却下済みタブでは全件 */
   function selectable(c: CollectionCandidate): boolean {
-    return status === 'rejected' || (status === 'pending' && (!!gameFor(c) || !!newGameTitleFor(c)));
+    return status === 'rejected' || (status === 'pending' && (!!gameFor(c) || !!newGameTitleFor(c) || isNoGame(c)));
   }
 
   function changeNewGameTitle(c: CollectionCandidate, title: string) {
     setNewGameTitles((prev) => new Map(prev).set(c.id, title));
     const valid = title.trim() && title.trim().length <= MAX_GAME_TITLE_LENGTH && normalizeForMatch(title);
-    if (!valid) {
+    if (!valid && !noGameIds.has(c.id)) {
       setSelected((prev) => {
         const next = new Set(prev);
         next.delete(c.id);
@@ -373,7 +383,37 @@ export default function AdminCollectionPage() {
     });
   }
 
+  /** 候補をゲーム未設定で登録する／しないに切り替える（切り替えた候補は選択も入れる／外す） */
+  function setNoGame(ids: string[], on: boolean) {
+    setNoGameIds((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => (on ? next.add(id) : next.delete(id)));
+      return next;
+    });
+    setSelected((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => {
+        if (on) next.add(id);
+        else if (!newGameTitleFor(allCandidates.find((c) => c.id === id)!)) next.delete(id);
+      });
+      return next;
+    });
+  }
+
+  /** 選んでいる推定なしの候補すべてを、ゲーム未設定にする（下部バーの一括操作） */
+  function handleSetNoGameForSelected() {
+    const ids = allCandidates.filter((c) => selected.has(c.id) && !hasGameOf(c)).map((c) => c.id);
+    if (ids.length === 0) return;
+    setNoGame(ids, true);
+    toast({ type: 'success', message: `${ids.length}件をゲーム未設定にしました。承認すると、ゲームタイトルを作らずに登録します` });
+  }
+
   function setGame(candidateId: string, game: GameOption) {
+    setNoGameIds((prev) => {
+      const next = new Set(prev);
+      next.delete(candidateId);
+      return next;
+    });
     setGameOverrides((prev) => new Map(prev).set(candidateId, game));
     setSelected((prev) => new Set(prev).add(candidateId));
   }
@@ -398,13 +438,13 @@ export default function AdminCollectionPage() {
   }
 
   async function handleApprove() {
-    const targets = (candidates ?? []).filter((c) => selected.has(c.id) && (gameFor(c) || newGameTitleFor(c)));
+    const targets = (candidates ?? []).filter((c) => selected.has(c.id) && (gameFor(c) || newGameTitleFor(c) || isNoGame(c)));
     if (targets.length === 0) return;
     // 同じ名前は1件にまとめる（承認APIも最初の1件の楽天の商品で登録する）。楽天の商品か「楽天なし」を添える
     const newGameNameByKey = new Map<string, string>();
     for (const c of targets) {
       const title = newGameTitleFor(c);
-      if (gameFor(c) || !title || newGameNameByKey.has(normalizeForMatch(title))) continue;
+      if (gameFor(c) || isNoGame(c) || !title || newGameNameByKey.has(normalizeForMatch(title))) continue;
       const pick = rakutenPickOf(c);
       newGameNameByKey.set(normalizeForMatch(title), `${title}${pick ? `（楽天: ${pick.title}）` : pick === null ? '（楽天なし）' : ''}`);
     }
@@ -417,11 +457,13 @@ export default function AdminCollectionPage() {
             .map((n) => `・${n}`)
             .join('\n')}${newGameNames.length > NAMES_SHOWN ? `\nほか${newGameNames.length - NAMES_SHOWN}件` : ''}\n\n`
         : '';
+    const noGameCount = targets.filter(isNoGame).length;
+    const noGameNotice = noGameCount > 0 ? `\n\nゲーム未設定で登録するもの: ${noGameCount}件（ゲームタイトルは作らず、あとで紐づけます）\n\n` : '';
     // 楽天の商品がまだ決まっていない（順番待ち・名前変更・検索失敗）候補は、承認APIが名前の完全一致で探す
     const undecided = targets.filter((c) => ['queued', 'unconfirmed'].includes(rakutenStateOf(c))).length;
     const undecidedNotice =
       undecided > 0 ? `楽天の商品がまだ決まっていない候補が${undecided}件あります（自動検索の順番待ちなど。承認時に名前が完全一致する商品だけを探します）。\n\n` : '';
-    if (!window.confirm(`${targets.length}件を登録します。${newGameNotice}${undecidedNotice}よろしいですか？`)) return;
+    if (!window.confirm(`${targets.length}件を登録します。${noGameNotice}${newGameNotice}${undecidedNotice}よろしいですか？`)) return;
 
     setProgress({ done: 0, total: targets.length });
     // 自動検索の1件（と、その後の間隔）が終わるのを待ってから送る。承認APIも楽天ブックスを呼ぶため（1秒1回）
@@ -434,7 +476,7 @@ export default function AdminCollectionPage() {
     let current: CollectionCandidate[] = [];
     let currentNew = 0;
     for (const c of targets) {
-      const isNew = !gameFor(c);
+      const isNew = !gameFor(c) && !isNoGame(c);
       if (current.length >= APPROVE_CHUNK || (isNew && currentNew >= APPROVE_CHUNK_NEW_GAMES)) {
         chunks.push(current);
         current = [];
@@ -460,6 +502,7 @@ export default function AdminCollectionPage() {
           action: 'approve',
           items: chunk.map((c) => {
             const game = gameFor(c);
+            if (!game && isNoGame(c)) return { playlistId: c.id, noGame: true, gameHint: (newGameTitles.get(c.id) ?? c.gameQuery).trim(), tagIds: tagIdsFor(c) };
             return game
               ? { playlistId: c.id, gameId: game.id, tagIds: tagIdsFor(c) }
               : { playlistId: c.id, newGameTitle: newGameTitleFor(c), ...rakutenJanParam(rakutenPickOf(c)), tagIds: tagIdsFor(c) };
@@ -591,6 +634,7 @@ export default function AdminCollectionPage() {
               { value: 'all', label: `すべて（${gameFilterCounts.all}）` },
               { value: 'guessed', label: `登録済みのゲームに付ける（${gameFilterCounts.guessed}）` },
               { value: 'none', label: `新しく登録する（${gameFilterCounts.none}）` },
+              { value: 'no_game', label: `ゲーム未設定で登録（${gameFilterCounts.noGame}）` },
             ]}
           />
         )}
@@ -610,7 +654,7 @@ export default function AdminCollectionPage() {
 
       {status === 'pending' && (
         <p className="text-md text-text-tertiary">
-          ゲームが推定できなかった候補（「新しく登録する」）は、「登録するゲームタイトル名」の欄の名前でゲームタイトルを登録してから承認します（同じ名前のゲームタイトルがあればそれを使い、楽天ブックスで見つかれば画像なども入れます）。ゲームではない再生リストはチェックを外すか却下してください。
+          ゲームが推定できなかった候補（「新しく登録する」）は、「登録するゲームタイトル名」の欄の名前でゲームタイトルを登録してから承認します（同じ名前のゲームタイトルがあればそれを使い、楽天ブックスで見つかれば画像なども入れます）。ゲームではない再生リストはチェックを外すか却下してください。ゲームが分からないもの・楽天に無いものは「ゲーム未設定で登録」にすると、ゲームタイトルを作らずに登録できます。
         </p>
       )}
 
@@ -762,6 +806,8 @@ export default function AdminCollectionPage() {
                                   <span className="text-text-tertiary">ゲーム:</span>
                                   {game ? (
                                     <StatusBadge>登録済みのゲームに付ける</StatusBadge>
+                                  ) : isNoGame(c) ? (
+                                    <StatusBadge>ゲーム未設定で登録</StatusBadge>
                                   ) : (
                                     <StatusBadge>新しく登録する</StatusBadge>
                                   )}
@@ -775,6 +821,14 @@ export default function AdminCollectionPage() {
                                         別のゲームを選ぶ
                                       </AdminActionButton>
                                     </div>
+                                  </div>
+                                ) : isNoGame(c) ? (
+                                  <div className="flex flex-col items-start gap-2" data-testid="no-game-panel">
+                                    <p className="text-md text-text-secondary">ゲームは決めずに登録します。あとでゲームタイトルが登録されたときに紐づけます。</p>
+                                    <p className="text-sm text-text-tertiary">検索に使う名前（メモ）: {(newGameTitles.get(c.id) ?? c.gameQuery).trim() || '（なし）'}</p>
+                                    <AdminActionButton onClick={() => setNoGame([c.id], false)} disabled={busy} aria-label={`${c.playlistTitle}を新しく登録するに戻す`}>
+                                      新しく登録するに戻す
+                                    </AdminActionButton>
                                   </div>
                                 ) : (
                                   <>
@@ -794,6 +848,9 @@ export default function AdminCollectionPage() {
                                         />
                                         <AdminActionButton onClick={() => setGameSelectFor(c)} disabled={busy} aria-label={`${c.playlistTitle}のゲームを既存から選ぶ`}>
                                           既存のゲームから選ぶ
+                                        </AdminActionButton>
+                                        <AdminActionButton onClick={() => setNoGame([c.id], true)} disabled={busy} aria-label={`${c.playlistTitle}をゲーム未設定にする`}>
+                                          ゲーム未設定で登録
                                         </AdminActionButton>
                                       </div>
                                     </div>
@@ -836,6 +893,9 @@ export default function AdminCollectionPage() {
             <div className="flex gap-2">
               {status === 'pending' ? (
                 <>
+                  <Button variant="secondary" onClick={handleSetNoGameForSelected} disabled={selected.size === 0 || busy}>
+                    選択をゲーム未設定にする
+                  </Button>
                   <Button variant="ghost" onClick={() => handleStatusChange('reject')} disabled={selected.size === 0 || busy} loading={rejecting}>
                     選択を却下
                   </Button>

@@ -17,8 +17,9 @@ import { getQuotaConsumed, resetQuotaCounter } from '@/lib/youtube';
 
 // 収集候補の承認・却下API（管理者専用。管理 AI運営者向け収集候補レビューUI仕様書 v2.2 §3.7・§4・§5）。
 // action:
-//   approve { items: [{ playlistId, gameId?, newGameTitle?, rakutenJan?, tagIds }] }  まとめて登録（最大50件、1件ずつ順に処理）
+//   approve { items: [{ playlistId, gameId?, newGameTitle?, rakutenJan?, noGame?, gameHint?, tagIds }] }  まとめて登録（最大50件、1件ずつ順に処理）
 //           gameId が無い候補は newGameTitle のゲームを使う（既存に一致すればそれ、無ければ新規登録。§4.3）
+//           noGame: true はゲーム未設定で登録（ゲームタイトルは作らず、gameHint に未確定の名前を残す。§3.9）
 //           rakutenJan は新規登録するゲームに結び付ける楽天ブックスの商品（null は楽天なし、省略は完全一致で探す）
 //   rakuten_search { playlistId, title, query? }         新規のゲーム名（query があればその語）で楽天ブックスを検索し、結果を候補に保存（§3.7）
 //   reject  { playlistIds }                              却下
@@ -27,7 +28,16 @@ import { getQuotaConsumed, resetQuotaCounter } from '@/lib/youtube';
 const MAX_APPROVE_PER_REQUEST = 50;
 const MAX_STATUS_CHANGE_PER_REQUEST = 500;
 
-type ApproveItem = { playlistId: string; gameId: string | null; newGameTitle: string | null; rakutenJan: RakutenChoice; tagIds: string[] };
+type ApproveItem = {
+  playlistId: string;
+  gameId: string | null;
+  newGameTitle: string | null;
+  rakutenJan: RakutenChoice;
+  /** ゲーム未設定で登録する（ゲームタイトルを作らず、楽天も検索しない。v2.4 §3.9） */
+  noGame: boolean;
+  gameHint: string | null;
+  tagIds: string[];
+};
 
 type ApproveResult = { playlistId: string; ok: boolean; error?: string; createdGame?: { id: string; title: string } };
 
@@ -35,18 +45,21 @@ function parseApproveItems(value: unknown): ApproveItem[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((v) => {
     if (!v || typeof v !== 'object') return [];
-    const { playlistId, gameId, newGameTitle, rakutenJan, tagIds } = v as Record<string, unknown>;
+    const { playlistId, gameId, newGameTitle, rakutenJan, noGame, gameHint, tagIds } = v as Record<string, unknown>;
     if (typeof playlistId !== 'string' || !playlistId) return [];
     const id = typeof gameId === 'string' && gameId ? gameId : null;
     const title = typeof newGameTitle === 'string' && newGameTitle.trim() ? newGameTitle.trim() : null;
-    // ゲームはIDか、照合・新規登録に使える名前のどちらかが必須
-    if (!id && (!title || title.length > MAX_GAME_TITLE_LENGTH || !normalizeForMatch(title))) return [];
+    const unset = !id && noGame === true;
+    // ゲームはIDか、照合・新規登録に使える名前か、ゲーム未設定（noGame）のどれかが必須
+    if (!id && !unset && (!title || title.length > MAX_GAME_TITLE_LENGTH || !normalizeForMatch(title))) return [];
     return [{
       playlistId,
       gameId: id,
-      newGameTitle: id ? null : title,
+      newGameTitle: id || unset ? null : title,
+      noGame: unset,
+      gameHint: unset && typeof gameHint === 'string' && gameHint.trim() ? gameHint.trim().slice(0, MAX_GAME_TITLE_LENGTH) : null,
       // 省略は完全一致で探す。JAN として読めない値は、指定した商品と違うものを入れないよう楽天なしとして扱う
-      rakutenJan: rakutenJan === undefined ? undefined : typeof rakutenJan === 'string' && /^\d{8,14}$/.test(rakutenJan) ? rakutenJan : null,
+      rakutenJan: unset || rakutenJan === undefined ? undefined : typeof rakutenJan === 'string' && /^\d{8,14}$/.test(rakutenJan) ? rakutenJan : null,
       tagIds: Array.isArray(tagIds) ? tagIds.filter((t): t is string => typeof t === 'string') : [],
     }];
   });
@@ -133,7 +146,7 @@ export async function POST(request: NextRequest) {
   const operatorTagIds = new Set((await fetchOperatorTagIdsByName()).values());
   const results: ApproveResult[] = [];
   // 新しいゲーム名がある承認のときだけ games・マスタを読む
-  const gameResolver: CollectionGameResolver | null = items.some((i) => !i.gameId) ? await createCollectionGameResolver() : null;
+  const gameResolver: CollectionGameResolver | null = items.some((i) => !i.gameId && !i.noGame) ? await createCollectionGameResolver() : null;
   resetQuotaCounter();
 
   try {
@@ -148,7 +161,7 @@ export async function POST(request: NextRequest) {
 
       let gameId = item.gameId;
       let createdGame: ApproveResult['createdGame'];
-      if (!gameId) {
+      if (!gameId && !item.noGame) {
         try {
           const resolved = await gameResolver!.resolve(item.newGameTitle!, item.rakutenJan);
           gameId = resolved.gameId;
@@ -165,6 +178,8 @@ export async function POST(request: NextRequest) {
         result = await registerPlaylist({
           playlistUrl: `https://www.youtube.com/playlist?list=${item.playlistId}`,
           gameId,
+          // ゲーム未設定は、画面で入力した名前（無ければ候補の gameQuery）を gameHint に残す
+          gameHint: item.noGame ? (item.gameHint ?? (candidate.gameQuery as string | undefined) ?? null) : null,
           registeredBy: auth.uid,
           proposedBy: null,
           fixedTagIds: tagIds,
@@ -185,7 +200,7 @@ export async function POST(request: NextRequest) {
           registeredPlaylistId: item.playlistId,
         });
         // 別経路で登録済みだったときは今回のゲームは付いていないので、使ったことにしない
-        if (!error) gameResolver?.markUsed(gameId);
+        if (!error && gameId) gameResolver?.markUsed(gameId);
         results.push({ playlistId: item.playlistId, ok: true, createdGame });
       } else if (error === 'not_public' || error === 'playlist_not_found') {
         // YouTube 側で非公開・削除になっていた候補は自動で却下する（§4.2）

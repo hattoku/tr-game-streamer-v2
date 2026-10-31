@@ -74,7 +74,7 @@ export default function PlaylistsPage() {
     const kw = keyword.trim().toLowerCase();
     return playlists.filter((p) => {
       // 検索対象はゲームタイトル・チャンネル名（§4.2。再生リスト自身のタイトルは対象外）
-      if (kw && !p.gameName.toLowerCase().includes(kw) && !p.channelName.toLowerCase().includes(kw)) return false;
+      if (kw && !p.gameName.toLowerCase().includes(kw) && !p.gameHint.toLowerCase().includes(kw) && !p.channelName.toLowerCase().includes(kw)) return false;
       if (selectedTagIds.size > 0) {
         const tagIdSet = new Set(p.tags.map((t) => t.id));
         for (const tagId of selectedTagIds) {
