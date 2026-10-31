@@ -121,3 +121,28 @@ test('v1.10 §4.2 ゲーム未設定の再生リストが一覧・詳細で崩�
     await ref.delete();
   }
 });
+
+test('§3.5 既存のゲームに当たった候補は、「違うので新しく登録する」で外して名前を入れ直せる', async ({ adminPage }) => {
+  const gameTitle = uniqueText('既存のゲーム');
+  const gameRef = e2eDb().collection('games').doc();
+  await gameRef.set({
+    title: gameTitle, aliases: [], packageImageUrl: null, rakutenUrl: null, description: '', isAiGeneratedDescription: false, platforms: [],
+    genreId: null, genreName: null, themeIds: [], gameTagIds: [], gameTagsFixed: [], playlistCount: 0, createdAt: new Date(), updatedAt: new Date(),
+  });
+  try {
+    const channelTitle = uniqueText('チャンネル');
+    const gameQuery = uniqueText('探し直す名前');
+    await seedCandidate({ channelTitle, explorationChannelId: randomId('e2e-ch-'), gameQuery, guessedGameId: gameRef.id });
+
+    await adminPage.goto('/admin/collection');
+    const row = section(adminPage, channelTitle).getByRole('listitem');
+    await expect(row).toContainText(gameTitle);
+    await row.getByRole('button', { name: /ゲームを外して新しく登録する/ }).click();
+    await expect(row).toContainText('新しく登録する');
+    await expect(row.getByRole('textbox')).toHaveValue(gameQuery);
+    // 外した行からは、既存から選び直す・ゲーム未設定にも進める
+    await expect(row.getByRole('button', { name: /ゲーム未設定にする/ })).toBeVisible();
+  } finally {
+    await gameRef.delete();
+  }
+});

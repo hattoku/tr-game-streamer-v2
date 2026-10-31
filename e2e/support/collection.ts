@@ -13,6 +13,8 @@ export async function seedCandidate(params: {
   channelTitle: string;
   explorationChannelId: string;
   gameQuery: string;
+  /** 推定済みのゲームID（既存のゲームに当たった候補を作る） */
+  guessedGameId?: string;
   /** 承認前の楽天ブックス検索の結果を保存済みにする（v2.2 §3.7。自動検索を待たずに済む） */
   rakutenSearch?: { title: string; query: string; items: Array<{ jan: string; title: string; hardware: string; imageUrl: string; salesDate: string }> };
 }): Promise<string> {
@@ -29,7 +31,7 @@ export async function seedCandidate(params: {
       thumbnailUrl: '',
       videoCount: 12,
       playlistPublishedAt: new Date(),
-      guessedGameId: null,
+      guessedGameId: params.guessedGameId ?? null,
       guessedGameTitle: null,
       gameQuery: params.gameQuery,
       titleTagIds: [],

@@ -27,7 +27,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { SkeletonText } from '@/components/ui/Skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { useToast } from '@/components/ui/Toast';
-import { ChevronRightIcon, InventoryIcon, SearchIcon, XIcon } from '@/components/ui/icons';
+import { ChevronRightIcon, ExternalLinkIcon, InventoryIcon, SearchIcon, XIcon } from '@/components/ui/icons';
 import { cn } from '@/components/ui/cn';
 import { GameSelectModal, type GameOption } from '@/components/playlists/GameSelectModal';
 import { GameCreateModal } from '@/components/games/GameCreateModal';
@@ -121,6 +121,8 @@ export default function AdminCollectionPage() {
   const [newGameTitles, setNewGameTitles] = useState<Map<string, string>>(new Map());
   // ゲーム未設定で登録すると決めた候補（推定なしのものだけ。この画面を開いている間だけ持つ。v2.4 §3.9）
   const [noGameIds, setNoGameIds] = useState<Set<string>>(new Set());
+  // 推定されたゲームが違うので、外して新しく登録する（名前を入れて楽天を探し直す）と決めた候補
+  const [detachedIds, setDetachedIds] = useState<Set<string>>(new Set());
   const [removedTags, setRemovedTags] = useState<Map<string, Set<string>>>(new Map());
   const [rowErrors, setRowErrors] = useState<Map<string, string>>(new Map());
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -179,7 +181,10 @@ export default function AdminCollectionPage() {
   const gamesById = useMemo(() => new Map(games.map((g) => [g.id, g])), [games]);
 
   function gameFor(c: CollectionCandidate): GameOption | null {
-    return gameOverrides.get(c.id) ?? (c.guessedGameId ? gamesById.get(c.guessedGameId) : undefined) ?? guessGame(c.playlistTitle, games);
+    const picked = gameOverrides.get(c.id);
+    if (picked) return picked;
+    if (detachedIds.has(c.id)) return null;
+    return (c.guessedGameId ? gamesById.get(c.guessedGameId) : undefined) ?? guessGame(c.playlistTitle, games);
   }
 
   /** 推定なしの候補で、承認時に用意するゲーム名（照合・新規登録に使えない名前なら null） */
@@ -247,7 +252,7 @@ export default function AdminCollectionPage() {
   }
 
   function hasGameOf(c: CollectionCandidate): boolean {
-    return !!(gameOverrides.get(c.id) ?? (c.guessedGameId && gamesById.get(c.guessedGameId)) ?? guessGame(c.playlistTitle, games));
+    return gameFor(c) !== null;
   }
 
   /** ゲーム未設定で登録する候補（ゲームが推定・選択されていれば対象外） */
@@ -408,7 +413,22 @@ export default function AdminCollectionPage() {
     toast({ type: 'success', message: `${ids.length}件をゲーム未設定にしました。承認すると、ゲームタイトルを作らずに登録します` });
   }
 
+  /** 推定されたゲームを外して、新しく登録する側に切り替える（選択も入れる。名前は gameQuery が初期値） */
+  function detachGame(c: CollectionCandidate) {
+    setGameOverrides((prev) => {
+      const next = new Map(prev);
+      next.delete(c.id);
+      return next;
+    });
+    setDetachedIds((prev) => new Set(prev).add(c.id));
+  }
+
   function setGame(candidateId: string, game: GameOption) {
+    setDetachedIds((prev) => {
+      const next = new Set(prev);
+      next.delete(candidateId);
+      return next;
+    });
     setNoGameIds((prev) => {
       const next = new Set(prev);
       next.delete(candidateId);
@@ -757,10 +777,11 @@ export default function AdminCollectionPage() {
                                     href={`https://www.youtube.com/playlist?list=${c.id}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className={ADMIN_ACTION_CLASS}
+                                    className={EXTERNAL_LINK_CLASS}
                                     aria-label={`${c.playlistTitle}の動画一覧をYouTubeで見る`}
                                   >
                                     動画一覧を見る（YouTube）
+                                    <ExternalLinkIcon size={14} aria-hidden />
                                   </a>
                                 </div>
                                 {status !== 'pending' && c.reviewComment && (
@@ -819,6 +840,9 @@ export default function AdminCollectionPage() {
                                       <p className="text-base text-text-primary">{game.title}</p>
                                       <AdminActionButton onClick={() => setGameSelectFor(c)} disabled={busy} aria-label={`${c.playlistTitle}のゲームを選び直す`}>
                                         別のゲームを選ぶ
+                                      </AdminActionButton>
+                                      <AdminActionButton onClick={() => detachGame(c)} disabled={busy} aria-label={`${c.playlistTitle}のゲームを外して新しく登録する`}>
+                                        違うので新しく登録する
                                       </AdminActionButton>
                                     </div>
                                   </div>
@@ -998,6 +1022,7 @@ function RakutenLine({
       >
         {pick.title}
         {pick.hardware && <span className="text-text-tertiary">（{pick.hardware}）</span>}
+        <ExternalLinkIcon size={12} aria-hidden className="ml-1 inline align-[-1px] text-text-tertiary" />
       </a>
     );
   } else if (failed && !result) {
@@ -1081,6 +1106,12 @@ function PackageImage({ url }: { url: string | null }) {
  * 管理画面の行の中の操作ボタン（ゲームを選ぶ等）。管理画面は操作ミスを防ぐのを優先し、ユーザー向け画面の
  * 白黒基調より目立つ管理用の色（admin-accent）で、押せる場所だと分かる見た目にする
  */
+/** 外部サイトへ移動するリンク。管理用の紫（操作ボタン）と区別するため無彩色で、外へ出る印のアイコンを付ける */
+const EXTERNAL_LINK_CLASS = cn(
+  'inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-[6px] border border-border-control bg-bg-hover/40 px-[10px] py-1 text-sm font-medium text-text-secondary',
+  'transition-colors duration-[120ms] hover:border-text-tertiary hover:text-text-primary',
+);
+
 const ADMIN_ACTION_CLASS = cn(
   'inline-flex items-center justify-center whitespace-nowrap rounded-[6px] border border-admin-accent bg-admin-accent/15 px-[10px] py-1 text-sm font-medium text-admin-accent-text',
   'transition-colors duration-[120ms] not-disabled:hover:bg-admin-accent/30 disabled:opacity-50',
