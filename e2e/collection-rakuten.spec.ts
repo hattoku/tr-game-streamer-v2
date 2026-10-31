@@ -220,3 +220,18 @@ test('§3.8 「動画一覧を見る（YouTube）」とサムネイルは、YouT
     await expect(link).toHaveAttribute('target', '_blank');
   }
 });
+
+test('§3.7 楽天ブックスの「ゲーム」の下でも、おもちゃ・その他（グッズ・周辺機器）の商品は候補に出さない', async ({ adminPage }) => {
+  test.setTimeout(120_000);
+  const channelTitle = uniqueText('チャンネル');
+  // 「ポケモンSV」は以前、ピカチュウの水筒（おもちゃ）だけがヒットしていた
+  const playlistId = await seedCandidate({ channelTitle, explorationChannelId: randomId('e2e-ch-'), gameQuery: 'ポケモンSV' });
+
+  await adminPage.goto('/admin/collection');
+  await filterChannel(adminPage, channelTitle);
+  const line = rakutenLine(adminPage, channelTitle);
+  await expect(line).not.toContainText(/自動検索の順番待ち|検索中…/, { timeout: 60_000 });
+  const saved = (await e2eDb().collection('collection_candidates').doc(playlistId).get()).data()!.rakutenSearch;
+  expect(saved.items.filter((i: { hardware: string }) => i.hardware === '玩具')).toEqual([]);
+  await expect(line).not.toContainText('水筒');
+});

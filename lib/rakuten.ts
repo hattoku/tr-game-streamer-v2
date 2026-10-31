@@ -170,6 +170,17 @@ async function fetchBooksGame(params: Record<string, string>): Promise<RakutenGa
     }));
 }
 
+// 楽天ブックスの「ゲーム」の下でもゲームソフトではないジャンル（006505 その他・006510 おもちゃ）。
+// 周辺機器・グッズ・玩具（「ポケモンSV」で水筒が出る等）が混ざるため、ゲーム名の候補からは外す
+const NON_GAME_BOOKS_GENRE_IDS = ['006505', '006510'];
+
+// ゲームソフトのジャンルの商品か。booksGenreId は「/」区切りで複数あることがあり、どれか1つでもゲーム機のジャンルならゲームとみなす
+export function isRakutenGameSoftware(item: Pick<RakutenGameSearchResult, 'booksGenreId'>): boolean {
+  const ids = item.booksGenreId.split('/').map((id) => id.trim()).filter(Boolean);
+  if (ids.length === 0) return true;
+  return ids.some((id) => !NON_GAME_BOOKS_GENRE_IDS.some((ng) => id.startsWith(ng)));
+}
+
 // ゲームタイトル名で検索する。booksGenreId未指定時のデフォルト値「006」（楽天ブックスの
 // ゲームジャンル直下）が自動的に適用されるため、ゲーム以外のジャンルは混入しない。
 export async function searchRakutenGames(title: string): Promise<RakutenGameSearchResult[]> {

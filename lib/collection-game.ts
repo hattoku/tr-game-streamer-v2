@@ -9,7 +9,7 @@
 import { FieldValue } from 'firebase-admin/firestore';
 import { adminDb } from './firebase-admin';
 import { normalizeForMatch } from './exploration-rules';
-import { resolveRakutenGenre, searchRakutenGames, searchRakutenGamesByJan, type RakutenGameSearchResult } from './rakuten';
+import { isRakutenGameSoftware, resolveRakutenGenre, searchRakutenGames, searchRakutenGamesByJan, type RakutenGameSearchResult } from './rakuten';
 import { normalizeRakutenBooksItemUrl, normalizeRakutenGameTitle, toMasterThemeName } from './rakuten-shared';
 import { PLATFORM_OPTIONS } from './game-shared';
 
@@ -76,7 +76,7 @@ export async function createCollectionGameResolver(): Promise<CollectionGameReso
     try {
       await throttle();
       const results = await searchRakutenGames(title);
-      return results.find((r) => normalizeForMatch(normalizeRakutenGameTitle(r.title)) === key) ?? null;
+      return results.find((r) => isRakutenGameSoftware(r) && normalizeForMatch(normalizeRakutenGameTitle(r.title)) === key) ?? null;
     } catch (e) {
       console.error('収集候補のゲーム登録で楽天ブックス検索に失敗', title, e);
       return null;
@@ -210,12 +210,12 @@ export async function searchRakutenForGameTitle(title: string): Promise<{ query:
   const queries = rakutenQueriesFor(title);
   for (let i = 0; i < queries.length; i++) {
     if (i > 0) await new Promise((resolve) => setTimeout(resolve, RAKUTEN_INTERVAL_MS));
-    const results = await searchRakutenGames(queries[i]);
-    if (results.some((r) => r.jan)) {
+    // JAN で取り直して登録するため、JAN の無い商品は選べないので外す。おもちゃ・その他（グッズ・周辺機器）も外す
+    const results = (await searchRakutenGames(queries[i])).filter((r) => r.jan && isRakutenGameSoftware(r));
+    if (results.length > 0) {
       return {
         query: queries[i],
-        // JAN で取り直して登録するため、JAN の無い商品は選べないので外す
-        items: results.filter((r) => r.jan).map((r) => ({ jan: r.jan, title: r.title, hardware: r.hardware, imageUrl: r.imageUrl, salesDate: r.salesDate, itemUrl: r.itemUrl })),
+        items: results.map((r) => ({ jan: r.jan, title: r.title, hardware: r.hardware, imageUrl: r.imageUrl, salesDate: r.salesDate, itemUrl: r.itemUrl })),
       };
     }
   }
