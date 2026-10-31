@@ -57,7 +57,7 @@ function parseApproveItems(value: unknown): ApproveItem[] {
       gameId: id,
       newGameTitle: id || unset ? null : title,
       noGame: unset,
-      gameHint: unset && typeof gameHint === 'string' && gameHint.trim() ? gameHint.trim().slice(0, MAX_GAME_TITLE_LENGTH) : null,
+      gameHint: unset && typeof gameHint === 'string' && normalizeForMatch(gameHint) ? gameHint.trim().slice(0, MAX_GAME_TITLE_LENGTH) : null,
       // 省略は完全一致で探す。JAN として読めない値は、指定した商品と違うものを入れないよう楽天なしとして扱う
       rakutenJan: unset || rakutenJan === undefined ? undefined : typeof rakutenJan === 'string' && /^\d{8,14}$/.test(rakutenJan) ? rakutenJan : null,
       tagIds: Array.isArray(tagIds) ? tagIds.filter((t): t is string => typeof t === 'string') : [],
@@ -179,7 +179,7 @@ export async function POST(request: NextRequest) {
           playlistUrl: `https://www.youtube.com/playlist?list=${item.playlistId}`,
           gameId,
           // ゲーム未設定は、画面で入力した名前（無ければ候補の gameQuery）を gameHint に残す
-          gameHint: item.noGame ? (item.gameHint ?? (candidate.gameQuery as string | undefined) ?? null) : null,
+          gameHint: item.noGame ? (item.gameHint ?? (typeof candidate.gameQuery === 'string' && normalizeForMatch(candidate.gameQuery) ? candidate.gameQuery : null)) : null,
           registeredBy: auth.uid,
           proposedBy: null,
           fixedTagIds: tagIds,

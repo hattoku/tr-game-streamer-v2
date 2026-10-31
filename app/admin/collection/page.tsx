@@ -890,7 +890,7 @@ export default function AdminCollectionPage() {
             <p className="text-base text-text-secondary">
               {progress ? `登録中… ${progress.done} / ${progress.total} 件` : `選択中 ${selected.size}件`}
             </p>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               {status === 'pending' ? (
                 <>
                   <Button variant="secondary" onClick={handleSetNoGameForSelected} disabled={selected.size === 0 || busy}>
