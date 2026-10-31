@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { FieldValue } from 'firebase-admin/firestore';
 import { requireAdmin } from '@/lib/api-auth';
 import { adminDb } from '@/lib/firebase-admin';
+import { autoLinkAfterGameChange } from '@/lib/playlist-game-linking';
 import { parseGameInput, resolveGameInput, validateGameTitle } from '@/lib/admin-game-input';
 
 // ゲームタイトルの新規登録API（管理者専用。フェーズ4.5ステップ2）。
@@ -61,6 +62,8 @@ export async function POST(request: NextRequest) {
   }
 
   await batch.commit();
+  // ゲーム未設定の再生リストのうち、このゲームに合うものを付ける（v2.4 §3.9）
+  await autoLinkAfterGameChange([gameRef.id]);
 
   return NextResponse.json({
     id: gameRef.id,

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { FieldValue } from 'firebase-admin/firestore';
 import { requireAdmin } from '@/lib/api-auth';
 import { adminDb } from '@/lib/firebase-admin';
+import { autoLinkAfterGameChange } from '@/lib/playlist-game-linking';
 import { parseGameInput, resolveGameInput, validateGameTitle } from '@/lib/admin-game-input';
 
 // Firestoreのbatchは1回500件まで。playlistsの同期件数が多い場合に備えて余裕を持って分割する
@@ -99,6 +100,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       await chunk.commit();
     }
   }
+
+  // タイトル・別名が変わったときに、ゲーム未設定の再生リストへ照合する
+  await autoLinkAfterGameChange([gameId]);
 
   return NextResponse.json({
     id: gameId,

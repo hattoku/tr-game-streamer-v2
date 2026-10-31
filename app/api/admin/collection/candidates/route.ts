@@ -12,6 +12,7 @@ import {
 } from '@/lib/collection-game';
 import { RakutenApiError } from '@/lib/rakuten';
 import { normalizeForMatch } from '@/lib/exploration-rules';
+import { autoLinkAfterGameChange } from '@/lib/playlist-game-linking';
 import { registerPlaylist } from '@/lib/playlist-registration';
 import { getQuotaConsumed, resetQuotaCounter } from '@/lib/youtube';
 
@@ -229,6 +230,10 @@ export async function POST(request: NextRequest) {
       }
     }
   }
+
+  // 新しく作ったゲームタイトルに合う、ゲーム未設定の再生リストを付ける（v2.4 §3.9）
+  const createdIds = results.flatMap((r) => (r.createdGame ? [r.createdGame.id] : []));
+  if (createdIds.length > 0) await autoLinkAfterGameChange(createdIds);
 
   return NextResponse.json({ results });
 }

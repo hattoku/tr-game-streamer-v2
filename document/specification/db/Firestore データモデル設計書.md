@@ -1,6 +1,6 @@
 # プレミテ Firestore データモデル設計書
 
-**バージョン**: v1.28  
+**バージョン**: v1.29  
 **作成日**: 2026年3月30日（更新）  
 **対象**: 開発チーム  
 **関連ドキュメント**: プレミテ企画書 / プレミテ_技術スタック仕様書 / 各機能仕様書
@@ -192,8 +192,9 @@ Firestoreはテーブル結合（JOIN）ができないため、一覧表示や�
 | `gameId` | string? | — | 紐づくゲームタイトルのドキュメントID。**null ＝ ゲーム未設定**（v1.28。収集画面の「ゲーム未設定で登録」で登録した再生リストなど。ゲームのページ・ジャンル別の一覧には出ない） |
 | `gameName` | string? | — | ゲームタイトル名（denormalized。ゲーム未設定は空文字） |
 | `gameHint` | string? | — | 未確定のゲーム名（v1.28。収集の `gameQuery` や承認時に入力した名前。マスタには入れない。再生リスト一覧のキーワード検索の対象で、あとの自動照合にも使う。無ければ null） |
-| `gameSetBy` | string? | — | 今のゲームを決めた者（v1.28。`admin`（管理者の登録・承認）／`auto`・`user` は段階B・Cで追加。ゲーム未設定・旧データは null） |
+| `gameSetBy` | string? | — | 今のゲームを決めた者（v1.28。`admin`（管理者の登録・承認・手動で付ける）／`auto`（登録・編集したゲームとの自動照合）／`user` は段階Cで追加。ゲーム未設定・旧データは null） |
 | `gameSetAt` | Timestamp? | — | 同上の日時（v1.28） |
+| `rejectedGameIds` | string[]? | — | 管理者がゲームを外した（「違う」と戻した）ゲームのID（v1.29。自動照合ではこのゲームを付け直さない。無ければ空） |
 | `gameGenreIds` | string[] | ✅ | ゲームのジャンルIDリスト（ランキング・フィルタ用） |
 | `videoCount` | number | ✅ | 動画数（YouTubeから取得） |
 | `latestVideoPublishedAt` | Timestamp? | — | 最新動画の公開日時（新着順ソート用） |
@@ -904,6 +905,19 @@ AI運営者（審査AI）の設定。プラットフォーム共通で1体のみ
 | `createdBy` | string | ✅ | 登録した管理者のuserId |
 | `updatedAt` | Timestamp | ✅ | 更新日時 |
 
+### 3.33 `playlist_game_changes`
+
+再生リストのゲームの付け外しの履歴（v1.29。収集候補レビューUI仕様書 v2.5 §6.5）。クライアントからは読み書きできない（Admin SDK のみ）。
+
+| フィールド | 型 | 必須 | 説明 |
+|-----------|-----|------|------|
+| `playlistId` | string | ✅ | 再生リストID |
+| `from` | string? | — | 変更前のゲームID（未設定からは null） |
+| `to` | string? | — | 変更後のゲームID（外したときは null） |
+| `by` | string | ✅ | `admin`／`auto`（`user` は段階C） |
+| `userId` | string? | — | 操作した管理者のuserId（自動は null） |
+| `at` | Timestamp | ✅ | 日時 |
+
 ---
 
 ## 4. リレーション図
@@ -1024,4 +1038,5 @@ ai_operators ──── (1) users
 | v1.25 | 2026-10-28 | フェーズ7-5（友人テスト前のコンテンツ充実）。コンテンツ収集をチャンネル起点に変更したことに合わせ、3.23 `collection_candidates` をタイトル・チャンネル起点のスキーマに改訂（ドキュメントIDを再生リストIDに、ゲーム推定・タグ候補を追加、ジャンル起点・AI判定のフィールドを削除）、3.24 `collection_batch_logs`・3.25 `collection_quota_logs` を改訂、3.32 `exploration_channels` を追加 |
 | v1.26 | 2026-10-30 | 3.23 `collection_candidates` に `rakutenSearch`（承認前の楽天ブックス検索の結果）・`videoCountCheckedAt` を追加。`videoCount` を以後の探索でも更新する |
 | v1.27 | 2026-10-31 | 3.23 `collection_candidates.rakutenSearch.items` に `itemUrl`（楽天ブックスの商品ページ）を追加 |
+| v1.29 | 2026-10-31 | 3.2 `playlists` に `rejectedGameIds` を追加、3.33 `playlist_game_changes` を追加（ゲーム未設定の自動照合・手動の付け外しの履歴） |
 | v1.28 | 2026-10-31 | 3.2 `playlists` に `gameHint`・`gameSetBy`・`gameSetAt` を追加し、`gameId` が null ＝ ゲーム未設定と明記（収集画面の「ゲーム未設定で登録」。収集候補レビューUI仕様書 v2.4 §3.9） |
