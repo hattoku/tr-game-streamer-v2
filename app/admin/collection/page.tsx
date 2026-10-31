@@ -690,18 +690,17 @@ export default function AdminCollectionPage() {
                                   onChange={() => toggleSelected(c.id)}
                                 />
                               )}
-                              <a
-                                href={`https://www.youtube.com/playlist?list=${c.id}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
+                              <button
+                                type="button"
+                                onClick={() => setVideosFor(c)}
                                 className="relative aspect-video w-28 shrink-0 self-start overflow-hidden rounded-[6px] bg-bg-hover md:w-44"
-                                aria-label={`${c.playlistTitle}をYouTubeで開く`}
+                                aria-label={`${c.playlistTitle}の再生リストを確認`}
                               >
                                 {c.thumbnailUrl && (
                                   // eslint-disable-next-line @next/next/no-img-element
                                   <img src={c.thumbnailUrl} alt="" className="absolute inset-0 size-full object-cover" loading="lazy" />
                                 )}
-                              </a>
+                              </button>
                               <div className="flex min-w-0 flex-1 flex-col gap-1">
                                 <p className="text-base text-text-primary">{c.playlistTitle}</p>
                                 <p className="text-md text-text-tertiary">

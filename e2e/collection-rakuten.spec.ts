@@ -203,22 +203,27 @@ test('§1.1 コンテンツ収集の2つの画面は、上の大きなタブで�
   await expect(adminPage).toHaveURL(/\/admin\/collection$/);
 });
 
-// stg に登録済み（収集候補ではない）の実在の再生リスト。SILENT HILL f（公開・14本）
-const REAL_PLAYLIST_ID = 'PLEQchj72pK57vf1T71qItIYlAyO6meW7y';
-
-test('§3.8 カードの「動画一覧を見る」で、再生リストの全動画を番号・タイトル・長さつきで確認できる', async ({ adminPage }) => {
-  test.setTimeout(120_000);
+test('§3.8 「動画一覧を見る」とサムネイルで、YouTube の再生リストの埋め込みプレイヤーを開く（API は使わない）', async ({ adminPage }) => {
   const channelTitle = uniqueText('チャンネル');
-  await seedCandidate({ channelTitle, explorationChannelId: randomId('e2e-ch-'), gameQuery: uniqueText('動画一覧のゲーム'), playlistId: REAL_PLAYLIST_ID });
+  const playlistId = await seedCandidate({ channelTitle, explorationChannelId: randomId('e2e-ch-'), gameQuery: uniqueText('動画一覧のゲーム') });
+  const apiCalls: string[] = [];
+  adminPage.on('request', (r) => {
+    if (r.url().includes('/api/admin/collection/candidates') && r.postData()?.includes('"videos"')) apiCalls.push(r.url());
+  });
 
   await adminPage.goto('/admin/collection');
   await filterChannel(adminPage, channelTitle);
-  await section(adminPage, channelTitle).getByRole('button', { name: /動画一覧を見る$/ }).click();
-  const dialog = adminPage.getByRole('dialog', { name: '再生リストの動画一覧' });
-  const items = dialog.getByRole('list', { name: '動画一覧' }).getByRole('listitem');
-  await expect(items.first()).toBeVisible({ timeout: 30_000 });
-  expect(await items.count()).toBeGreaterThan(5);
-  await expect(dialog).toContainText(/今の時点で \d+本・合計/);
-  await expect(items.first()).toContainText(/\d+:\d{2}/);
-  await expect(items.first().getByRole('link')).toHaveAttribute('href', /youtube\.com\/watch\?v=/);
+  const group = section(adminPage, channelTitle);
+  const dialog = adminPage.getByRole('dialog', { name: '再生リストを確認' });
+  const embedSrc = `https://www.youtube.com/embed/videoseries?list=${playlistId}`;
+
+  await group.getByRole('button', { name: /動画一覧を見る$/ }).click();
+  await expect(dialog.locator('iframe')).toHaveAttribute('src', embedSrc);
+  await expect(dialog.getByRole('link', { name: /YouTube で開く/ })).toHaveAttribute('href', `https://www.youtube.com/playlist?list=${playlistId}`);
+  await adminPage.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+
+  await group.getByRole('button', { name: /の再生リストを確認$/ }).click();
+  await expect(dialog.locator('iframe')).toHaveAttribute('src', embedSrc);
+  expect(apiCalls).toEqual([]);
 });
