@@ -26,7 +26,7 @@ export function PlaylistVideosModal({ candidate, onClose }: PlaylistVideosModalP
       {candidate && (
         <div className="flex flex-col gap-3">
           <p className="text-md text-text-tertiary">
-            プレイヤー右上の再生リストのボタンで、動画の一覧を開けます。シリーズと関係の無い動画が挟まっていれば、承認せず却下してください。
+            再生を始めるとプレイヤー右上に出る再生リストのボタンで、動画の一覧を開けます。シリーズと関係の無い動画が挟まっていれば、承認せず却下してください。
           </p>
           <div className="relative aspect-video w-full overflow-hidden rounded-[8px] bg-bg-player">
             <iframe
@@ -43,7 +43,7 @@ export function PlaylistVideosModal({ candidate, onClose }: PlaylistVideosModalP
             rel="noopener noreferrer"
             className="self-end text-md text-admin-accent-text hover:underline"
           >
-            埋め込みで再生できないときは YouTube で開く
+            一覧をまとめて見たいとき・再生できないときは YouTube で開く
           </a>
         </div>
       )}
