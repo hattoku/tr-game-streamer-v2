@@ -10,7 +10,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { adminDb } from './firebase-admin';
 import { normalizeForMatch } from './exploration-rules';
 import { isRakutenGameSoftware, resolveRakutenGenre, searchRakutenGames, searchRakutenGamesByJan, type RakutenGameSearchResult } from './rakuten';
-import { normalizeRakutenBooksItemUrl, normalizeRakutenGameTitle, toMasterThemeName } from './rakuten-shared';
+import { matchRakutenItem, normalizeRakutenBooksItemUrl, toMasterThemeName } from './rakuten-shared';
 import { PLATFORM_OPTIONS } from './game-shared';
 
 /** ゲームタイトル名の上限（ゲームタイトル新規登録と同じ。lib/admin-game-input.ts） */
@@ -71,12 +71,12 @@ export async function createCollectionGameResolver(): Promise<CollectionGameReso
     lastRakutenCallAt = Date.now();
   }
 
-  /** 正規化したタイトルが完全に一致する楽天ブックスの商品（機種違いが複数あれば先頭） */
-  async function findRakutenItem(title: string, key: string): Promise<RakutenGameSearchResult | null> {
+  /** ゲーム名に当たる楽天ブックスの商品（機種違いが複数あれば先頭。照合は画面の確認と同じ matchRakutenItem） */
+  async function findRakutenItem(title: string): Promise<RakutenGameSearchResult | null> {
     try {
       await throttle();
       const results = await searchRakutenGames(title);
-      return results.find((r) => isRakutenGameSoftware(r) && normalizeForMatch(normalizeRakutenGameTitle(r.title)) === key) ?? null;
+      return matchRakutenItem(results.filter(isRakutenGameSoftware), title);
     } catch (e) {
       console.error('収集候補のゲーム登録で楽天ブックス検索に失敗', title, e);
       return null;
@@ -101,7 +101,7 @@ export async function createCollectionGameResolver(): Promise<CollectionGameReso
     const existing = gameIdByNormalized.get(key);
     if (existing) return { gameId: existing, created: false };
 
-    const item = rakuten === null ? null : rakuten ? await findRakutenItemByJan(rakuten) : await findRakutenItem(title, key);
+    const item = rakuten === null ? null : rakuten ? await findRakutenItemByJan(rakuten) : await findRakutenItem(title);
     let genreId: string | null = null;
     let genreName: string | null = null;
     const themeIds: string[] = [];

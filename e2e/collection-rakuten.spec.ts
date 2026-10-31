@@ -287,3 +287,28 @@ test('§3.7 末尾の数字（シリーズの番号）は外して探し直さ�
   expect(saved.query).not.toBe('バイオハザード RE');
   await expect(line).not.toContainText('RE:4');
 });
+
+test('§3.7 ゲーム名で始まる商品（トリプルパック等）は選んだ状態で出し、続編（デッドライジング2）は選ばない', async ({ adminPage }) => {
+  const item = (title: string, jan: string) => ({ jan, title, hardware: 'PS5', imageUrl: '', salesDate: '2025年09月25日' });
+  const matchedChannel = uniqueText('チャンネル');
+  const sequelChannel = uniqueText('チャンネル');
+  await seedCandidate({
+    channelTitle: matchedChannel,
+    explorationChannelId: randomId('e2e-ch-'),
+    gameQuery: 'ポピープレイタイム',
+    rakutenSearch: { title: 'ポピープレイタイム', query: 'ポピープレイタイム', items: [item('ポピープレイタイム トリプルパック　PS5版', '4900000000011')] },
+  });
+  await seedCandidate({
+    channelTitle: sequelChannel,
+    explorationChannelId: randomId('e2e-ch-'),
+    gameQuery: 'デッドライジング',
+    rakutenSearch: { title: 'デッドライジング', query: 'デッドライジング', items: [item('デッドライジング2', '4900000000028')] },
+  });
+
+  await adminPage.goto('/admin/collection');
+  await filterChannel(adminPage, matchedChannel);
+  await expect(rakutenLine(adminPage, matchedChannel)).toContainText('ポピープレイタイム トリプルパック');
+  await expect(rakutenLine(adminPage, matchedChannel).getByRole('button', { name: /選び直す$/ })).toBeVisible();
+  await filterChannel(adminPage, sequelChannel);
+  await expect(rakutenLine(adminPage, sequelChannel)).toContainText('名前が一致する商品なし');
+});

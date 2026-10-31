@@ -94,7 +94,8 @@ const DECORATION_PATTERN =
   /(ゲーム)?実況(プレイ)?|プレイ動画|ゆっくり|初見|縛り(プレイ)?|ボイロ|VOICEROID|字幕(付き)?|ホラーゲーム|ゲーム|生配信|配信|最終回|完結|総集編|シリーズ|全\d+話|\d+人/gi;
 
 function stripDecoration(text: string): string {
-  return text.replace(DECORATION_PATTERN, '').replace(/^[\s・:：\-ー]+|[\s・:：\-ー]+$/g, '').trim();
+  // 先頭の「ー」は飾りだが、末尾の「ー」は長音（ホラー・ゲームなど）なので落とさない
+  return text.replace(DECORATION_PATTERN, '').replace(/^[\s・:：\-ー]+|[\s・:：\-]+$/g, '').trim();
 }
 
 /**

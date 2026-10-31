@@ -36,7 +36,7 @@ import { CollectionNav } from '@/components/admin/collection/CollectionNav';
 import { fetchTagsMap, type TagInfo } from '@/lib/tags';
 import { guessGame, normalizeForMatch } from '@/lib/exploration-rules';
 import { COLLECTION_DAILY_QUOTA_LIMIT } from '@/lib/collection-quota-shared';
-import { normalizeRakutenGameTitle } from '@/lib/rakuten-shared';
+import { matchRakutenItem, normalizeRakutenGameTitle } from '@/lib/rakuten-shared';
 import {
   fetchCandidates,
   fetchCollectionQuotaUsedToday,
@@ -199,8 +199,7 @@ export default function AdminCollectionPage() {
     const result = rakutenResultFor(c);
     // ゲーム名を書き換えた後の古い結果は使わず、未検索と同じく承認APIに新しい名前で探させる
     if (!result || rakutenResultStale(c)) return undefined;
-    const key = normalizeForMatch(newGameTitleFor(c) ?? '');
-    return result.items.find((item) => key && normalizeForMatch(normalizeRakutenGameTitle(item.title)) === key) ?? null;
+    return matchRakutenItem(result.items, newGameTitleFor(c) ?? '');
   }
 
   /** 検索した後にゲーム名を書き換えたか */
