@@ -77,7 +77,10 @@ function RakutenPickBody({ gameTitle, result, selectedJan, onSearch, onPick, onN
       {!result ? (
         <p className="text-md text-text-tertiary">まだ検索していません。検索語を入れて「検索」を押してください。</p>
       ) : result.items.length === 0 ? (
-        <p className="text-md text-text-tertiary">「{result.query}」では見つかりませんでした。検索語を変えるか、楽天なしで登録してください。</p>
+        <p className="text-md text-text-tertiary">
+          「{result.query}」では見つかりませんでした。検索語を変えるか、楽天なしで登録してください。
+          {/^[\x20-\x7E]+$/.test(result.query) && '英語名のゲームは、楽天ではカタカナ（例: Pacific Drive → パシフィックドライブ）で登録されていることが多いです。'}
+        </p>
       ) : (
         // 見た目は GameCreateModal の楽天ブックス検索の候補一覧に揃える。選んでいる商品は枠で示す
         <ul className="flex max-h-[320px] flex-col gap-1 overflow-y-auto rounded-[8px] border border-border-card p-1" aria-label="楽天ブックスの検索結果">

@@ -955,7 +955,13 @@ function RakutenLine({
     body = <span className="text-text-tertiary">名前が一致する商品なし（候補{result.items.length}件。このままなら名前だけで登録）</span>;
   } else {
     action = '探し直す';
-    body = <span className="text-text-tertiary">見つかりませんでした（名前だけで登録）</span>;
+    body = (
+      <span className="text-text-tertiary">
+        見つかりませんでした（名前だけで登録）
+        {/* 楽天ブックスは英語名のゲームもカタカナで登録していることが多い（Pacific Drive → パシフィックドライブ。v2.3 §3.7） */}
+        {isAsciiOnly(gameTitle) && <span className="block">英語名は楽天ではカタカナのことが多いです。「探し直す」でカタカナで探してください</span>}
+      </span>
+    );
   }
   return (
     <div className="flex items-start gap-3 text-md" data-testid="rakuten-line">
@@ -993,6 +999,11 @@ function RakutenLine({
       </div>
     </div>
   );
+}
+
+/** 英数字・記号だけの名前か（楽天ブックスでカタカナで探すよう案内するため） */
+function isAsciiOnly(text: string): boolean {
+  return /^[\x20-\x7E]+$/.test(text.trim());
 }
 
 /** ゲームのパッケージ画像（無ければ「画像なし」の枠）。楽天の商品・登録済みのゲームで共用 */

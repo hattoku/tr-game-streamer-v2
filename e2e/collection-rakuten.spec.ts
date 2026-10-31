@@ -254,3 +254,22 @@ test('§3.7 探索の後に、未検索の新規のゲーム名の候補をサ�
   expect(saved.title).toBe('野狗子: Slitterhead');
   expect(saved.items.some((i: { jan: string }) => i.jan === SLITTERHEAD.jan)).toBe(true);
 });
+
+test('§3.7 英語名で見つからないときは、カタカナで探し直すよう案内する（Pacific Drive → パシフィックドライブ）', async ({ adminPage }) => {
+  test.setTimeout(120_000);
+  const channelTitle = uniqueText('チャンネル');
+  await seedCandidate({ channelTitle, explorationChannelId: randomId('e2e-ch-'), gameQuery: 'Pacific Drive' });
+
+  await adminPage.goto('/admin/collection');
+  await filterChannel(adminPage, channelTitle);
+  const line = rakutenLine(adminPage, channelTitle);
+  await expect(line).toContainText('見つかりませんでした（名前だけで登録）', { timeout: 60_000 });
+  await expect(line).toContainText('英語名は楽天ではカタカナのことが多いです');
+
+  await line.getByRole('button', { name: /探し直す$/ }).click();
+  const dialog = adminPage.getByRole('dialog', { name: '楽天ブックスの商品を選ぶ' });
+  await expect(dialog).toContainText('楽天ではカタカナ');
+  await dialog.getByRole('textbox', { name: '楽天ブックスの検索語' }).fill('パシフィックドライブ');
+  await dialog.getByRole('button', { name: '検索' }).click();
+  await expect(dialog.getByRole('list', { name: '楽天ブックスの検索結果' }).getByRole('button').first()).toContainText('パシフィックドライブ', { timeout: 30_000 });
+});
