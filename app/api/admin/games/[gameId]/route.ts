@@ -101,8 +101,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
   }
 
-  // タイトル・別名が変わったときに、ゲーム未設定の再生リストへ照合する
-  await autoLinkAfterGameChange([gameId]);
+  // タイトル・別名が変わったときだけ、ゲーム未設定の再生リストへ照合する
+  const aliasesChanged = JSON.stringify(current.aliases ?? []) !== JSON.stringify(resolved.aliases);
+  if (titleChanged || aliasesChanged) await autoLinkAfterGameChange([gameId]);
 
   return NextResponse.json({
     id: gameId,

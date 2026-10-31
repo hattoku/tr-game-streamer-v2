@@ -1,5 +1,5 @@
 // ゲーム未設定（playlists.gameId = null）の再生リストにゲームを付ける・外す共通処理（サーバー専用。
-// 収集候補レビューUI仕様書 v2.4 §3.9、データモデル設計書 v1.28 の playlists.gameHint / gameSetBy / gameSetAt）。
+// 収集候補レビューUI仕様書 v2.5 §3.9・§6.5、データモデル設計書 v1.28 の playlists.gameHint / gameSetBy / gameSetAt）。
 // 付け外しでは playlists.gameId / gameName / gameGenreIds と games.playlistCount を必ず一緒に直す。
 // 履歴は playlist_game_changes に残す（クライアントからは読み書きできない。管理画面の「戻す」の元）。
 import { FieldValue } from 'firebase-admin/firestore';
@@ -22,7 +22,7 @@ function namesOf(game: GameForLinking): string[] {
 /**
  * 再生リストに合うゲームを返す。
  * ヒントがあれば、ヒントとゲームのタイトル・別名が正規化して完全一致するものだけ（誤爆を避ける）。
- * ヒントが無ければ、再生リスト名にタイトル・別名が含まれるもの（正規化後3文字以上のうち最長一致。今の「ゲーム推定」と同じ）。
+ * ヒントが無ければ、再生リスト名にタイトルが含まれるもの（正規化後3文字以上のうち最長一致。別名は使わず、続編・番号違いは付けない）。
  * `rejectedGameIds` は管理者が「違う」と戻したゲームなので、自動では付けない。
  */
 export function matchGameForPlaylist(
@@ -35,8 +35,13 @@ export function matchGameForPlaylist(
   if (hint) {
     return candidates.find((g) => namesOf(g).some((n) => normalizeForMatch(n) === hint)) ?? null;
   }
-  const entries = candidates.flatMap((g) => namesOf(g).map((name) => ({ id: g.id, game: g, title: name })));
-  return guessGame(playlist.title, entries)?.game ?? null;
+  // ヒントが無いときは誤爆を避けるため、別名は使わずタイトルだけで照合し、続編・番号違い（「RE:4」「2」「III」など）は付けない
+  const match = guessGame(playlist.title, candidates);
+  if (!match) return null;
+  const title = normalizeForMatch(playlist.title);
+  const rest = title.slice(title.indexOf(normalizeForMatch(match.title)) + normalizeForMatch(match.title).length);
+  if (/^[a-z]{0,2}\d/.test(rest) || /^(?:i{1,3}|iv|vi{0,3}|ix|x)(?![a-z])/.test(rest)) return null;
+  return match;
 }
 
 export type LinkResult = 'linked' | 'already_set' | 'playlist_not_found' | 'game_not_found';

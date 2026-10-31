@@ -6,9 +6,9 @@ import { uniqueText } from './support/env';
 import { db as e2eDb } from './support/cleanup';
 import { randomId } from './support/collection';
 
-async function seedUnsetPlaylist(hint: string | null) {
+async function seedUnsetPlaylist(hint: string | null, titleOverride?: string) {
   const id = randomId('PLE2E');
-  const title = uniqueText('未設定の再生リスト');
+  const title = titleOverride ?? uniqueText('未設定の再生リスト');
   await e2eDb().collection('playlists').doc(id).set({
     title, thumbnailUrl: '', channelId: 'UCE2E', channelName: uniqueText('チャンネル'), channelIconUrl: '',
     gameId: null, gameName: '', gameGenreIds: [], gameHint: hint, gameSetBy: null, gameSetAt: null,
@@ -63,6 +63,23 @@ test('§6.5 ゲーム未設定の画面に一覧が出て、ゲームを選ぶ�
     expect(changes.docs[0].data()).toMatchObject({ from: null, to: gameId, by: 'admin' });
   } finally {
     await cleanup(id, gameId);
+  }
+});
+
+test('§6.5 ヒントが無い再生リストは名前にタイトルが含まれれば付くが、続編・番号違いは付かない', async ({ adminPage }) => {
+  const gameTitle = uniqueText('ゲーム名照合');
+  const gameId = await seedGame(gameTitle);
+  const plain = await seedUnsetPlaylist(null, `${gameTitle} 実況 Part1`);
+  const sequel = await seedUnsetPlaylist(null, `${gameTitle}2 実況`);
+  try {
+    await row(adminPage, plain.title);
+    await adminPage.getByRole('button', { name: 'いますぐ照合' }).click();
+    await expect(adminPage.getByText(/件を照合し、\d+件にゲームを付けました/).first()).toBeVisible({ timeout: 30_000 });
+    expect((await e2eDb().collection('playlists').doc(plain.id).get()).data()!.gameId).toBe(gameId);
+    expect((await e2eDb().collection('playlists').doc(sequel.id).get()).data()!.gameId).toBeNull();
+  } finally {
+    await cleanup(plain.id, gameId);
+    await cleanup(sequel.id, gameId);
   }
 });
 

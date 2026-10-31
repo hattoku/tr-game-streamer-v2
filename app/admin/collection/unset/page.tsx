@@ -1,5 +1,5 @@
 /**
- * ゲーム未設定の再生リスト（/admin/collection/unset）。管理 AI運営者向け収集候補レビューUI仕様書 v2.4 §3.9・§6。
+ * ゲーム未設定の再生リスト（/admin/collection/unset）。管理 AI運営者向け収集候補レビューUI仕様書 v2.5 §6.5。
  *
  * 「ゲーム未設定で登録」した再生リストの一覧。ゲームを選んで付ける、ゲームを新規登録して付ける、いますぐ照合する
  * （ゲームのタイトル・別名と再生リストのヒント・名前を照合して自動で付ける）ことができる。
@@ -8,6 +8,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Card, SectionHeading } from '@/components/ui/Card';
@@ -85,7 +86,7 @@ export default function AdminUnsetPlaylistsPage() {
     setBusy(null);
     // 新規登録したゲームの自動照合で、すでに付いていた場合も成功として扱う
     if (res.ok || res.status === 409) {
-      toast({ type: 'success', message: 'ゲームを付けました' });
+      toast({ type: 'success', message: res.ok ? 'ゲームを付けました' : '自動照合ですでにゲームが付いていました' });
       await reload();
     } else {
       toast({ type: 'error', message: 'ゲームを付けられませんでした' });
@@ -136,9 +137,9 @@ export default function AdminUnsetPlaylistsPage() {
                     <span className="h-14 w-24 shrink-0 rounded-[6px] bg-bg-hover" />
                   )}
                   <div className="min-w-0">
-                    <a href={`/playlists/${p.id}`} className="block truncate text-lg font-medium text-text-primary hover:underline">
+                    <Link href={`/playlists/${p.id}`} className="block truncate text-lg font-medium text-text-primary hover:underline">
                       {p.title}
-                    </a>
+                    </Link>
                     <p className="truncate text-md text-text-tertiary">{p.channelName}</p>
                     <p className="text-sm text-text-tertiary">
                       ヒント: {p.gameHint || '（なし）'} ／ 登録 {formatDateTime(p.registeredAt)}
