@@ -29,6 +29,7 @@ import { formatDuration } from '@/components/playlists/VideoList';
 import { ChevronDownIcon, ChevronRightIcon, PlayIcon, ReverseIcon, TrashIcon } from '@/components/ui/icons';
 import { useCanAutoplayAfterNavigation } from '@/lib/autoplay';
 import { AddToCollectionButton } from '@/components/collections/AddToCollectionButton';
+import { COLLECTIONS_ENABLED } from '@/lib/feature-flags';
 
 export interface MylistCardData {
   mylistId: string;
@@ -216,12 +217,12 @@ function Actions({
         <ReverseIcon size={13} />
         {entry.isReverseOrder ? (compact ? '逆順中' : '逆順再生中') : compact ? '逆順' : '逆順で再生'}
       </Button>
-      {/* まとめ機能仕様書 §4.1「マイリストページ」の作成導線 */}
-      <AddToCollectionButton playlistId={entry.playlistId} label={compact ? 'まとめ' : 'まとめに追加'} />
+      {/* まとめ機能仕様書 §4.1「マイリストページ」の作成導線。まとめ機能の取り下げ（マイリスト機能仕様書 v1.12）で出さない */}
+      {COLLECTIONS_ENABLED && <AddToCollectionButton playlistId={entry.playlistId} label={compact ? 'まとめ' : 'まとめに追加'} />}
       <Button variant="ghost" size="sm" onClick={onRemove} aria-label="マイリストから削除">
         <TrashIcon size={13} />
-        {/* モバイルは「まとめ」ボタン追加で1行に収まらなくなるためアイコンのみ（aria-label で名前は保つ） */}
-        {!compact && '削除'}
+        {/* モバイルは「まとめ」ボタン追加で1行に収まらなくなるためアイコンのみ（aria-label で名前は保つ）。まとめを出さない間は文字も出す */}
+        {(!compact || !COLLECTIONS_ENABLED) && '削除'}
       </Button>
     </div>
   );

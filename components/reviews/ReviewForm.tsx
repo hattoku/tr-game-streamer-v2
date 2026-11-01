@@ -40,6 +40,7 @@ import {
 } from '@/components/ui/DropdownMenu';
 import { LoginRequiredModal } from '@/components/layout/LoginRequiredModal';
 import { AddToCollectionButton } from '@/components/collections/AddToCollectionButton';
+import { COLLECTIONS_ENABLED } from '@/lib/feature-flags';
 import { MAX_COMMENT_LENGTH, getIdToken, upsertReview, useOwnReview, type MylistState } from './useOwnReview';
 
 export type { MylistState } from './useOwnReview';
@@ -289,8 +290,8 @@ export function ReviewForm({ playlistId, user, mylist, onMylistChange, writeRequ
             'いずれかを選ぶとマイリストに追加されます'
           )}
         </p>
-        {/* まとめ機能仕様書 §4.1「再生リスト詳細ページの視聴記録セクション」の作成導線 */}
-        <AddToCollectionButton playlistId={playlistId} className="mt-1 self-start" />
+        {/* まとめ機能仕様書 §4.1「再生リスト詳細ページの視聴記録セクション」の作成導線。まとめ機能の取り下げ（レビュー投稿機能仕様書 v1.9.0）で出さない */}
+        {COLLECTIONS_ENABLED && <AddToCollectionButton playlistId={playlistId} className="mt-1 self-start" />}
       </div>
 
       <CardDivider />

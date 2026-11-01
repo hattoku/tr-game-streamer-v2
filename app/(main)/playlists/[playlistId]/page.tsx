@@ -20,6 +20,7 @@ import { cn } from '@/components/ui/cn';
 import { ChannelCard } from '@/components/playlists/ChannelCard';
 import { GameInfoCard } from '@/components/playlists/GameInfoCard';
 import { ContainingCollectionsCard } from '@/components/collections/ContainingCollectionsCard';
+import { COLLECTIONS_ENABLED } from '@/lib/feature-flags';
 import { PlaylistInfoCard } from '@/components/playlists/PlaylistInfoCard';
 import { VideoList, type VideoItem } from '@/components/playlists/VideoList';
 import { PlayerOsd, OSD_DURATION_MS } from '@/components/playlists/PlayerOsd';
@@ -1172,8 +1173,8 @@ export default function PlaylistDetailPage() {
           {videoList}
           <div className="md:hidden">{reviewSection}</div>
           {game && <GameInfoCard {...game} />}
-          {/* この再生リストを含む公開まとめ（まとめ機能仕様書 §7）。0件なら何も描画しない */}
-          <ContainingCollectionsCard playlistId={playlistId} />
+          {/* この再生リストを含む公開まとめ（まとめ機能仕様書 §7）。0件なら何も描画しない。まとめ機能の取り下げ（2026-11-01、詳細仕様書 v1.14）で出さない */}
+          {COLLECTIONS_ENABLED && <ContainingCollectionsCard playlistId={playlistId} />}
         </div>
       </div>
 

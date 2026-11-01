@@ -23,6 +23,7 @@ import { ChevronDownIcon } from '@/components/ui/icons';
 import { cn } from '@/components/ui/cn';
 import { USER_NAV } from './nav';
 import { formatBadgeCount, usePendingWorkflowCount } from '@/components/admin/usePendingWorkflowCount';
+import { COLLECTIONS_ENABLED } from '@/lib/feature-flags';
 
 export function UserAvatar({
   name,
@@ -111,10 +112,14 @@ export function UserDropdown() {
         ))}
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={() => router.push(`/profile/${user.uid}`)}>プロフィール</DropdownMenuItem>
-        {/* 自分のまとめ一覧（まとめ機能仕様書 §4.1。プロフィールのまとめセクションは公開まとめのみのため、非公開を含む管理画面として残す） */}
-        <DropdownMenuItem onSelect={() => router.push('/collections/mine')}>自分のまとめ</DropdownMenuItem>
-        {/* 保存したまとめ（まとめ機能仕様書 §8.3。仕様のヘッダーリンクの代わりにメニューに置く） */}
-        <DropdownMenuItem onSelect={() => router.push('/collections/saved')}>保存したまとめ</DropdownMenuItem>
+        {/* 自分のまとめ一覧（まとめ機能仕様書 §4.1。プロフィールのまとめセクションは公開まとめのみのため、非公開を含む管理画面として残す）
+            と保存したまとめ（§8.3。仕様のヘッダーリンクの代わりにメニューに置く）。まとめ機能の取り下げ（UI仕様書 v2.0 §2.6）で出さない */}
+        {COLLECTIONS_ENABLED && (
+          <>
+            <DropdownMenuItem onSelect={() => router.push('/collections/mine')}>自分のまとめ</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => router.push('/collections/saved')}>保存したまとめ</DropdownMenuItem>
+          </>
+        )}
         {/* 提案履歴（ページ 再生リストを追加する 仕様書 §9.4） */}
         <DropdownMenuItem onSelect={() => router.push('/playlists/proposals')}>提案履歴</DropdownMenuItem>
         {/* お問い合わせ履歴（ページ お問い合わせ履歴 仕様書 §2。設定ページ経由だけでは分かりにくいため追加） */}

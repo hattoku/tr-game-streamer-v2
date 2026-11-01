@@ -149,6 +149,34 @@ export async function fetchPlaylistSnippet(playlistId: string): Promise<Playlist
   };
 }
 
+export interface PlaylistItemCount {
+  itemCount: number;
+  isPublic: boolean;
+}
+
+/**
+ * 再生リストIDのリストから、YouTube 側の動画数と公開状態を取得する（playlists.list の id 指定、50件ごとに1ユニット）。
+ * 削除された再生リストは結果に含まれない。新着動画取得の差分判定に使う（共通 YouTube定期取得仕様書 §7）。
+ */
+export async function fetchPlaylistItemCounts(playlistIds: string[]): Promise<Map<string, PlaylistItemCount>> {
+  const result = new Map<string, PlaylistItemCount>();
+  const CHUNK_SIZE = 50;
+  for (let i = 0; i < playlistIds.length; i += CHUNK_SIZE) {
+    const chunk = playlistIds.slice(i, i + CHUNK_SIZE);
+    const data = await callApi<{
+      items?: Array<{ id: string; contentDetails: { itemCount: number }; status: { privacyStatus: string } }>;
+    }>('playlists', {
+      part: 'contentDetails,status',
+      id: chunk.join(','),
+      maxResults: '50',
+    });
+    for (const item of data.items ?? []) {
+      result.set(item.id, { itemCount: item.contentDetails.itemCount, isPublic: item.status.privacyStatus === 'public' });
+    }
+  }
+  return result;
+}
+
 /** チャンネルの基本情報を取得する。存在しない場合はnullを返す。 */
 export async function fetchChannelSnippet(channelId: string): Promise<ChannelSnippet | null> {
   const data = await callApi<{

@@ -1,8 +1,8 @@
 /**
  * モバイル「さがす」セクションのタブ列（共通 uiコンポーネント フロント 仕様書 §2.7、
  * デザイントークン仕様書 §14）。
- * /playlists /games /channels /collections の一覧ページでヘッダー直下に表示する。
- * 横幅に収めるため4等分の固定幅とし、ラベルは2行（上段: 対象「再生リスト」等を大きめ、
+ * /playlists /games /channels（まとめを出す間は /collections も）の一覧ページでヘッダー直下に表示する。
+ * 横幅に収めるためタブ数で等分した固定幅とし（v2.0 でまとめを外して3タブ）、ラベルは2行（上段: 対象「再生リスト」等を大きめ、
  * 下段: 「を探す」「から探す」を小さく）。横スクロールはしない。
  */
 'use client';
@@ -16,7 +16,11 @@ export function SearchTabs({ className }: { className?: string }) {
   const pathname = usePathname();
 
   return (
-    <nav aria-label="さがす" className={cn('grid h-header-mobile-tabs grid-cols-4 border-t border-border-divider', className)}>
+    <nav
+      aria-label="さがす"
+      style={{ gridTemplateColumns: `repeat(${SEARCH_TABS.length}, minmax(0, 1fr))` }}
+      className={cn('grid h-header-mobile-tabs border-t border-border-divider', className)}
+    >
       {SEARCH_TABS.map((item) => {
         const active = pathname === item.href;
         return (
