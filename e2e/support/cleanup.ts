@@ -35,7 +35,9 @@ async function cleanupCollectionData(): Promise<{ candidates: number; games: num
   const games = (await startsWithMark('games', 'title')).docs.filter((d) => !d.data().playlistCount);
   // 新着取得のテスト（e2e/refresh-new-videos.spec.ts）が作った、YouTube に無い再生リスト
   const playlists = (await startsWithMark('playlists', 'title')).docs.filter((d) => d.id.startsWith('PLE2E'));
-  const refs = [...candidates.docs, ...games, ...playlists].map((d) => d.ref);
+  // 掲載状態のテスト（e2e/listing-status.spec.ts）が作った、名前が E2E_MARK で始まり ID が UCE2E で始まる channels
+  const channels = (await startsWithMark('channels', 'name')).docs.filter((d) => d.id.startsWith('UCE2E'));
+  const refs = [...candidates.docs, ...games, ...playlists, ...channels].map((d) => d.ref);
   for (let i = 0; i < refs.length; i += 400) {
     const batch = db().batch();
     refs.slice(i, i + 400).forEach((ref) => batch.delete(ref));

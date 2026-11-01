@@ -1,6 +1,6 @@
 # AI運営者_コンテンツ収集機能仕様書
 
-**バージョン**: v4.1
+**バージョン**: v4.2
 **作成日**: 2026年3月16日
 **更新日**: 2026年11月1日
 **関連ドキュメント**: プレミテ_AI運営者_企画書 / AI運営者_YouTube API調査レポート / AI運営者_コンテンツ品質基準検討書 / プレミテ_YouTube定期取得仕様書 / プレミテ_技術スタック仕様書 / 管理 AI運営者向け収集候補レビューUI仕様書 / Firestore データモデル設計書
@@ -421,6 +421,12 @@ YouTube API Services Developer Policies（III.E.4）は、ユーザーの認可�
    - 認定したチャンネルの再生リストは `listed`（`listingSetBy: admin`）、基準に合わないチャンネル（切り抜き・転載など）の再生リストは `channel_off`（非表示。消さない）にする。
    - マイリスト・レビュー・視聴履歴は壊さない。本番の件数は移行前に数える（友人テスト前で実利用はほぼ無い見込み）。
 2. 検索面を「公開かつ `listed`」に絞る（再生リストを探す・TOP・ゲームタイトル詳細・チャンネル・タグ・関連表示・`lib/playlist-aggregates.ts` の集計）。
+   - 実装: 一覧の取得（`fetchPublicPlaylists`・`fetchPlaylistsByGame`・`fetchPlaylistsByChannel`）と集計（`lib/playlist-aggregates.ts`）に `listingStatus == 'listed'` を足した。等価条件だけなので複合インデックスは不要。ゲーム・チャンネルの一覧の件数は `playlists` から掲載中だけを数える。チャンネル詳細は、再生リストがすべて `channel_off` のときだけ 404 にする（掲載中が0件で確認待ちがあるチャンネルは空状態で開く）。
+   - 実装: `scripts/migrate-listing-status.mjs`（`npm run migrate:listing:stg`／`:prod`）。既定は確認だけで書き込まない。`--off=<YouTubeチャンネルID,…>` で非表示にするチャンネルを指定し、`--apply` で反映する。何度実行しても結果は同じ（`listingStatus` が既にある再生リストは変えない）。
+   - 移行で書く値: 掲載は `listed`（`listingReason: migration`）、非表示は `channel_off`（`listingReason: channel_excluded`・`previousListingStatus: listed`）。どちらも `listingSetBy: admin`。`source` は提案者がいれば `user_proposal`、収集候補の承認済みなら `collection_candidate`、それ以外は `admin`。掲載するチャンネルは `exploration_channels` を `active`（`publishMode: confirm`・`authorizedVia: migration`、既にあるものはそのまま）にそろえ、名前が同じ未特定のものは `active` に上げる。非表示にするチャンネルの認定は `excluded` にする。
+   - 件数（`games.playlistCount`・`channels.playlistCount`・`tags.usagePlaylistCount`）は掲載中の再生リストだけで数え直す。
+   - **本番では、移行を適用してからアプリをデプロイする**（先にデプロイすると、移行前の再生リストが検索面から消える）。
+   - 以後の登録（管理者の直接登録・収集候補の承認・提案の承認）は、そのまま `listed`（`listingSetBy: admin`）で作る。ゲームの付け外し（PR #14 段階B）の `games.playlistCount` の増減は、掲載中の再生リストのときだけ行う。
 3. 残っている収集候補（`collection_candidates` の未処理）は、段階4で巡回に切り替えるときに一括で §10.4 の判定にかけ、役目を終える（コレクションは消さずに残す）。
 
 ### 10.10 クォータ
@@ -451,3 +457,4 @@ YouTube API Services Developer Policies（III.E.4）は、ユーザーの認可�
 | v3.5 | 2026-11-01 | 除外語に「実写」「くだらない」「ドッキリ」「大喜利」「ラジオ」「雑談」「食べてみた」「飲んでみた」を追加。除外語に当たった再生リストは捨てずに却下済み（自動）の候補として残す（§3.3） |
 | v4.0 | 2026-11-01 | リブランディング（ゲーム起点の格付け → 認定チャンネルの再生リストのキュレーション）に合わせ、第10章「認定チャンネルの自動掲載」を追加（段階1の仕様書書き換え。実装は段階3・4）。認定の入口3つ・認定の基準・チャンネルの状態（`opted_out` を追加）とチャンネルごとの掲載方法（既定は確認してから掲載）、全件保持と掲載状態の判定、除外語・非ゲーム語の表、認定を外す・掲載を止める、YouTube API 規約の保存期間（30日）への対応、段階3の移行を定義。第2章・第3章は段階4の実装までの現行仕様として残す |
 | v4.1 | 2026-11-01 | main の v4.0 に、PR #14 の v3.2〜v3.5（動画数の更新・サーバー側の楽天先読み・ゲーム未設定・除外語の追加と自動却下の保存）を統合 |
+| v4.2 | 2026-11-01 | 段階3の実装（§10.9）。移行スクリプト、移行で書く値、本番の適用順、検索面の絞り込みの実装、ゲーム付け外しの件数の扱いを追記。仕様の変更はなし |

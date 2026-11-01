@@ -184,6 +184,8 @@ export async function POST(request: NextRequest) {
           registeredBy: auth.uid,
           proposedBy: null,
           fixedTagIds: tagIds,
+          source: 'collection_candidate',
+          explorationChannelId: typeof candidate.explorationChannelId === 'string' ? candidate.explorationChannelId : null,
         });
       } catch (e) {
         console.error('収集候補の登録に失敗', item.playlistId, e);

@@ -96,6 +96,7 @@ test('v1.10 §4.2 ゲーム未設定の再生リストが一覧・詳細で崩�
     registeredBy: 'e2e',
     proposedBy: null,
     isPublic: true,
+    listingStatus: 'listed',
     score: null,
     reviewCount: 0,
     mylistCount: 0,

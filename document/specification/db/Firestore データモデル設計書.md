@@ -1,6 +1,6 @@
 # プレミテ Firestore データモデル設計書
 
-**バージョン**: v2.1  
+**バージョン**: v2.2  
 **作成日**: 2026年3月30日（更新）  
 **対象**: 開発チーム  
 **関連ドキュメント**: プレミテ企画書 / プレミテ_技術スタック仕様書 / 各機能仕様書
@@ -1091,3 +1091,4 @@ ai_operators ──── (1) users
 | v1.26 | 2026-11-01 | 新着動画取得の差分化。§3.2 `playlists` に `youtubeItemCount` を追加。§3.21 `batch_logs` に `refetchedCount`・`deferredCount`・`quotaExceeded`・`newVideoDetails`・`notFoundPlaylists`・`errorPlaylists` を追加 |
 | v2.0 | 2026-11-01 | リブランディング（段階1の仕様書書き換え）。§3.2 `playlists` に掲載状態（`listingStatus`・`listingReason`・`listingSetBy`・`listingSetAt`・`previousListingStatus`）と `source`・`explorationChannelId`・`fullRefetchedAt` を追加。§3.32 `exploration_channels` を認定チャンネルとして位置づけ、`opted_out`・`publishMode`・`featuredOrder`・`authorizedVia` ほかを追加。§3.15 `workflows` に `channel_application` を追加し、`playlist_register` のゲーム任意・掲載していない再生リストの掲載の提案を追記。§3.28 に `listing_rules` を追加。§3.14 まとめの取り下げ（データは残す）を注記。§3.4 登録者数の保存期間（YouTube API 規約）。§5 にインデックスを追加。未マージの PR #14（v1.26〜v1.29 を使用）と版番号が重ならないよう v2.0 とした |
 | v2.1 | 2026-11-01 | main の v2.0 に、PR #14 の v1.26〜v1.29（`collection_candidates` の楽天検索結果、`playlists` の `gameHint`・`gameSetBy`・`gameSetAt`・`rejectedGameIds`、`playlist_game_changes`）を統合。版番号の衝突（v1.26）は PR #14 側を v1.26b 相当として扱う |
+| v2.2 | 2026-11-01 | 段階3の実装。§3.2 `playlists` の掲載状態（`listingStatus` ほか）と `source`・`explorationChannelId` を実装。管理者の登録・承認は `listed`（`listingReason: admin`）で作り、既存データは移行スクリプトで `listed`（`listingReason: migration`）または `channel_off` にする。`games.playlistCount`・`channels.playlistCount`・`tags.usagePlaylistCount` は掲載中の再生リストだけを数える（コンテンツ収集機能仕様書 §10.9）。フィールドの追加・変更はなし |

@@ -11,6 +11,7 @@ import {
   type PlaylistSnippet,
 } from './youtube';
 import { PLAYLIST_PROPOSAL_TYPE } from './proposal-shared';
+import type { PlaylistSource } from './listing';
 
 // 再生リストの登録・提案で共通のサーバー側処理（ページ 再生リストを追加する 仕様書 §4.1.5・§5）。
 // 管理者の直接登録（/api/playlists/register）、一般ユーザーの提案（/api/playlists/propose）、
@@ -88,6 +89,10 @@ export async function registerPlaylist(params: {
   proposedBy: string | null;
   /** 固定タグとして付けるタグID（運営者タグ。存在確認は呼び出し側で行う） */
   fixedTagIds?: string[];
+  /** 入った経路。省略は管理者の直接登録（`admin`）。収集候補の承認は `collection_candidate` */
+  source?: PlaylistSource;
+  /** 所属する認定チャンネル（`exploration_channels` のドキュメントID）。分かるときだけ */
+  explorationChannelId?: string | null;
 }): Promise<RegisteredPlaylist | PlaylistApiError> {
   const { playlistUrl, gameId, channelDescription, sourceChannelId, registeredBy, proposedBy } = params;
   const gameHint = gameId ? null : params.gameHint?.trim().slice(0, 100) || null;
@@ -183,6 +188,14 @@ export async function registerPlaylist(params: {
     registeredBy,
     proposedBy,
     isPublic: true,
+    // 掲載状態（コンテンツ収集機能仕様書 §10.4・§10.9）。管理者が登録・承認したものは、そのまま掲載する
+    listingStatus: 'listed',
+    listingReason: 'admin',
+    listingSetBy: 'admin',
+    listingSetAt: now,
+    previousListingStatus: null,
+    source: proposedBy ? 'user_proposal' : params.source ?? 'admin',
+    explorationChannelId: params.explorationChannelId ?? null,
     score: null,
     reviewCount: 0,
     mylistCount: 0,
