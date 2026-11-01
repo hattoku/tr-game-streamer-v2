@@ -93,7 +93,7 @@ test('§9.1 チャンネルを探すには、掲載中の再生リストがあ�
 
 test('§8.1 チャンネル詳細: 掲載中が0件でも確認待ちなら開ける（空状態）。再生リストがすべて channel_off なら 404', async ({ guestPage }) => {
   const waitingName = uniqueText('確認待ちのチャンネル');
-  const offName = uniqueText('認定を外したチャンネル');
+  const offName = uniqueText('掲載から外したチャンネル');
   const waitingId = await seedChannel(waitingName);
   const offId = await seedChannel(offName);
   const a = await seedPlaylist({ channelId: waitingId, channelName: waitingName, listingStatus: 'unconfirmed' });

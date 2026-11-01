@@ -67,7 +67,7 @@ export default function ChannelDetailPage() {
     fetchPlaylistsByChannel(channelId).then(async (list) => {
       setPlaylists(list);
       if (list.length > 0) return;
-      // 認定を外した・掲載を止めたチャンネル（再生リストがすべて channel_off）は開けない（ページ チャンネル 詳細 仕様書 §8.1）。
+      // 掲載から外した・掲載を止めたチャンネル（再生リストがすべて channel_off）は開けない（ページ チャンネル 詳細 仕様書 §8.1）。
       // 確認待ちなどで掲載中が0件のチャンネルは、空状態で開ける
       const off = await getDocs(
         query(collection(db, 'playlists'), where('isPublic', '==', true), where('listingStatus', '==', 'channel_off'), where('channelId', '==', channelId), limit(1)),
