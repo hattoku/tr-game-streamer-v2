@@ -63,7 +63,7 @@ test('§10.7 再生リストを探すには掲載中だけが出る。掲載し�
 
     // 掲載していない再生リストも URL から開ける（精査 Q2=A）
     await guestPage.goto(`/playlists/${unconfirmed.id}`);
-    await expect(guestPage.getByText(unconfirmed.title).first()).toBeVisible({ timeout: 30_000 });
+    await expect(guestPage.getByRole('heading', { name: unconfirmed.title }).filter({ visible: true }).first()).toBeVisible({ timeout: 30_000 });
     await expect(guestPage.getByText('問題が発生しました')).toHaveCount(0);
   } finally {
     await Promise.all([listed, unconfirmed, nonGame, off].map((p) => e2eDb().collection('playlists').doc(p.id).delete()));
