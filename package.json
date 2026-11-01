@@ -21,6 +21,8 @@
     "recount:mylist:stg": "node scripts/recount-mylist.mjs --target=stg",
     "recount:mylist:prod": "node scripts/recount-mylist.mjs --target=prod",
     "backfill:package-images:stg": "node scripts/backfill-package-images.mjs --target=stg",
+    "migrate:listing:stg": "node scripts/migrate-listing-status.mjs --target=stg",
+    "migrate:listing:prod": "node scripts/migrate-listing-status.mjs --target=prod",
     "backfill:package-images:prod": "node scripts/backfill-package-images.mjs --target=prod"
   },
   "dependencies": {

@@ -5,6 +5,7 @@
 import { FieldValue } from 'firebase-admin/firestore';
 import { adminDb } from '@/lib/firebase-admin';
 import { guessGame, normalizeForMatch } from '@/lib/exploration-rules';
+import { countsAsListed } from '@/lib/listing';
 
 export type GameSetBy = 'admin' | 'auto' | 'user';
 
@@ -64,7 +65,8 @@ export async function linkPlaylistToGame(playlistId: string, gameId: string, by:
       gameSetBy: by,
       gameSetAt: now,
     });
-    tx.update(gameRef, { playlistCount: FieldValue.increment(1) });
+    // 掲載していない再生リストは件数に数えない（コンテンツ収集機能仕様書 §10.7）
+    if (countsAsListed(playlistSnap.data()!)) tx.update(gameRef, { playlistCount: FieldValue.increment(1) });
     tx.set(adminDb.collection('playlist_game_changes').doc(), { playlistId, from: null, to: gameId, by, userId, at: now });
     return 'linked';
   });
@@ -89,7 +91,7 @@ export async function unlinkPlaylistGame(playlistId: string, userId: string | nu
       gameSetAt: null,
       rejectedGameIds: FieldValue.arrayUnion(gameId),
     });
-    if (gameSnap.exists) tx.update(gameRef, { playlistCount: FieldValue.increment(-1) });
+    if (gameSnap.exists && countsAsListed(playlistSnap.data()!)) tx.update(gameRef, { playlistCount: FieldValue.increment(-1) });
     tx.set(adminDb.collection('playlist_game_changes').doc(), { playlistId, from: gameId, to: null, by: 'admin', userId, at: now });
     return 'unlinked';
   });

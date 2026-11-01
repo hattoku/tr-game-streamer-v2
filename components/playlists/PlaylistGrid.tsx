@@ -26,6 +26,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Tag } from '@/components/ui/Tag';
 import { CommentIcon, InventoryIcon, StarIcon, UsersIcon } from '@/components/ui/icons';
 import { cn } from '@/components/ui/cn';
+import { LISTED } from '@/lib/listing';
 import { fetchTagsMap, resolveTags, type ResolvedTag, type TagInfo } from '@/lib/tags';
 
 const MAX_VISIBLE_TAGS = 3;
@@ -197,7 +198,7 @@ export function sortPlaylists(list: PlaylistSummary[], sort: PlaylistSort): Play
  */
 export async function fetchPlaylistsByGame(gameId: string): Promise<PlaylistSummary[]> {
   const [snap, tagsMap] = await Promise.all([
-    getDocs(query(collection(db, 'playlists'), where('isPublic', '==', true), where('gameId', '==', gameId))),
+    getDocs(query(collection(db, 'playlists'), where('isPublic', '==', true), where('listingStatus', '==', LISTED), where('gameId', '==', gameId))),
     fetchTagsMap(),
   ]);
   return snap.docs.map((d) => toSummary(d, tagsMap));
@@ -210,7 +211,7 @@ export async function fetchPlaylistsByGame(gameId: string): Promise<PlaylistSumm
  */
 export async function fetchPlaylistsByChannel(channelId: string): Promise<PlaylistSummary[]> {
   const [snap, tagsMap] = await Promise.all([
-    getDocs(query(collection(db, 'playlists'), where('isPublic', '==', true), where('channelId', '==', channelId))),
+    getDocs(query(collection(db, 'playlists'), where('isPublic', '==', true), where('listingStatus', '==', LISTED), where('channelId', '==', channelId))),
     fetchTagsMap(),
   ]);
   return snap.docs.map((d) => toSummary(d, tagsMap));
@@ -223,7 +224,7 @@ export async function fetchPlaylistsByChannel(channelId: string): Promise<Playli
  */
 export async function fetchPublicPlaylists(): Promise<PlaylistSummary[]> {
   const [snap, tagsMap] = await Promise.all([
-    getDocs(query(collection(db, 'playlists'), where('isPublic', '==', true))),
+    getDocs(query(collection(db, 'playlists'), where('isPublic', '==', true), where('listingStatus', '==', LISTED))),
     fetchTagsMap(),
   ]);
   return snap.docs.map((d) => toSummary(d, tagsMap));

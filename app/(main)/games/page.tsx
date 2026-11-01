@@ -17,7 +17,7 @@ import { useSearchParams } from 'next/navigation';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { fetchTagsMap, isListedTag, resolveTags, type TagInfo } from '@/lib/tags';
-import { fetchGameVideoCounts } from '@/lib/playlist-aggregates';
+import { fetchGameAggregates } from '@/lib/playlist-aggregates';
 import { GameCard, type GameCardData } from '@/components/games/GameCard';
 import { Card, SectionHeading } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -73,8 +73,8 @@ export default function GamesPage() {
       getDocs(collection(db, 'games')),
       getDocs(collection(db, 'genres')),
       fetchTagsMap(),
-      fetchGameVideoCounts(),
-    ]).then(([gamesSnap, genresSnap, tagsMap, videoCounts]) => {
+      fetchGameAggregates(),
+    ]).then(([gamesSnap, genresSnap, tagsMap, aggregates]) => {
       setGenres(
         genresSnap.docs
           .map((d) => ({ id: d.id, name: (d.data().name as string) ?? '' }))
@@ -95,8 +95,8 @@ export default function GamesPage() {
             packageImageUrl: data.packageImageUrl ?? null,
             genreId: data.genreId ?? null,
             genreName: data.genreName ?? '',
-            playlistCount: data.playlistCount ?? 0,
-            videoCount: videoCounts.get(d.id) ?? 0,
+            playlistCount: aggregates.get(d.id)?.playlistCount ?? 0,
+            videoCount: aggregates.get(d.id)?.videoCount ?? 0,
             tags: resolveTags(gameTagIds, gameTagsFixed, tagsMap),
           } satisfies GameListItem;
         }),

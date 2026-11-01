@@ -41,14 +41,15 @@ export default function ChannelsPage() {
   useEffect(() => {
     Promise.all([getDocs(collection(db, 'channels')), fetchChannelAggregates()]).then(([snap, aggregates]) => {
       setChannels(
-        snap.docs.map((d) => {
+        // 掲載中の再生リストが1件以上あるチャンネルだけ出す（ページ チャンネル 探す 仕様書 §9.1）
+        snap.docs.filter((d) => aggregates.has(d.id)).map((d) => {
           const data = d.data();
           const agg = aggregates.get(d.id);
           return {
             id: d.id,
             name: (data.name as string) ?? '',
             iconUrl: (data.iconUrl as string) ?? '',
-            playlistCount: (data.playlistCount as number) ?? 0,
+            playlistCount: agg?.playlistCount ?? 0,
             videoCount: agg?.videoCount ?? 0,
             topPlaylists: agg?.topPlaylists ?? [],
           } satisfies ChannelCardData;

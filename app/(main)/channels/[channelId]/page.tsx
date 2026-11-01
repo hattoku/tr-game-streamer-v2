@@ -15,7 +15,7 @@
 
 import { useEffect, useState } from 'react';
 import { notFound, useParams } from 'next/navigation';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { collection, doc, getDocs, limit, onSnapshot, query, where } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { fetchPlaylistsByChannel, type PlaylistSummary } from '@/components/playlists/PlaylistGrid';
@@ -64,7 +64,16 @@ export default function ChannelDetailPage() {
 
   useEffect(() => {
     if (!channelId) return;
-    fetchPlaylistsByChannel(channelId).then(setPlaylists);
+    fetchPlaylistsByChannel(channelId).then(async (list) => {
+      setPlaylists(list);
+      if (list.length > 0) return;
+      // 認定を外した・掲載を止めたチャンネル（再生リストがすべて channel_off）は開けない（ページ チャンネル 詳細 仕様書 §8.1）。
+      // 確認待ちなどで掲載中が0件のチャンネルは、空状態で開ける
+      const off = await getDocs(
+        query(collection(db, 'playlists'), where('isPublic', '==', true), where('listingStatus', '==', 'channel_off'), where('channelId', '==', channelId), limit(1)),
+      );
+      if (!off.empty) setMissing(true);
+    });
   }, [channelId]);
 
   if (missing) notFound();
@@ -104,7 +113,7 @@ export default function ChannelDetailPage() {
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-md text-text-tertiary">
               <span className="inline-flex items-center gap-1">
                 <InventoryIcon size={14} />
-                {channel.playlistCount.toLocaleString()} 再生リスト
+                {(playlists?.length ?? channel.playlistCount).toLocaleString()} 再生リスト
               </span>
               <span className="inline-flex items-center gap-1">
                 <PlayIcon size={12} />

@@ -13,7 +13,7 @@ async function seedUnsetPlaylist(hint: string | null, titleOverride?: string) {
     title, thumbnailUrl: '', channelId: 'UCE2E', channelName: uniqueText('チャンネル'), channelIconUrl: '',
     gameId: null, gameName: '', gameGenreIds: [], gameHint: hint, gameSetBy: null, gameSetAt: null,
     videoCount: 0, latestVideoPublishedAt: null, registeredAt: new Date(), registeredBy: 'e2e', proposedBy: null,
-    isPublic: true, score: null, reviewCount: 0, mylistCount: 0, playlistTagIds: [], playlistTagsFixed: [],
+    isPublic: true, listingStatus: 'listed', score: null, reviewCount: 0, mylistCount: 0, playlistTagIds: [], playlistTagsFixed: [],
     referenceUrl: '', lastFetchedAt: null,
   });
   return { id, title };
