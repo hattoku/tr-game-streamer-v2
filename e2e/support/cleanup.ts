@@ -2,7 +2,8 @@
 // お問い合わせを、メッセージ（サブコレクション）・返信通知・添付画像（Storage）ごと削除する。手で作ったデータは対象にしない。
 // テスト用会員の画像添付の1日の上限カウンター（inquiry_upload_counters）も消す（実行を繰り返しても上限に当たらないように）。
 // あわせて、収集候補のテスト（e2e/collection-approve.spec.ts）が作った、再生リストタイトルが E2E_MARK で始まる
-// collection_candidates と、タイトルが E2E_MARK で始まり再生リストの無い games を削除する。
+// collection_candidates と、タイトルが E2E_MARK で始まり再生リストの無い games、新着取得のテストが作った
+// ID が PLE2E で始まる playlists を削除する。
 // 認証は GOOGLE_APPLICATION_CREDENTIALS（stg 用サービスアカウント。roles/datastore.user）。接続先は stg 固定。
 import { applicationDefault, getApps, initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
@@ -32,7 +33,9 @@ async function startsWithMark(collectionName: string, field: string) {
 async function cleanupCollectionData(): Promise<{ candidates: number; games: number }> {
   const candidates = await startsWithMark('collection_candidates', 'playlistTitle');
   const games = (await startsWithMark('games', 'title')).docs.filter((d) => !d.data().playlistCount);
-  const refs = [...candidates.docs, ...games].map((d) => d.ref);
+  // 新着取得のテスト（e2e/refresh-new-videos.spec.ts）が作った、YouTube に無い再生リスト
+  const playlists = (await startsWithMark('playlists', 'title')).docs.filter((d) => d.id.startsWith('PLE2E'));
+  const refs = [...candidates.docs, ...games, ...playlists].map((d) => d.ref);
   for (let i = 0; i < refs.length; i += 400) {
     const batch = db().batch();
     refs.slice(i, i + 400).forEach((ref) => batch.delete(ref));
