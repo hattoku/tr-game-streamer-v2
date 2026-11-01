@@ -45,19 +45,31 @@ export function matchGameForPlaylist(
   return match;
 }
 
-export type LinkResult = 'linked' | 'already_set' | 'playlist_not_found' | 'game_not_found';
+export type LinkResult = 'linked' | 'already_set' | 'playlist_not_found' | 'game_not_found' | 'rejected_game' | 'daily_limit';
+
+/** 一般ユーザーが1日に登録できる件数（直近ではなく日本時間の暦日。カウンターを同じトランザクションで数えて競合を防ぐ） */
+export const USER_DAILY_LINK_LIMIT = 20;
+
+function todayKey(): string {
+  return new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
 
 /** ゲーム未設定の再生リストにゲームを付ける。すでに付いていれば何もしない（先に設定した方を優先） */
 export async function linkPlaylistToGame(playlistId: string, gameId: string, by: GameSetBy, userId: string | null): Promise<LinkResult> {
   const playlistRef = adminDb.collection('playlists').doc(playlistId);
   const gameRef = adminDb.collection('games').doc(gameId);
   return adminDb.runTransaction(async (tx) => {
-    const [playlistSnap, gameSnap] = await Promise.all([tx.get(playlistRef), tx.get(gameRef)]);
+    // 一般ユーザーは、1日の上限と、管理者が外したゲームの除外もここ（トランザクション内）で確かめる
+    const counterRef = by === 'user' && userId ? adminDb.collection('game_link_counters').doc(`${userId}_${todayKey()}`) : null;
+    const [playlistSnap, gameSnap, counterSnap] = await Promise.all([tx.get(playlistRef), tx.get(gameRef), counterRef ? tx.get(counterRef) : Promise.resolve(null)]);
     if (!playlistSnap.exists) return 'playlist_not_found';
     if (!gameSnap.exists) return 'game_not_found';
     if (playlistSnap.data()!.gameId) return 'already_set';
+    if (by === 'user' && ((playlistSnap.data()!.rejectedGameIds as string[] | undefined) ?? []).includes(gameId)) return 'rejected_game';
+    if (counterRef && ((counterSnap?.data()?.count as number | undefined) ?? 0) >= USER_DAILY_LINK_LIMIT) return 'daily_limit';
     const game = gameSnap.data()!;
     const now = new Date();
+    if (counterRef) tx.set(counterRef, { userId, date: todayKey(), count: FieldValue.increment(1), updatedAt: now }, { merge: true });
     tx.update(playlistRef, {
       gameId,
       gameName: game.title ?? '',

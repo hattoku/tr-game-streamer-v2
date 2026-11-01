@@ -52,7 +52,7 @@ async function fetchPlaylists(field: 'gameId' | 'gameSetBy', value: null | 'user
 }
 
 const fetchUnsetPlaylists = () => fetchPlaylists('gameId', null);
-/** 一般ユーザーが登録したゲーム（確認して、違えば戻す。v2.6 §6.5） */
+/** 一般ユーザーが登録したゲーム（確認して、違えば戻す。v3.2 §6.5） */
 const fetchUserSetPlaylists = () => fetchPlaylists('gameSetBy', 'user');
 
 async function fetchGames(): Promise<GameOption[]> {

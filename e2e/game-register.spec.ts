@@ -102,3 +102,30 @@ test('すでにゲームが付いている再生リストには、一般ユー�
     await e2eDb().collection('games').doc(other).delete();
   }
 });
+
+test('1日20件の上限に達したユーザーは登録できない（429）', async ({ userPage }) => {
+  const gameId = await seedGame(uniqueText('上限のゲーム'));
+  const { id } = await seedPlaylist();
+  const token = await captureIdToken(userPage, '/contact/history');
+  const uid = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString()).user_id as string;
+  const today = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const counterRef = e2eDb().collection('game_link_counters').doc(`${uid}_${today}`);
+  const before = await counterRef.get();
+  await counterRef.set({ userId: uid, date: today, count: 20, updatedAt: new Date() });
+  try {
+    const res = await userPage.request.post(`/api/playlists/${id}/game`, { headers: { Authorization: `Bearer ${token}` }, data: { gameId } });
+    expect(res.status()).toBe(429);
+    expect((await e2eDb().collection('playlists').doc(id).get()).data()!.gameId).toBeNull();
+  } finally {
+    if (before.exists) await counterRef.set(before.data()!);
+    else await counterRef.delete();
+    await cleanup(id, gameId);
+  }
+});
+
+test('不正な入力（JSON が null・予約形式のID）は 400', async ({ userPage }) => {
+  const token = await captureIdToken(userPage, '/contact/history');
+  const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+  expect((await userPage.request.post('/api/playlists/abc/game', { headers, data: 'null' })).status()).toBe(400);
+  expect((await userPage.request.post('/api/playlists/abc/game', { headers, data: { gameId: '__x__' } })).status()).toBe(400);
+});

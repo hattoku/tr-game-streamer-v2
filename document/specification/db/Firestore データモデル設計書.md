@@ -963,6 +963,17 @@ AI運営者（審査AI）の設定。プラットフォーム共通で1体のみ
 | `userId` | string? | — | 操作した管理者のuserId（自動は null） |
 | `at` | Timestamp | ✅ | 日時 |
 
+### 3.34 `game_link_counters`
+
+一般ユーザーがゲーム未設定の再生リストにゲームを登録した件数の、1日ごとのカウンター（v2.3。再生リスト詳細仕様書 v1.15）。ドキュメントIDは `{userId}_{YYYY-MM-DD（日本時間）}`。ゲームを付けるトランザクションの中で数えるので、同時に大量に送っても上限（20件）を超えられない。クライアントからは読み書きできない（Admin SDK のみ）。
+
+| フィールド | 型 | 必須 | 説明 |
+|-----------|-----|------|------|
+| `userId` | string | ✅ | ユーザーID |
+| `date` | string | ✅ | 日付（日本時間、`YYYY-MM-DD`） |
+| `count` | number | ✅ | その日に登録した件数 |
+| `updatedAt` | Timestamp | ✅ | 更新日時 |
+
 ---
 
 ## 4. リレーション図
@@ -1091,5 +1102,5 @@ ai_operators ──── (1) users
 | v1.26 | 2026-11-01 | 新着動画取得の差分化。§3.2 `playlists` に `youtubeItemCount` を追加。§3.21 `batch_logs` に `refetchedCount`・`deferredCount`・`quotaExceeded`・`newVideoDetails`・`notFoundPlaylists`・`errorPlaylists` を追加 |
 | v2.0 | 2026-11-01 | リブランディング（段階1の仕様書書き換え）。§3.2 `playlists` に掲載状態（`listingStatus`・`listingReason`・`listingSetBy`・`listingSetAt`・`previousListingStatus`）と `source`・`explorationChannelId`・`fullRefetchedAt` を追加。§3.32 `exploration_channels` を認定チャンネルとして位置づけ、`opted_out`・`publishMode`・`featuredOrder`・`authorizedVia` ほかを追加。§3.15 `workflows` に `channel_application` を追加し、`playlist_register` のゲーム任意・掲載していない再生リストの掲載の提案を追記。§3.28 に `listing_rules` を追加。§3.14 まとめの取り下げ（データは残す）を注記。§3.4 登録者数の保存期間（YouTube API 規約）。§5 にインデックスを追加。未マージの PR #14（v1.26〜v1.29 を使用）と版番号が重ならないよう v2.0 とした |
 | v2.1 | 2026-11-01 | main の v2.0 に、PR #14 の v1.26〜v1.29（`collection_candidates` の楽天検索結果、`playlists` の `gameHint`・`gameSetBy`・`gameSetAt`・`rejectedGameIds`、`playlist_game_changes`）を統合。版番号の衝突（v1.26）は PR #14 側を v1.26b 相当として扱う |
-| v2.3 | 2026-11-01 | `gameSetBy` に `user`、`playlist_game_changes.by` に `user` を追加（一般ユーザーのゲーム登録） |
+| v2.3 | 2026-11-01 | `gameSetBy` に `user`、`playlist_game_changes.by` に `user` を追加、3.34 `game_link_counters` を追加（一般ユーザーのゲーム登録と1日の上限） |
 | v2.2 | 2026-11-01 | 段階3の実装。§3.2 `playlists` の掲載状態（`listingStatus` ほか）と `source`・`explorationChannelId` を実装。管理者の登録・承認は `listed`（`listingReason: admin`）で作り、既存データは移行スクリプトで `listed`（`listingReason: migration`）または `channel_off` にする。`games.playlistCount`・`channels.playlistCount`・`tags.usagePlaylistCount` は掲載中の再生リストだけを数える（コンテンツ収集機能仕様書 §10.9）。フィールドの追加・変更はなし |

@@ -16,6 +16,7 @@ import { GameSelectModal, type GameOption } from '@/components/playlists/GameSel
 const ERROR_MESSAGE: Record<string, string> = {
   already_set: 'この再生リストには、すでにゲームが登録されています',
   rejected_game: 'このゲームは、運営が外したため選べません',
+  game_not_found: 'そのゲームタイトルは見つかりませんでした',
   daily_limit: '今日は登録できる上限（20件）に達しました。明日また登録できます',
 };
 
@@ -36,7 +37,14 @@ export function GameRegisterCard({ playlistId, signedIn, onRegistered }: GameReg
   async function openModal() {
     setOpen(true);
     if (games) return;
-    const snap = await getDocs(collection(db, 'games'));
+    let snap;
+    try {
+      snap = await getDocs(collection(db, 'games'));
+    } catch {
+      toast({ type: 'error', message: 'ゲームの一覧を読み込めませんでした' });
+      setOpen(false);
+      return;
+    }
     setGames(
       snap.docs
         .map((d) => ({
@@ -53,6 +61,10 @@ export function GameRegisterCard({ playlistId, signedIn, onRegistered }: GameReg
     setBusy(true);
     try {
       const idToken = await auth.currentUser?.getIdToken();
+      if (!idToken) {
+        toast({ type: 'error', message: 'ログインしてから登録してください' });
+        return;
+      }
       const res = await fetch(`/api/playlists/${playlistId}/game`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
@@ -65,6 +77,8 @@ export function GameRegisterCard({ playlistId, signedIn, onRegistered }: GameReg
       } else {
         toast({ type: 'error', message: ERROR_MESSAGE[json.error ?? ''] ?? 'ゲームを登録できませんでした' });
       }
+    } catch {
+      toast({ type: 'error', message: 'ゲームを登録できませんでした。通信を確かめてください' });
     } finally {
       setBusy(false);
     }
