@@ -785,7 +785,7 @@ export default function AdminCollectionPage() {
                                   </a>
                                 </div>
                                 {status !== 'pending' && c.reviewComment && (
-                                  <p className="text-md text-text-muted">理由: {APPROVE_ERROR_LABEL[c.reviewComment] ?? c.reviewComment}</p>
+                                  <p className="text-md text-text-muted">理由: {c.reviewComment.startsWith('auto_exclude:') ? `除外語「${c.reviewComment.slice('auto_exclude:'.length)}」に当たったため自動で却下（ゲームではない可能性）` : (APPROVE_ERROR_LABEL[c.reviewComment] ?? c.reviewComment)}</p>
                                 )}
                                 {status === 'registered' && (
                                   <Link href={`/playlists/${c.id}`} className="text-md text-text-tertiary hover:text-text-primary">

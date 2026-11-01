@@ -1,7 +1,7 @@
 // 楽天ブックスの商品とゲーム名の照合（lib/rakuten-shared.ts の matchRakutenItem）と、ゲーム名の抜き出し（extractGameQuery）。
 // 管理 AI運営者向け収集候補レビューUI仕様書 v2.3 §3.7 の確認項目。画面を使わない（関数を直接呼ぶ）。
 import { expect, test } from '@playwright/test';
-import { extractGameQuery } from '../lib/exploration-rules';
+import { extractGameQuery, findExcludeWord } from '../lib/exploration-rules';
 import { matchRakutenItem } from '../lib/rakuten-shared';
 
 const pick = (gameTitle: string, ...titles: string[]) => matchRakutenItem(titles.map((title) => ({ title })), gameTitle)?.title ?? null;
@@ -32,4 +32,11 @@ test('§3.7 続編・別の作品（数字・RE:2・ローマ数字）や、短�
 test('§3.4 ゲーム名の末尾の長音「ー」は落とさない（ソングオブホラー → ソングオブホラ にしない）', () => {
   expect(extractGameQuery('ソングオブホラー')).toBe('ソングオブホラー');
   expect(extractGameQuery('【バイオハザード ヴィレッジ】ホラー')).toBe('バイオハザード ヴィレッジ');
+});
+
+test('§3.3 実写・バラエティ系の語は除外語に当たるが、ゲーム実況で使う語は当たらない', () => {
+  expect(findExcludeWord('実写＆くだらないシリーズ')).not.toBeNull();
+  expect(findExcludeWord('ドッキリ集')).toBe('ドッキリ');
+  expect(findExcludeWord('【マイクラ】サバイバル検証企画 #1')).toBeNull();
+  expect(findExcludeWord('ゲームをやってみた')).toBeNull();
 });
