@@ -47,17 +47,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ error: 'already_proposed' }, { status: 409 });
   }
 
+  const since = Date.now() - 24 * 60 * 60 * 1000;
+  const mine = await adminDb.collection('workflows').where('type', '==', GAME_PROPOSAL_TYPE).where('submittedBy', '==', auth.uid).get();
+  if (mine.docs.filter((d) => (d.data().submittedAt?.toMillis?.() ?? 0) >= since).length >= DAILY_LIMIT) {
+    return NextResponse.json({ error: 'daily_limit' }, { status: 429 });
+  }
+
   // 同名のゲームが既にあれば、一覧から選んでもらう
   const key = normalizeForMatch(gameTitle);
   const games = await adminDb.collection('games').select('title', 'aliases').get();
   if (games.docs.some((g) => [g.data().title as string, ...((g.data().aliases as string[] | undefined) ?? [])].some((n) => normalizeForMatch(n ?? '') === key))) {
     return NextResponse.json({ error: 'game_exists' }, { status: 409 });
-  }
-
-  const since = Date.now() - 24 * 60 * 60 * 1000;
-  const mine = await adminDb.collection('workflows').where('type', '==', GAME_PROPOSAL_TYPE).where('submittedBy', '==', auth.uid).get();
-  if (mine.docs.filter((d) => (d.data().submittedAt?.toMillis?.() ?? 0) >= since).length >= DAILY_LIMIT) {
-    return NextResponse.json({ error: 'daily_limit' }, { status: 429 });
   }
 
   await adminDb.collection('workflows').add(

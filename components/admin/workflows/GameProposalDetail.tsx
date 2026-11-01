@@ -1,7 +1,7 @@
 /**
  * 審査ワークフロー詳細のうち、ゲームタイトル登録提案（type: "game_title_register"、フェーズ7ステップ7-4）。
  * 「ゲームタイトルを登録して承認」で GameCreateModal（タイトル名入り）を開き、登録できたらその id を渡して承認する
- * （管理_審査ワークフロー仕様書 §3）。提案者には結果を通知しないため、承認後は同じ提案に付いていた再生リストを
+ * （管理_審査ワークフロー仕様書 §3）。旧形式の提案は提案者に結果を通知しないため、承認後は同じ提案に付いていた再生リストを
  * そのまま登録できるよう「この再生リストも登録する」（/playlists/new?gameId=&url=）を出す。
  * v1.16: 登録済みでゲーム未設定の再生リストに付けたいゲームタイトルの提案（proposalData.playlistId あり）は、承認すると
  * その再生リストにゲームを付け、提案者に結果を通知する。「既存のゲームに付けて承認」（表記ゆれの別名扱いなど）も選べる。
@@ -44,14 +44,20 @@ export function GameProposalDetail({ workflowId, data }: { workflowId: string; d
   const [games, setGames] = useState<GameOption[]>([]);
 
   async function openSelect() {
+    if (games.length === 0) {
+      try {
+        const snap = await getDocs(collection(db, 'games'));
+        setGames(
+          snap.docs
+            .map((d) => ({ id: d.id, title: (d.data().title as string) ?? '', packageImageUrl: (d.data().packageImageUrl as string) ?? null, aliases: (d.data().aliases as string[] | undefined) ?? [] }))
+            .sort((a, b) => a.title.localeCompare(b.title, 'ja')),
+        );
+      } catch {
+        toast({ type: 'error', message: 'ゲームの一覧を読み込めませんでした' });
+        return;
+      }
+    }
     setSelectOpen(true);
-    if (games.length > 0) return;
-    const snap = await getDocs(collection(db, 'games'));
-    setGames(
-      snap.docs
-        .map((d) => ({ id: d.id, title: (d.data().title as string) ?? '', packageImageUrl: (d.data().packageImageUrl as string) ?? null, aliases: (d.data().aliases as string[] | undefined) ?? [] }))
-        .sort((a, b) => a.title.localeCompare(b.title, 'ja')),
-    );
   }
   const [confirmAction, setConfirmAction] = useState<DecisionAction | null>(null);
   // ゲーム登録は済んだが承認の記録に失敗した場合に、登録し直さず承認だけやり直せるよう保持する
@@ -63,8 +69,15 @@ export function GameProposalDetail({ workflowId, data }: { workflowId: string; d
     try {
       await callWorkflowApi(workflowId, { action: 'approve', createdGameId: gameId, comment: null });
       toast({ type: 'success', message: 'ゲームタイトルを登録し、提案を承認しました' });
-    } catch {
-      toast({ type: 'error', message: '承認の記録に失敗しました。もう一度「承認する」を押してください' });
+    } catch (e) {
+      const code = (e as { code?: string | null }).code;
+      toast({
+        type: 'error',
+        message:
+          code === 'playlist_game_already_set'
+            ? 'この再生リストには、すでに別のゲームが付いているため承認できません。却下してください'
+            : '承認の記録に失敗しました。もう一度「承認する」を押してください',
+      });
     } finally {
       setApproving(false);
     }

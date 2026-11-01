@@ -138,7 +138,15 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       updates['proposalData.createdGameId'] = createdGameId;
       // 再生リストに付けたい提案（v1.16）は、その再生リストにこのゲームを付ける（すでに付いていれば何もしない）
       const targetPlaylistId = (workflow.proposalData?.playlistId as string | undefined) ?? null;
-      if (targetPlaylistId) await linkPlaylistToGame(targetPlaylistId, createdGameId, 'admin', uid);
+      if (targetPlaylistId) {
+        const linked = await linkPlaylistToGame(targetPlaylistId, createdGameId, 'admin', uid);
+        // 提案のあとに別の経路（ユーザーの登録・自動照合）で別のゲームが付いていた、または再生リストが無いときは、
+        // 承認として通知してしまわないよう、承認せず管理者に知らせる（すでに同じゲームが付いているのは成功）
+        const sameGame = linked === 'already_set' && (await adminDb.collection('playlists').doc(targetPlaylistId).get()).data()?.gameId === createdGameId;
+        if (linked !== 'linked' && !sameGame) {
+          return NextResponse.json({ error: linked === 'already_set' ? 'playlist_game_already_set' : linked }, { status: 409 });
+        }
+      }
     }
     if (action === 'reject' && workflow.type === PLAYLIST_PROPOSAL_TYPE) {
       updates['proposalData.rejectReasonCode'] = body.rejectReasonCode;
