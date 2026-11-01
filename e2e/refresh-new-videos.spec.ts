@@ -47,8 +47,11 @@ test.describe('再取得', () => {
   test('§7.2 動画数が変わった再生リストだけ取り直し、増えた本数が再生リスト名つきで出る', async ({ adminPage }) => {
     test.setTimeout(240_000);
     const playlist = await pickRealPlaylist();
-    const videos = await e2eDb().collection('videos').where('playlistId', '==', playlist.id).limit(1).get();
-    const removed = videos.docs[0];
+    // YouTube の再生リストから外れていない見込みが高い、いちばん新しい動画を消す
+    const videos = await e2eDb().collection('videos').where('playlistId', '==', playlist.id).get();
+    const removed = videos.docs.reduce((a, b) =>
+      (b.data().publishedAt?.toMillis?.() ?? 0) > (a.data().publishedAt?.toMillis?.() ?? 0) ? b : a,
+    );
     const removedData = removed.data();
 
     // 1回目で記録を揃える（初回は全件取り直しになる）
@@ -72,11 +75,14 @@ test.describe('再取得', () => {
       // 消した動画が戻り、記録が YouTube 側の数に揃う
       expect((await removed.ref.get()).exists).toBe(true);
       const after = (await playlist.ref.get()).data()!;
-      expect(after.youtubeItemCount).toBeGreaterThanOrEqual(0);
+      expect(after.youtubeItemCount).not.toBe(-1);
+      expect(typeof after.youtubeItemCount).toBe('number');
 
-      // 取り直したのは記録をずらした再生リストを含む少数で、動画数が同じ再生リストは取り直さない
+      // 取り直したのは記録をずらした再生リスト（と、その間に YouTube で動画が増えたもの）だけ
       const log = await latestBatchLog();
-      expect(log.refetchedCount).toBeLessThan(log.processedCount);
+      expect(log.refetchedCount).toBe(body.playlistsRefetched);
+      expect(body.playlistsRefetched).toBeGreaterThanOrEqual(1);
+      expect(body.playlistsRefetched).toBeLessThanOrEqual(3);
     } finally {
       if (!(await removed.ref.get()).exists) await removed.ref.set(removedData);
       const current = (await playlist.ref.get()).data()!;
@@ -86,8 +92,13 @@ test.describe('再取得', () => {
 
   test('§7.1・§7.4 動画数が変わっていなければ取り直さず、消費は確認の分（50件ごとに1）だけ', async ({ adminPage }) => {
     test.setTimeout(240_000);
-    await runRefresh(adminPage); // 前のテストの影響を消して記録を揃える
-    const body = await runRefresh(adminPage);
+    // 前のテストの影響を消して記録を揃える。実行の合間に実在のシリーズへ投稿があると取り直しが起きるので、
+    // 取り直し・エラーの無い回が出るまで最大3回まわす
+    let body = await runRefresh(adminPage);
+    for (let i = 0; i < 3 && (i === 0 || body.playlistsRefetched > 0 || body.errors.length > 0); i++) {
+      body = await runRefresh(adminPage);
+    }
+    expect(body.errors).toEqual([]);
     expect(body.playlistsRefetched).toBe(0);
     expect(body.quotaConsumed).toBe(Math.ceil(body.playlistsChecked / 50));
     await expect(adminPage.getByTestId('refresh-last-batch')).toContainText(

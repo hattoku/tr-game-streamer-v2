@@ -51,8 +51,9 @@ export async function POST(request: NextRequest) {
   await adminDb.collection('batch_logs').add({
     functionName: 'video_update',
     executedAt,
-    // 動画数の確認が1件もできなかった（クォータ切れ・キーの不備など）ときだけ失敗とする
-    status: summary.playlistsChecked === 0 && summary.errors.length > 0 ? 'error' : 'success',
+    // 動画数の確認が1件もできなかった（キーの不備など）・クォータが途中で尽きたときは失敗とする
+    status: summary.quotaExceeded || (summary.playlistsChecked === 0 && summary.errors.length > 0) ? 'error' : 'success',
+    ...(summary.quotaExceeded ? { errorMessage: 'YouTube API の1日のクォータが尽きたため中断しました' } : {}),
     ...toBatchLogFields(summary),
   });
 

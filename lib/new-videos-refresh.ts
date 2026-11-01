@@ -43,6 +43,8 @@ export interface RefreshSummary {
   notificationsCreated: number;
   /** クォータの上限で後回しにした数（次の回に取り直す） */
   deferredCount: number;
+  /** YouTube の1日のクォータが途中で尽きた */
+  quotaExceeded: boolean;
   newVideoDetails: NewVideoDetail[];
   notFoundPlaylists: PlaylistRef[];
   errors: Array<PlaylistRef & { message: string }>;
@@ -53,9 +55,14 @@ function errorMessage(e: unknown): string {
   return e instanceof YouTubeApiError ? e.message : e instanceof Error ? e.message : 'unknown_error';
 }
 
-/** 取り直しに要る見込みのユニット数（playlistItems.list の全ページ＋新着分の videos.list） */
+/** 取り直しに要る見込みのユニット数（playlistItems.list の全ページ＋余分の1ページ＋新着分の videos.list） */
 function estimateRefetchCost(itemCount: number): number {
-  return Math.max(1, Math.ceil(itemCount / 50)) + 1;
+  return Math.ceil(itemCount / 50) + 2;
+}
+
+/** YouTube の1日のクォータが尽きた（以降の呼び出しは全部失敗する。§6.2・§7.3） */
+function isQuotaExceeded(e: unknown): boolean {
+  return e instanceof YouTubeApiError && (e.reason === 'quotaExceeded' || e.reason === 'dailyLimitExceeded');
 }
 
 async function refetchPlaylist(
@@ -116,8 +123,9 @@ async function refetchPlaylist(
     youtubeItemCount: youtube.itemCount,
     lastFetchedAt: new Date(),
   };
-  if (newItems.length > 0) {
-    const latest = newItems.reduce((l, i) => (i.publishedAt > l ? i.publishedAt : l), newItems[0].publishedAt);
+  // 新着分ではなく取り直した全件から決める（前回が動画の保存後に失敗していても、ここで追いつく）
+  if (items.length > 0) {
+    const latest = items.reduce((l, i) => (i.publishedAt > l ? i.publishedAt : l), items[0].publishedAt);
     const current = playlist.latestVideoPublishedAt?.toDate?.() as Date | undefined;
     if (!current || new Date(latest) > current) update.latestVideoPublishedAt = new Date(latest);
   }
@@ -141,6 +149,7 @@ export async function refreshNewVideos(): Promise<RefreshSummary> {
     totalNewVideos: 0,
     notificationsCreated: 0,
     deferredCount: 0,
+    quotaExceeded: false,
     newVideoDetails: [],
     notFoundPlaylists: [],
     errors: [],
@@ -158,8 +167,13 @@ export async function refreshNewVideos(): Promise<RefreshSummary> {
       result.forEach((v, k) => counts.set(k, v));
       checked.push(...chunk);
     } catch (e) {
-      const message = errorMessage(e);
-      for (const d of chunk) summary.errors.push({ playlistId: d.id, title: titleOf(d), message });
+      const message = `動画数の確認に失敗: ${errorMessage(e)}`;
+      const failed = isQuotaExceeded(e) ? docs.slice(i) : chunk;
+      for (const d of failed) summary.errors.push({ playlistId: d.id, title: titleOf(d), message });
+      if (isQuotaExceeded(e)) {
+        summary.quotaExceeded = true;
+        break;
+      }
     }
   }
   summary.playlistsChecked = checked.length;
@@ -175,9 +189,9 @@ export async function refreshNewVideos(): Promise<RefreshSummary> {
     if (d.data().youtubeItemCount !== youtube.itemCount) changed.push({ doc: d, youtube });
   }
 
-  // ③ 取り直し（1回あたりの上限を超えそうなら残りは後回し。§7.3）
+  // ③ 取り直し（1回あたりの上限を超えそうなら、またはクォータが尽きたら残りは後回し。§7.3）
   for (const { doc, youtube } of changed) {
-    if (getQuotaConsumed() + estimateRefetchCost(youtube.itemCount) > NEW_VIDEOS_QUOTA_BUDGET) {
+    if (summary.quotaExceeded || getQuotaConsumed() + estimateRefetchCost(youtube.itemCount) > NEW_VIDEOS_QUOTA_BUDGET) {
       summary.deferredCount++;
       continue;
     }
@@ -186,7 +200,12 @@ export async function refreshNewVideos(): Promise<RefreshSummary> {
       result = await refetchPlaylist(doc, youtube);
     } catch (e) {
       if (!(e instanceof YouTubeApiError)) throw e;
-      summary.errors.push({ playlistId: doc.id, title: titleOf(doc), message: errorMessage(e) });
+      if (isQuotaExceeded(e)) {
+        summary.quotaExceeded = true;
+        summary.deferredCount++;
+        continue;
+      }
+      summary.errors.push({ playlistId: doc.id, title: titleOf(doc), message: `取り直しに失敗: ${errorMessage(e)}` });
       continue;
     }
     summary.playlistsRefetched++;
@@ -210,6 +229,7 @@ export function toBatchLogFields(summary: RefreshSummary) {
     newVideoCount: summary.totalNewVideos,
     refetchedCount: summary.playlistsRefetched,
     deferredCount: summary.deferredCount,
+    quotaExceeded: summary.quotaExceeded,
     newVideoDetails: summary.newVideoDetails.slice(0, LOG_LIST_LIMIT),
     notFoundPlaylists: summary.notFoundPlaylists.slice(0, LOG_LIST_LIMIT),
     errorPlaylists: summary.errors.slice(0, LOG_LIST_LIMIT),

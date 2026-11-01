@@ -36,6 +36,7 @@ interface BatchLogSummary {
   refetchedCount?: number;
   newVideoCount?: number;
   deferredCount?: number;
+  quotaExceeded?: boolean;
   newVideoDetails?: Array<PlaylistRef & { newVideos: number }>;
   notFoundPlaylists?: PlaylistRef[];
   errorPlaylists?: Array<PlaylistRef & { message: string }>;
@@ -97,6 +98,7 @@ export default function AdminDashboardPage() {
       refetchedCount: d.refetchedCount,
       newVideoCount: d.newVideoCount,
       deferredCount: d.deferredCount,
+      quotaExceeded: d.quotaExceeded,
       newVideoDetails: d.newVideoDetails,
       notFoundPlaylists: d.notFoundPlaylists,
       errorPlaylists: d.errorPlaylists,
@@ -232,6 +234,12 @@ function LastBatchDetails({ batch }: { batch: BatchLogSummary }) {
         公開 {batch.processedCount ?? 0} 件を確認、動画数が変わった {batch.refetchedCount ?? 0} 件を取り直し、新着 {batch.newVideoCount ?? 0} 本
         {!!batch.deferredCount && `。後回し ${batch.deferredCount} 件（次回に取り直し）`}
       </p>
+      {batch.quotaExceeded && (
+        <p className="inline-flex items-center gap-1 text-text-secondary">
+          <AlertIcon size={13} className="text-toast-error" />
+          YouTube API の1日のクォータが尽きたため途中で止めました。残りは次回に確認します
+        </p>
+      )}
       <div className="flex flex-col gap-1">
         <p className="font-medium text-text-primary">新着のあった再生リスト</p>
         {details.length === 0 ? (
@@ -267,9 +275,9 @@ function LastBatchDetails({ batch }: { batch: BatchLogSummary }) {
         <div className="flex flex-col gap-1">
           <p className="inline-flex items-center gap-1 font-medium text-text-primary">
             <AlertIcon size={13} className="text-toast-error" />
-            取り直しに失敗した再生リスト
+            確認・取り直しに失敗した再生リスト
           </p>
-          <ul className="flex flex-col gap-1" aria-label="取り直しに失敗した再生リスト">
+          <ul className="flex flex-col gap-1" aria-label="確認・取り直しに失敗した再生リスト">
             {errors.map((p) => (
               <li key={p.playlistId} className="min-w-0 break-words text-text-secondary">
                 {p.title}（{p.message}）
