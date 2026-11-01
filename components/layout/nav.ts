@@ -5,18 +5,25 @@
  * （wiki/sources/2026-09-11-phase2.5-design-plan.md §4 ステップ2）。
  */
 
+import { COLLECTIONS_ENABLED } from '@/lib/feature-flags';
+
+/** まとめ（/collections）の項目。まとめ機能の取り下げ（2026-11-01、UI仕様書 v2.0）で COLLECTIONS_ENABLED が false の間は外す */
+const COLLECTIONS_HREF = '/collections';
+const withoutCollections = <T extends { href: string }>(items: T[]): T[] =>
+  COLLECTIONS_ENABLED ? items : items.filter((item) => item.href !== COLLECTIONS_HREF);
+
 export interface NavItem {
   label: string;
   href: string;
 }
 
 /** グローバルナビゲーション（PC、§2.4）。アクティブ判定は href のプレフィクス一致 */
-export const GLOBAL_NAV: NavItem[] = [
+export const GLOBAL_NAV: NavItem[] = withoutCollections([
   { label: '再生リストを探す', href: '/playlists' },
   { label: 'ゲームから探す', href: '/games' },
   { label: 'チャンネルから探す', href: '/channels' },
-  { label: 'まとめ', href: '/collections' },
-];
+  { label: 'まとめ', href: COLLECTIONS_HREF },
+]);
 
 /** ログイン済みユーザー向けリンク（PC、§2.6） */
 export const USER_NAV: NavItem[] = [
@@ -25,12 +32,12 @@ export const USER_NAV: NavItem[] = [
 ];
 
 /** フッター「サービス」グループ（§3.3）。モバイルの「さがす」タブ列（§2.7）も同じラベルを使う */
-export const FOOTER_SERVICE_NAV: NavItem[] = [
+export const FOOTER_SERVICE_NAV: NavItem[] = withoutCollections([
   { label: '再生リストを探す', href: '/playlists' },
   { label: 'ゲームタイトルから探す', href: '/games' },
   { label: 'チャンネル名から探す', href: '/channels' },
-  { label: 'まとめを探す', href: '/collections' },
-];
+  { label: 'まとめを探す', href: COLLECTIONS_HREF },
+]);
 
 /** モバイル「さがす」セクションのタブ列（§2.7）。2行ラベル: main を大きく、sub を小さく表示 */
 export interface SearchTab {
@@ -39,12 +46,12 @@ export interface SearchTab {
   sub: string;
 }
 
-export const SEARCH_TABS: SearchTab[] = [
+export const SEARCH_TABS: SearchTab[] = withoutCollections([
   { href: '/playlists', main: '再生リスト', sub: 'を探す' },
   { href: '/games', main: 'ゲームタイトル', sub: 'から探す' },
   { href: '/channels', main: 'チャンネル名', sub: 'から探す' },
-  { href: '/collections', main: 'まとめ', sub: 'を探す' },
-];
+  { href: COLLECTIONS_HREF, main: 'まとめ', sub: 'を探す' },
+]);
 
 /** 後方互換: フッターと同じ href 群 */
 export const SEARCH_TAB_NAV: NavItem[] = FOOTER_SERVICE_NAV;
@@ -94,7 +101,7 @@ export const BOTTOM_TABS: BottomTab[] = [
   { key: 'home', label: 'ホーム', href: '/', prefixes: [] },
   // マイリスト（2026-09-12 ユーザー決定で「タイムライン」を置き換え）。未ログイン時はログインページへ
   { key: 'mylist', label: 'マイリスト', href: '/mylist', guestHref: '/login', prefixes: ['/mylist'] },
-  { key: 'search', label: 'さがす', href: '/playlists', prefixes: ['/playlists', '/games', '/channels', '/collections'] },
+  { key: 'search', label: 'さがす', href: '/playlists', prefixes: ['/playlists', '/games', '/channels', ...(COLLECTIONS_ENABLED ? [COLLECTIONS_HREF] : [])] },
   // 未ログイン時はアカウント作成フローへ（§2.7）
   // マイページの遷移先はプロフィール／設定ページ実装後に見直す。当面は視聴履歴（準備中ページ）
   { key: 'mypage', label: 'マイページ', href: '/history', guestHref: SIGNUP_HREF, prefixes: ['/history', '/profile', '/settings'] },

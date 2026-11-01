@@ -16,6 +16,7 @@ import { useToast } from '@/components/ui/Toast';
 import { LockIcon, PencilIcon } from '@/components/ui/icons';
 import { cn } from '@/components/ui/cn';
 import { ProfileVisibilityModal } from '@/components/profile/ProfileVisibilityModal';
+import { COLLECTIONS_ENABLED } from '@/lib/feature-flags';
 import {
   BIO_MAX,
   DISPLAY_NAME_MAX,
@@ -124,7 +125,7 @@ function ProfileEditForm({
         {/* エラー・ヒントの出し入れでアバターが上下しないよう上端で揃える */}
         <div className="flex items-start gap-4">
           <UserAvatar name={displayName.trim() || u.displayName} imageUrl={u.profileImageUrl} size={72} />
-          <Field label="表示名" error={errors.displayName} hint="レビューやまとめに表示される名前です" className="min-w-0 flex-1 md:max-w-sm">
+          <Field label="表示名" error={errors.displayName} hint={COLLECTIONS_ENABLED ? 'レビューやまとめに表示される名前です' : 'レビューに表示される名前です'} className="min-w-0 flex-1 md:max-w-sm">
             {(props) => (
               <Input
                 {...props}

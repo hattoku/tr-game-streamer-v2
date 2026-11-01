@@ -7,6 +7,7 @@
  * - マイリスト・レビュー履歴は、他人のページでは公開設定OFFならセクションごと出さない（API が null を返す。§2.3）。
  * - プロフィール画像のアップロードは見送り（Firebase Storage 未導入、2026-10-12 ユーザー決定）。アバターは UserAvatar の頭文字表示。
  * - 保存したまとめは既存の API（/api/collections/saved）から取る。閲覧できなくなったまとめは /collections/saved 側で管理する。
+ * - まとめ・保存したまとめ（⑥⑦）はまとめ機能の取り下げ（2026-11-01、プロフィール仕様書 v1.8）で COLLECTIONS_ENABLED が false の間は出さない。
  * - ヘッダーと「編集する」（§9 インライン編集）は ProfileHeader。保存後は再取得せず、返ってきた表示名・自己紹介で差し替える。
  */
 'use client';
@@ -37,6 +38,7 @@ import {
   fromCollectionJson,
   type CollectionData,
 } from '@/lib/collections';
+import { COLLECTIONS_ENABLED } from '@/lib/feature-flags';
 import { fetchProfile, formatProfileDate, ProfileNotFoundError, type ProfileJson, type ProfileReviewJson } from '@/lib/profile';
 
 const COMMENT_EXCERPT_LENGTH = 100;
@@ -80,7 +82,7 @@ function ProfileView({ userId }: { userId: string }) {
 
   const isSelf = profile?.isSelf === true;
   useEffect(() => {
-    if (!isSelf) return;
+    if (!isSelf || !COLLECTIONS_ENABLED) return;
     let cancelled = false;
     (async () => {
       try {
@@ -238,7 +240,7 @@ function ProfileView({ userId }: { userId: string }) {
       )}
 
       {/* ⑥ まとめ（まとめ機能仕様書 §9.1。公開まとめのみ。他人のページで0件ならセクションごと出さない） */}
-      {(isSelf || collections.length > 0) && (
+      {COLLECTIONS_ENABLED && (isSelf || collections.length > 0) && (
         <ProfileSection
           title="まとめ"
           count={collections.length}
@@ -274,7 +276,7 @@ function ProfileView({ userId }: { userId: string }) {
       )}
 
       {/* ⑦ 保存したまとめ（まとめ機能仕様書 §9.2。本人のページのみ） */}
-      {isSelf && (
+      {COLLECTIONS_ENABLED && isSelf && (
         <ProfileSection
           title="保存したまとめ"
           count={saved?.length}

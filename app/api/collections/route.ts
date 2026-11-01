@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireUser } from '@/lib/api-auth';
 import { adminDb } from '@/lib/firebase-admin';
+import { collectionsDisabledResponse } from '@/lib/collections-server';
 import { COLLECTIONS_PER_USER_MAX } from '@/lib/collections-shared';
 import { fetchCreatorSnapshot, parseCollectionFields, readJsonObject } from '@/lib/collections-server';
 
@@ -11,6 +12,9 @@ import { fetchCreatorSnapshot, parseCollectionFields, readJsonObject } from '@/l
 // 件数確認と作成はトランザクションで行い、別タブ・連打による上限超過を防ぐ。
 // 新規作成分は自分のまとめ一覧の先頭に来るよう、既存の最小 sortOrder より 1 小さい値にする（§4.5 既定は新しい順）。
 export async function POST(request: NextRequest) {
+  // まとめ機能の取り下げ（2026-11-01、まとめ機能仕様書 v2.0）。COLLECTIONS_ENABLED が false の間は読み書きせず 404
+  const disabled = collectionsDisabledResponse();
+  if (disabled) return disabled;
   const auth = await requireUser(request);
   if ('errorResponse' in auth) return auth.errorResponse;
   const uid = auth.uid;
