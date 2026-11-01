@@ -56,7 +56,7 @@ test.describe('まとめの API は読み書きせず 404（まとめ機能仕�
   });
 
   test('ログイン中の作成・保存一覧・保存も 404', async ({ userPage }) => {
-    const token = await captureIdToken(userPage, '/mylist');
+    const token = await captureIdToken(userPage, '/contact/history');
     const headers = { Authorization: `Bearer ${token}` };
     const create = await userPage.request.post('/api/collections', {
       headers,
