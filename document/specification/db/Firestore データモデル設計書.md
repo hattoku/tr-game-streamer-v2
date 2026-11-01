@@ -1,6 +1,6 @@
 # プレミテ Firestore データモデル設計書
 
-**バージョン**: v2.2  
+**バージョン**: v2.3  
 **作成日**: 2026年3月30日（更新）  
 **対象**: 開発チーム  
 **関連ドキュメント**: プレミテ企画書 / プレミテ_技術スタック仕様書 / 各機能仕様書
@@ -195,7 +195,7 @@ Firestoreはテーブル結合（JOIN）ができないため、一覧表示や�
 | `gameId` | string? | — | 紐づくゲームタイトルのドキュメントID。**null ＝ ゲーム未設定**（v1.28。収集画面の「ゲーム未設定で登録」で登録した再生リストなど。ゲームのページ・ジャンル別の一覧には出ない） |
 | `gameName` | string? | — | ゲームタイトル名（denormalized。ゲーム未設定は空文字） |
 | `gameHint` | string? | — | 未確定のゲーム名（v1.28。収集の `gameQuery` や承認時に入力した名前。マスタには入れない。再生リスト一覧のキーワード検索の対象で、あとの自動照合にも使う。無ければ null） |
-| `gameSetBy` | string? | — | 今のゲームを決めた者（v1.28。`admin`（管理者の登録・承認・手動で付ける）／`auto`（登録・編集したゲームとの自動照合）／`user` は段階Cで追加。ゲーム未設定・旧データは null） |
+| `gameSetBy` | string? | — | 今のゲームを決めた者（v1.28。`admin`（管理者の登録・承認・手動で付ける）／`auto`（登録・編集したゲームとの自動照合）／`user`（一般ユーザーが再生リスト詳細から登録。v2.3）。ゲーム未設定・旧データは null） |
 | `gameSetAt` | Timestamp? | — | 同上の日時（v1.28） |
 | `rejectedGameIds` | string[]? | — | 管理者がゲームを外した（「違う」と戻した）ゲームのID（v1.29。自動照合ではこのゲームを付け直さない。無ければ空） |
 | `gameGenreIds` | string[] | ✅ | ゲームのジャンルIDリスト（ランキング・フィルタ用） |
@@ -959,7 +959,7 @@ AI運営者（審査AI）の設定。プラットフォーム共通で1体のみ
 | `playlistId` | string | ✅ | 再生リストID |
 | `from` | string? | — | 変更前のゲームID（未設定からは null） |
 | `to` | string? | — | 変更後のゲームID（外したときは null） |
-| `by` | string | ✅ | `admin`／`auto`（`user` は段階C） |
+| `by` | string | ✅ | `admin`／`auto`／`user`（一般ユーザーの登録。1日20件の数え上げにも使う） |
 | `userId` | string? | — | 操作した管理者のuserId（自動は null） |
 | `at` | Timestamp | ✅ | 日時 |
 
@@ -1091,4 +1091,5 @@ ai_operators ──── (1) users
 | v1.26 | 2026-11-01 | 新着動画取得の差分化。§3.2 `playlists` に `youtubeItemCount` を追加。§3.21 `batch_logs` に `refetchedCount`・`deferredCount`・`quotaExceeded`・`newVideoDetails`・`notFoundPlaylists`・`errorPlaylists` を追加 |
 | v2.0 | 2026-11-01 | リブランディング（段階1の仕様書書き換え）。§3.2 `playlists` に掲載状態（`listingStatus`・`listingReason`・`listingSetBy`・`listingSetAt`・`previousListingStatus`）と `source`・`explorationChannelId`・`fullRefetchedAt` を追加。§3.32 `exploration_channels` を認定チャンネルとして位置づけ、`opted_out`・`publishMode`・`featuredOrder`・`authorizedVia` ほかを追加。§3.15 `workflows` に `channel_application` を追加し、`playlist_register` のゲーム任意・掲載していない再生リストの掲載の提案を追記。§3.28 に `listing_rules` を追加。§3.14 まとめの取り下げ（データは残す）を注記。§3.4 登録者数の保存期間（YouTube API 規約）。§5 にインデックスを追加。未マージの PR #14（v1.26〜v1.29 を使用）と版番号が重ならないよう v2.0 とした |
 | v2.1 | 2026-11-01 | main の v2.0 に、PR #14 の v1.26〜v1.29（`collection_candidates` の楽天検索結果、`playlists` の `gameHint`・`gameSetBy`・`gameSetAt`・`rejectedGameIds`、`playlist_game_changes`）を統合。版番号の衝突（v1.26）は PR #14 側を v1.26b 相当として扱う |
+| v2.3 | 2026-11-01 | `gameSetBy` に `user`、`playlist_game_changes.by` に `user` を追加（一般ユーザーのゲーム登録） |
 | v2.2 | 2026-11-01 | 段階3の実装。§3.2 `playlists` の掲載状態（`listingStatus` ほか）と `source`・`explorationChannelId` を実装。管理者の登録・承認は `listed`（`listingReason: admin`）で作り、既存データは移行スクリプトで `listed`（`listingReason: migration`）または `channel_off` にする。`games.playlistCount`・`channels.playlistCount`・`tags.usagePlaylistCount` は掲載中の再生リストだけを数える（コンテンツ収集機能仕様書 §10.9）。フィールドの追加・変更はなし |
