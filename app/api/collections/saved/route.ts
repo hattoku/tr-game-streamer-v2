@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireUser } from '@/lib/api-auth';
 import { adminDb } from '@/lib/firebase-admin';
+import { collectionsDisabledResponse } from '@/lib/collections-server';
 import { toCollectionJson } from '@/lib/collections-server';
 import type { SavedCollectionJson } from '@/lib/collections-shared';
 
@@ -9,6 +10,9 @@ import type { SavedCollectionJson } from '@/lib/collections-shared';
 // 「閲覧できなくなったまとめ」（collection: null）として返す（2026-10-12 ユーザー決定）。
 // 公開・限定公開に戻れば再び通常どおり返る。削除されたまとめの保存記録はまとめ削除APIで一緒に消している。
 export async function GET(request: NextRequest) {
+  // まとめ機能の取り下げ（2026-11-01、まとめ機能仕様書 v2.0）。COLLECTIONS_ENABLED が false の間は読み書きせず 404
+  const disabled = collectionsDisabledResponse();
+  if (disabled) return disabled;
   const auth = await requireUser(request);
   if ('errorResponse' in auth) return auth.errorResponse;
 

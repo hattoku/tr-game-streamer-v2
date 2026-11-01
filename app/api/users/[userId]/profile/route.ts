@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getOptionalUid, requireUser } from '@/lib/api-auth';
 import { adminDb } from '@/lib/firebase-admin';
 import { readJsonObject, toCollectionJson } from '@/lib/collections-server';
+import { COLLECTIONS_ENABLED } from '@/lib/feature-flags';
 import { normalizeWatchStatus, WATCH_STATUS_ORDER } from '@/components/ui/Chip';
 import { validateProfileInput, type ProfileJson, type ProfilePlaylistJson } from '@/lib/profile-shared';
 
@@ -10,6 +11,7 @@ import { validateProfileInput, type ProfileJson, type ProfilePlaylistJson } from
 // （email 等は返さない。2026-10-12 ユーザー決定でルールは緩めない）。
 // マイリスト・レビュー履歴は本人以外には公開設定（isMylistPublic / isReviewHistoryPublic）に従い、OFF なら null。
 // 統計・ジャンル分布は公開設定にかかわらず返す（§2.1）。
+// まとめ（collections）はまとめ機能の取り下げ（2026-11-01、プロフィール仕様書 v1.8）で COLLECTIONS_ENABLED が false の間は読まず空で返す。
 // どのクエリも userId の等価条件のみ（並び替えはメモリ内）で複合インデックスは不要。
 
 const GENRES_TOP = 3;
@@ -33,7 +35,9 @@ export async function GET(request: NextRequest, { params }: Params) {
   const [reviewSnap, mylistSnap, collectionSnap] = await Promise.all([
     adminDb.collection('reviews').where('userId', '==', userId).get(),
     adminDb.collection('mylist').where('userId', '==', userId).get(),
-    adminDb.collection('collections').where('userId', '==', userId).where('visibility', '==', 'public').get(),
+    COLLECTIONS_ENABLED
+      ? adminDb.collection('collections').where('userId', '==', userId).where('visibility', '==', 'public').get()
+      : null,
   ]);
 
   // 星評価・視聴ステータス・コメントのいずれかがある投稿をレビューとして数える（§5.3）。
@@ -43,7 +47,7 @@ export async function GET(request: NextRequest, { params }: Params) {
     .filter(({ data }) => data.isHidden !== true)
     .filter(({ data }) => data.starRating != null || normalizeWatchStatus(data.watchStatus) != null || !!(data.comment as string | null)?.trim());
   const mylistDocs = mylistSnap.docs.map((d) => d.data());
-  const collections = collectionSnap.docs
+  const collections = (collectionSnap?.docs ?? [])
     .map((d) => toCollectionJson(d.id, d.data()))
     .sort((a, b) => a.sortOrder - b.sortOrder || (b.createdAt ?? 0) - (a.createdAt ?? 0));
 

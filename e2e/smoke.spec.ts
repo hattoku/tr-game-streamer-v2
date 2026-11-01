@@ -1,5 +1,5 @@
 // 主要画面のスモークテスト。各ページがエラー画面にならず、見出しが出て、横スクロールが出ないことを確認する
-// （ページ一覧仕様書の主要ページ。画面幅は playwright.config.ts のプロジェクトごとに 1440・768・390px）。
+// （ページ一覧仕様書の主要ページ。まとめ（/collections*）は v2.0 で取り下げたため collections-withdrawn.spec.ts で 404 を確認する。画面幅は playwright.config.ts のプロジェクトごとに 1440・768・390px）。
 import type { Page } from '@playwright/test';
 import { expect, hasHorizontalScroll, test } from './support/fixtures';
 
@@ -10,7 +10,6 @@ const GUEST_PAGES: PageCase[] = [
   { path: '/playlists', heading: '再生リストを探す' },
   { path: '/games', heading: 'ゲームタイトルから探す' },
   { path: '/channels', heading: 'チャンネル名から探す' },
-  { path: '/collections', heading: 'まとめを探す' },
   { path: '/about', heading: '初めての方へ' },
   { path: '/terms', heading: '利用規約' },
   { path: '/privacy', heading: 'プライバシーポリシー' },
@@ -23,7 +22,6 @@ const USER_PAGES: PageCase[] = [
   { path: '/history', heading: '視聴履歴' },
   { path: '/notifications', heading: '通知' },
   { path: '/settings', heading: '設定' },
-  { path: '/collections/mine', heading: '自分のまとめ' },
   { path: '/contact/history', heading: 'お問い合わせ履歴' },
 ];
 
