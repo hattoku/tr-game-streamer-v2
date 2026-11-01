@@ -55,7 +55,7 @@
 
 ## 1. 概要・設計方針
 
-> **v2.0（2026-11-01）リブランディング**: 「認定チャンネル（運営が認めた実況者のチャンネル）の再生リストのキュレーション」への転換（プレミテ企画書 §0.0）に合わせ、掲載状態（`playlists.listingStatus` ほか、§3.2）、認定チャンネルの設定（`exploration_channels`、§3.32）、チャンネル申請（`workflows` の `channel_application`、§3.15）、判定の言葉の表（`app_settings/listing_rules`、§3.28）を追加した。まとめ（`collections`・`saved_collections`）は機能を取り下げ、データは残す（§3.14）。
+> **v2.0（2026-11-01）リブランディング**: 「掲載チャンネル（実況者本人・公式のチャンネル）の再生リストを、みんなで見て評価する形」への転換（プレミテ企画書 §0.0）に合わせ、掲載状態（`playlists.listingStatus` ほか、§3.2）、掲載チャンネルの設定（`exploration_channels`、§3.32）、チャンネル申請（`workflows` の `channel_application`、§3.15）、判定の言葉の表（`app_settings/listing_rules`、§3.28）を追加した。まとめ（`collections`・`saved_collections`）は機能を取り下げ、データは残す（§3.14）。
 > 各項目に実装段階（段階3: 掲載状態と移行／段階4: 巡回・自動判定／段階6: 申請）を添える。段階の実装までは、そのフィールドは存在しない。
 
 ### 1.1 データベース概要
@@ -117,7 +117,7 @@ Firestoreはテーブル結合（JOIN）ができないため、一覧表示や�
 | 28 | `app_settings` | アプリ全体の設定値（閾値など） | モニタリング仕様書 |
 | 29 | `new_title_candidates` | 新作タイトル検知候補 | AI運営者 コンテンツ収集仕様書 |
 | 30 | `notifications` | ユーザー向けサイト内通知（ベルアイコン・通知一覧） | ユーザー通知機能仕様書 |
-| 31 | `exploration_channels` | 認定チャンネル（v2.0。旧称: 探索対象チャンネル） | AI運営者コンテンツ収集仕様書 §3.1・§10.2 |
+| 31 | `exploration_channels` | 掲載チャンネル（v2.0。旧称: 探索対象チャンネル） | AI運営者コンテンツ収集仕様書 §3.1・§10.2 |
 
 ---
 
@@ -213,13 +213,13 @@ Firestoreはテーブル結合（JOIN）ができないため、一覧表示や�
 | `referenceUrl` | string | ✅ | YouTube再生リストの元URL |
 | `lastFetchedAt` | Timestamp? | — | 動画更新バッチによる最終更新日時 |
 | `youtubeItemCount` | number? | — | 動画更新バッチが前回確認した YouTube 側の動画数（`contentDetails.itemCount`）。これと違うときだけ動画一覧を取り直す（YouTube定期取得仕様書 §7）。登録時にも保存する。未記録なら次の回に取り直す |
-| `listingStatus` | string | ✅（段階3〜） | 掲載状態（v2.0、コンテンツ収集機能仕様書 §10.4）。`"listed"`（掲載中）／`"unconfirmed"`（確認待ち）／`"non_game"`（ゲーム実況ではない）／`"excluded"`（シリーズとして扱わない）／`"too_short"`（動画10本未満）／`"channel_off"`（チャンネルの認定を外した・掲載を止めた）。**検索面に出すのは `isPublic == true` かつ `listed` だけ**。既存データは移行で `listed` または `channel_off`（§10.9） |
+| `listingStatus` | string | ✅（段階3〜） | 掲載状態（v2.0、コンテンツ収集機能仕様書 §10.4）。`"listed"`（掲載中）／`"unconfirmed"`（確認待ち）／`"non_game"`（ゲーム実況ではない）／`"excluded"`（シリーズとして扱わない）／`"too_short"`（動画10本未満）／`"channel_off"`（チャンネルの掲載から外した・掲載を止めた）。**検索面に出すのは `isPublic == true` かつ `listed` だけ**。既存データは移行で `listed` または `channel_off`（§10.9） |
 | `listingReason` | string? | — | 判定の理由（v2.0）。当たった言葉（例 `word:雑談`）、`too_short`、`channel_excluded`、`opt_out`、`admin` など |
 | `listingSetBy` | string | ✅（段階3〜） | 掲載状態を決めた者（v2.0）。`"auto"`（巡回の判定）／`"admin"`（管理者）。`admin` は自動の判定し直しで上書きしない |
 | `listingSetAt` | Timestamp | ✅（段階3〜） | 同上の日時（v2.0） |
-| `previousListingStatus` | string? | — | `channel_off` にする前の掲載状態（v2.0）。チャンネルを認定し直したときに戻す。`channel_off` 以外では null |
-| `source` | string? | — | 入った経路（v2.0）。`"channel_sweep"`（認定チャンネルの巡回）／`"user_proposal"`（一般ユーザーの提案）／`"admin"`（管理者の直接登録）／`"collection_candidate"`（v2.0 より前の収集候補の承認）。移行で分かる範囲を付ける |
-| `explorationChannelId` | string? | — | 所属する認定チャンネル（`exploration_channels` のドキュメントID、v2.0） |
+| `previousListingStatus` | string? | — | `channel_off` にする前の掲載状態（v2.0）。チャンネルを掲載し直したときに戻す。`channel_off` 以外では null |
+| `source` | string? | — | 入った経路（v2.0）。`"channel_sweep"`（掲載チャンネルの巡回）／`"user_proposal"`（一般ユーザーの提案）／`"admin"`（管理者の直接登録）／`"collection_candidate"`（v2.0 より前の収集候補の承認）。移行で分かる範囲を付ける |
+| `explorationChannelId` | string? | — | 所属する掲載チャンネル（`exploration_channels` のドキュメントID、v2.0） |
 | `fullRefetchedAt` | Timestamp? | — | 動画一覧を全件取り直した最後の日時（v2.0、段階4）。30日を超えないように取り直す（YouTube定期取得仕様書 §8.4、YouTube API 規約 III.E.4） |
 
 > **v2.0 の注記**: 掲載していない再生リスト（`listed` 以外）は、`videos` を持たないことがある（動画一覧は `listed` になったとき、またはマイリスト登録者がいるときに取る。コンテンツ収集機能仕様書 §10.3・§10.7）。`games.playlistCount`・`channels.playlistCount` などの件数は `listed` だけを数える。ゲーム未設定（`gameId` が null）は PR #14（v1.28）の定義に従い、掲載の妨げにしない。
@@ -527,8 +527,8 @@ YouTubeチャンネルの情報。
 | 種別 | フィールド |
 |------|-----------|
 | `playlist_register` | `playlistUrl`・`youtubePlaylistId`・`title`・`thumbnailUrl`・`itemCount`・`channelId`・`channelName`・`channelIconUrl`（提案時点の YouTube の情報）・`gameId`・`gameName`（新しいゲームタイトルとして提案した場合はどちらも null で、`newGameTitle`・`newGameNote`（null 可）を持つ）。承認時に `registeredPlaylistId`、ゲームタイトルを差し替えて承認した場合は `approvedGameId`・`approvedGameName` を追記。v1.23: 新しいゲームタイトルの場合は `newGamePlatforms`（string[]、任意）と `newGameRakuten`（楽天ブックスの候補から選んだ場合の `itemUrl`・`title`（元の商品名）・`imageUrl`・`hardware`・`booksGenreId`、それ以外は null）。却下時に `rejectReasonCode`（定型の見送り理由、管理 審査ワークフロー仕様書 §14.4） |
-| `playlist_register`（v2.0 の追記） | 提案できるのは認定チャンネル（`exploration_channels.status == active`）の再生リストだけ（ページ 再生リストを追加する 仕様書 §10）。ゲームタイトルは任意: ゲームが分からない提案は `gameId`・`newGameTitle` がどちらも null で `noGame: true` を持つ（承認ではゲーム未設定で登録できる）。既に `playlists` にあるが掲載していない再生リスト（`listed` 以外）の掲載の提案は `existingListingStatus`（提案時点の掲載状態）を持ち、承認で `listed`（`listingSetBy: admin`）にする |
-| `channel_application`（v2.0・段階6） | `channelUrl`（入力されたURL・@ハンドル）・`youtubeChannelId`・`channelTitle`・`channelIconUrl`（申請時点の YouTube の情報）・`applicantType`（`"creator"`＝本人・事務所／`"viewer"`＝視聴者の推薦。自己申告）・`reason`（任意、200文字まで）。承認時に `explorationChannelId`（認定した `exploration_channels` のID）を追記。却下時に `rejectReasonCode`（審査ワークフロー仕様書 §15.4）。同じチャンネルの審査中の申請がある場合のまとめ方は実装時に決める（案: 新しいワークフローを作らず `supporterUserIds` に申請者を足す） |
+| `playlist_register`（v2.0 の追記） | 提案できるのは掲載チャンネル（`exploration_channels.status == active`）の再生リストだけ（ページ 再生リストを追加する 仕様書 §10）。ゲームタイトルは任意: ゲームが分からない提案は `gameId`・`newGameTitle` がどちらも null で `noGame: true` を持つ（承認ではゲーム未設定で登録できる）。既に `playlists` にあるが掲載していない再生リスト（`listed` 以外）の掲載の提案は `existingListingStatus`（提案時点の掲載状態）を持ち、承認で `listed`（`listingSetBy: admin`）にする |
+| `channel_application`（v2.0・段階6） | `channelUrl`（入力されたURL・@ハンドル）・`youtubeChannelId`・`channelTitle`・`channelIconUrl`（申請時点の YouTube の情報）・`applicantType`（`"creator"`＝本人・事務所／`"viewer"`＝視聴者の推薦。自己申告）・`reason`（任意、200文字まで）。承認時に `explorationChannelId`（掲載した `exploration_channels` のID）を追記。却下時に `rejectReasonCode`（審査ワークフロー仕様書 §15.4）。同じチャンネルの審査中の申請がある場合のまとめ方は実装時に決める（案: 新しいワークフローを作らず `supporterUserIds` に申請者を足す） |
 | `game_title_register` | `playlistUrl`・`gameTitle`・`note`（null 可）。承認時に `createdGameId`（登録したゲームタイトルのID）を追記。v1.22 の改訂（同日）以降は新規作成しない（新しいゲームタイトルは `playlist_register` の `newGameTitle` で提案する） |
 
 **`editHistory` 要素の構造**（v1.22 時点では再生リスト登録提案のゲームタイトル差し替えのみ）: `editedAt`（Timestamp）・`operatorId`・`field`（`"gameId"`）・`from`・`to`
@@ -921,14 +921,14 @@ AI運営者（審査AI）の設定。プラットフォーム共通で1体のみ
 
 コンテンツ収集の探索対象チャンネル（AI運営者 コンテンツ収集機能仕様書 §3.1）。書き込みは API Route（Admin SDK）のみ。
 
-> **v2.0**: 「認定チャンネル」の一覧として使う（コンテンツ収集機能仕様書 §10.2）。`status: active` が認定済み。`opted_out`（掲載停止）と、チャンネルごとの設定・巡回の記録を追加した。
+> **v2.0**: 「掲載チャンネル」の一覧として使う（コンテンツ収集機能仕様書 §10.2）。`status: active` が登録済み。`opted_out`（掲載停止）と、チャンネルごとの設定・巡回の記録を追加した。
 
 **パス**: `exploration_channels/{docId}`（自動ID）
 
 | フィールド | 型 | 必須 | 説明 |
 |-----------|-----|:---:|------|
 | `name` | string | ✅ | 登録時の名前（wiki の表記など） |
-| `status` | string | ✅ | `"unresolved"` / `"pending_confirm"` / `"active"`（認定済み） / `"excluded"`（認定しない・外した） / `"opted_out"`（実況者・事務所の申し出で掲載停止、v2.0） |
+| `status` | string | ✅ | `"unresolved"` / `"pending_confirm"` / `"active"`（登録済み） / `"excluded"`（掲載しない・外した） / `"opted_out"`（実況者・事務所の申し出で掲載停止、v2.0） |
 | `youtubeChannelId` | string? | — | 確定したYouTubeチャンネルID（`active` のみ） |
 | `channelTitle` | string? | — | 確定したチャンネル名 |
 | `channelIconUrl` | string? | — | 確定したチャンネルのアイコンURL |
@@ -939,11 +939,11 @@ AI運営者（審査AI）の設定。プラットフォーム共通で1体のみ
 | `lastFoundCount` | number? | — | 前回の探索で新しく保存した候補数 |
 | `publishMode` | string | ✅（段階4〜） | 掲載方法（v2.0）。`"confirm"`（確認してから掲載、**既定**）／`"auto"`（自動で掲載） |
 | `featuredOrder` | number? | — | 「人気のチャンネル」の仮の表示順（v2.0・段階5。小さいほど先。null は並べない）。人気の決め方が決まるまで運営が手で付ける |
-| `authorizedVia` | string? | — | 認定の入口（v2.0）。`"admin"`（運営の直接登録）／`"creator_application"`（本人・事務所の申請）／`"viewer_recommendation"`（視聴者の推薦）／`"migration"`（段階3の移行） |
-| `applicationWorkflowId` | string? | — | 申請から認定した場合のワークフローID（v2.0・段階6） |
-| `authorizedAt` | Timestamp? | — | 認定した日時（v2.0） |
+| `authorizedVia` | string? | — | 掲載の入口（v2.0）。`"admin"`（運営の直接登録）／`"creator_application"`（本人・事務所の申請）／`"viewer_recommendation"`（視聴者の推薦）／`"migration"`（段階3の移行） |
+| `applicationWorkflowId` | string? | — | 申請から掲載した場合のワークフローID（v2.0・段階6） |
+| `authorizedAt` | Timestamp? | — | 掲載した日時（v2.0） |
 | `optedOutAt` | Timestamp? | — | 掲載を止めた日時（v2.0。`opted_out` のみ） |
-| `statusNote` | string? | — | 認定を外した・掲載を止めた理由のメモ（運営内部向け、v2.0。お問い合わせのIDなど） |
+| `statusNote` | string? | — | 掲載から外した・掲載を止めた理由のメモ（運営内部向け、v2.0。お問い合わせのIDなど） |
 | `lastSweptAt` | Timestamp? | — | 最終巡回日時（v2.0・段階4） |
 | `lastSweepNewCount` | number? | — | 前回の巡回で新しく取り込んだ再生リスト数（v2.0・段階4） |
 | `createdAt` | Timestamp | ✅ | 登録日時 |
@@ -1100,7 +1100,7 @@ ai_operators ──── (1) users
 | v1.29 | 2026-10-31 | 3.2 `playlists` に `rejectedGameIds` を追加、3.33 `playlist_game_changes` を追加（ゲーム未設定の自動照合・手動の付け外しの履歴） |
 | v1.28 | 2026-10-31 | 3.2 `playlists` に `gameHint`・`gameSetBy`・`gameSetAt` を追加し、`gameId` が null ＝ ゲーム未設定と明記（収集画面の「ゲーム未設定で登録」。収集候補レビューUI仕様書 v2.4 §3.9） |
 | v1.26 | 2026-11-01 | 新着動画取得の差分化。§3.2 `playlists` に `youtubeItemCount` を追加。§3.21 `batch_logs` に `refetchedCount`・`deferredCount`・`quotaExceeded`・`newVideoDetails`・`notFoundPlaylists`・`errorPlaylists` を追加 |
-| v2.0 | 2026-11-01 | リブランディング（段階1の仕様書書き換え）。§3.2 `playlists` に掲載状態（`listingStatus`・`listingReason`・`listingSetBy`・`listingSetAt`・`previousListingStatus`）と `source`・`explorationChannelId`・`fullRefetchedAt` を追加。§3.32 `exploration_channels` を認定チャンネルとして位置づけ、`opted_out`・`publishMode`・`featuredOrder`・`authorizedVia` ほかを追加。§3.15 `workflows` に `channel_application` を追加し、`playlist_register` のゲーム任意・掲載していない再生リストの掲載の提案を追記。§3.28 に `listing_rules` を追加。§3.14 まとめの取り下げ（データは残す）を注記。§3.4 登録者数の保存期間（YouTube API 規約）。§5 にインデックスを追加。未マージの PR #14（v1.26〜v1.29 を使用）と版番号が重ならないよう v2.0 とした |
+| v2.0 | 2026-11-01 | リブランディング（段階1の仕様書書き換え）。§3.2 `playlists` に掲載状態（`listingStatus`・`listingReason`・`listingSetBy`・`listingSetAt`・`previousListingStatus`）と `source`・`explorationChannelId`・`fullRefetchedAt` を追加。§3.32 `exploration_channels` を掲載チャンネルとして位置づけ、`opted_out`・`publishMode`・`featuredOrder`・`authorizedVia` ほかを追加。§3.15 `workflows` に `channel_application` を追加し、`playlist_register` のゲーム任意・掲載していない再生リストの掲載の提案を追記。§3.28 に `listing_rules` を追加。§3.14 まとめの取り下げ（データは残す）を注記。§3.4 登録者数の保存期間（YouTube API 規約）。§5 にインデックスを追加。未マージの PR #14（v1.26〜v1.29 を使用）と版番号が重ならないよう v2.0 とした |
 | v2.1 | 2026-11-01 | main の v2.0 に、PR #14 の v1.26〜v1.29（`collection_candidates` の楽天検索結果、`playlists` の `gameHint`・`gameSetBy`・`gameSetAt`・`rejectedGameIds`、`playlist_game_changes`）を統合。版番号の衝突（v1.26）は PR #14 側を v1.26b 相当として扱う |
 | v2.3 | 2026-11-01 | `gameSetBy` に `user`、`playlist_game_changes.by` に `user` を追加、3.34 `game_link_counters` を追加（一般ユーザーのゲーム登録と1日の上限） |
 | v2.2 | 2026-11-01 | 段階3の実装。§3.2 `playlists` の掲載状態（`listingStatus` ほか）と `source`・`explorationChannelId` を実装。管理者の登録・承認は `listed`（`listingReason: admin`）で作り、既存データは移行スクリプトで `listed`（`listingReason: migration`）または `channel_off` にする。`games.playlistCount`・`channels.playlistCount`・`tags.usagePlaylistCount` は掲載中の再生リストだけを数える（コンテンツ収集機能仕様書 §10.9）。フィールドの追加・変更はなし |

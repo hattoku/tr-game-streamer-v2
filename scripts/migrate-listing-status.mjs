@@ -5,9 +5,9 @@
 //   1. 既存の再生リスト（listingStatus が無いもの）の所属チャンネルごとに、掲載する／非表示にするを決めて書き込む。
 //      掲載するチャンネル → listed（listingSetBy: admin）。--off に挙げたチャンネル → channel_off（消さない。
 //      previousListingStatus に listed を残す）。
-//   2. 掲載するチャンネルを認定チャンネル（exploration_channels, status: active）にそろえる。
+//   2. 掲載するチャンネルを掲載チャンネル（exploration_channels, status: active）にそろえる。
 //      既にある active はそのまま（publishMode / authorizedVia が無ければ足す）。名前が同じ未特定のものは active に上げる。
-//      無ければ authorizedVia: migration で作る。--off のチャンネルに active の認定があれば excluded にする。
+//      無ければ authorizedVia: migration で作る。--off のチャンネルに active の掲載チャンネルがあれば excluded にする。
 //   3. 件数を数え直す（games.playlistCount・channels.playlistCount・tags.usagePlaylistCount は掲載中だけ数える）。
 //
 // 使い方（既定は確認だけ。書き込まない）:
@@ -70,7 +70,7 @@ async function main() {
     exploSnap.docs.filter((d) => !d.data().youtubeChannelId && ['unresolved', 'pending_confirm'].includes(d.data().status)).map((d) => [d.data().name, d]),
   );
 
-  console.log('\nチャンネル\t再生リスト\t未移行\t判定\t認定チャンネル');
+  console.log('\nチャンネル\t再生リスト\t未移行\t判定\t掲載チャンネル');
   const now = new Date();
   const exploOps = [];
   const exploIdByChannel = new Map();
@@ -104,7 +104,7 @@ async function main() {
       } else {
         const ref = db.collection('exploration_channels').doc();
         exploIdByChannel.set(channelId, ref.id);
-        note = '新しく認定(migration)';
+        note = '新しく掲載(migration)';
         exploOps.push((b) =>
           b.set(ref, {
             name: c.name, status: 'active', youtubeChannelId: channelId, channelTitle: c.name, channelIconUrl: null, subscriberCount: null,
@@ -114,10 +114,10 @@ async function main() {
         );
       }
     } else if (existing && existing.data().status === 'active') {
-      note = '認定を外す(excluded)';
+      note = '掲載から外す(excluded)';
       exploOps.push((b) => b.update(existing.ref, { status: 'excluded', statusNote: '段階3の移行で基準に合わないと判断', updatedAt: now }));
     } else {
-      note = existing ? `既存(${existing.data().status})のまま` : '認定なし';
+      note = existing ? `既存(${existing.data().status})のまま` : '掲載チャンネルなし';
     }
     console.log(`${c.name}(${channelId})\t${c.total}\t${c.pending}\t${listed ? 'listed' : 'channel_off'}\t${note}`);
   }
@@ -181,7 +181,7 @@ async function main() {
 
   const listedCount = [...finalStatus.values()].filter((s) => s === 'listed').length;
   console.log(`\n再生リスト: 全${playlistsSnap.size}件のうち ${playlistOps.length}件を移行（移行後 listed ${listedCount}件・channel_off ${finalStatus.size - listedCount}件）`);
-  console.log(`認定チャンネル: ${exploOps.length}件を更新・作成`);
+  console.log(`掲載チャンネル: ${exploOps.length}件を更新・作成`);
   console.log(`件数の補正: ${countOps.length}件`);
   diffs.forEach((x) => console.log(`  ${x}`));
 
