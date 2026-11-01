@@ -12,7 +12,7 @@
  */
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { collection, getDocs, orderBy, limit, query, where } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
@@ -23,9 +23,23 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 import { AlertIcon, CheckIcon } from '@/components/ui/icons';
 
+interface PlaylistRef {
+  playlistId: string;
+  title: string;
+}
+
 interface BatchLogSummary {
   status: string;
   executedAt: number;
+  /** 以下は差分取得（共通 YouTube定期取得仕様書 §7）以降のログにだけある */
+  processedCount?: number;
+  refetchedCount?: number;
+  newVideoCount?: number;
+  deferredCount?: number;
+  quotaExceeded?: boolean;
+  newVideoDetails?: Array<PlaylistRef & { newVideos: number }>;
+  notFoundPlaylists?: PlaylistRef[];
+  errorPlaylists?: Array<PlaylistRef & { message: string }>;
 }
 
 export default function AdminDashboardPage() {
@@ -39,6 +53,8 @@ export default function AdminDashboardPage() {
 
   const [refreshBusy, setRefreshBusy] = useState(false);
   const [refreshResult, setRefreshResult] = useState<string | null>(null);
+  // 画面を開いたときの読み込みが、再取得の後の読み込みより遅れて返ってきても古い結果で上書きしないための通し番号
+  const lastBatchRequestRef = useRef(0);
 
   async function loadPendingReportCount() {
     const snap = await getDocs(
@@ -70,13 +86,27 @@ export default function AdminDashboardPage() {
   async function loadLastBatch() {
     // functionNameでの絞り込みは行わず直近1件のみ見る（orderByと別フィールドのequalityを
     // 組み合わせると複合インデックスが必要になるため。現状batch_logsへの書き込みはvideo_updateのみ）
+    const requestId = ++lastBatchRequestRef.current;
     const snap = await getDocs(query(collection(db, 'batch_logs'), orderBy('executedAt', 'desc'), limit(1)));
+    if (requestId !== lastBatchRequestRef.current) return;
     const doc = snap.docs[0];
-    setLastBatch(
-      doc
-        ? { status: (doc.data().status as string) ?? 'unknown', executedAt: doc.data().executedAt?.toMillis?.() ?? 0 }
-        : null,
-    );
+    if (!doc) {
+      setLastBatch(null);
+      return;
+    }
+    const d = doc.data();
+    setLastBatch({
+      status: (d.status as string) ?? 'unknown',
+      executedAt: d.executedAt?.toMillis?.() ?? 0,
+      processedCount: d.processedCount,
+      refetchedCount: d.refetchedCount,
+      newVideoCount: d.newVideoCount,
+      deferredCount: d.deferredCount,
+      quotaExceeded: d.quotaExceeded,
+      newVideoDetails: d.newVideoDetails,
+      notFoundPlaylists: d.notFoundPlaylists,
+      errorPlaylists: d.errorPlaylists,
+    });
   }
 
   useEffect(() => {
@@ -98,9 +128,7 @@ export default function AdminDashboardPage() {
         toast({ type: 'error', message: '再取得に失敗しました' });
         return;
       }
-      setRefreshResult(
-        `確認済み ${body.playlistsChecked} 件中 ${body.playlistsWithNewVideos} 件に新着（動画 ${body.totalNewVideos} 本、通知 ${body.notificationsCreated} 件生成）`,
-      );
+      setRefreshResult(`完了しました（通知 ${body.notificationsCreated} 件生成、消費 ${body.quotaConsumed} ユニット）`);
       toast({ type: 'success', message: '新着動画の再取得が完了しました' });
       loadLastBatch();
     } catch {
@@ -169,7 +197,7 @@ export default function AdminDashboardPage() {
         <Card className="flex flex-col gap-3">
           <p className="text-lg font-medium text-text-primary">新着動画の再取得</p>
           <p className="text-base text-text-secondary">
-            マイリスト登録のある公開再生リストを YouTube から再取得し、新着動画があれば登録ユーザーに通知を生成します。
+            公開中の再生リストの動画数を YouTube で確認し、変わったものだけ動画一覧を取り直します。新着があればマイリスト登録者に通知します。
           </p>
           <div className="flex flex-wrap items-center gap-3">
             <Button variant="secondary" onClick={handleRefresh} loading={refreshBusy}>
@@ -190,8 +218,78 @@ export default function AdminDashboardPage() {
               </span>
             )}
           </div>
+          {lastBatch && lastBatch.refetchedCount !== undefined && (
+            <LastBatchDetails batch={lastBatch} />
+          )}
         </Card>
       </div>
+    </div>
+  );
+}
+
+/** 直近の新着取得で何をしたか（管理_ダッシュボード仕様書 §9.2 v1.9） */
+function LastBatchDetails({ batch }: { batch: BatchLogSummary }) {
+  const details = batch.newVideoDetails ?? [];
+  const notFound = batch.notFoundPlaylists ?? [];
+  const errors = batch.errorPlaylists ?? [];
+  return (
+    <div className="flex flex-col gap-3 text-md" data-testid="refresh-last-batch">
+      <p className="text-text-secondary">
+        公開 {batch.processedCount ?? 0} 件を確認、動画数が変わった {batch.refetchedCount ?? 0} 件を取り直し、新着 {batch.newVideoCount ?? 0} 本
+        {!!batch.deferredCount && `。後回し ${batch.deferredCount} 件（次回に取り直し）`}
+      </p>
+      {batch.quotaExceeded && (
+        <p className="inline-flex items-center gap-1 text-text-secondary">
+          <AlertIcon size={13} className="text-toast-error" />
+          YouTube API の1日のクォータが尽きたため途中で止めました。残りは次回に確認します
+        </p>
+      )}
+      <div className="flex flex-col gap-1">
+        <p className="font-medium text-text-primary">新着のあった再生リスト</p>
+        {details.length === 0 ? (
+          <p className="text-text-muted">新着はありません</p>
+        ) : (
+          <ul className="flex flex-col gap-1" aria-label="新着のあった再生リスト">
+            {details.map((d) => (
+              <li key={d.playlistId} className="flex items-baseline justify-between gap-3">
+                <Link href={`/playlists/${d.playlistId}`} className="min-w-0 truncate text-text-secondary underline-offset-4 hover:text-text-primary hover:underline">
+                  {d.title}
+                </Link>
+                <span className="shrink-0 font-medium text-text-primary">+{d.newVideos}本</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+      {notFound.length > 0 && (
+        <div className="flex flex-col gap-1">
+          <p className="font-medium text-text-primary">YouTubeで見つからない再生リスト（削除・非公開の可能性）</p>
+          <ul className="flex flex-col gap-1" aria-label="YouTubeで見つからない再生リスト">
+            {notFound.map((p) => (
+              <li key={p.playlistId} className="min-w-0 truncate">
+                <Link href={`/playlists/${p.playlistId}`} className="text-text-secondary underline-offset-4 hover:text-text-primary hover:underline">
+                  {p.title}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {errors.length > 0 && (
+        <div className="flex flex-col gap-1">
+          <p className="inline-flex items-center gap-1 font-medium text-text-primary">
+            <AlertIcon size={13} className="text-toast-error" />
+            確認・取り直しに失敗した再生リスト
+          </p>
+          <ul className="flex flex-col gap-1" aria-label="確認・取り直しに失敗した再生リスト">
+            {errors.map((p) => (
+              <li key={p.playlistId} className="min-w-0 break-words text-text-secondary">
+                {p.title}（{p.message}）
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

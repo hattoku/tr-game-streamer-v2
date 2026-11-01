@@ -1,6 +1,6 @@
 # プレミテ Firestore データモデル設計書
 
-**バージョン**: v1.25  
+**バージョン**: v1.26  
 **作成日**: 2026年3月30日（更新）  
 **対象**: 開発チーム  
 **関連ドキュメント**: プレミテ企画書 / プレミテ_技術スタック仕様書 / 各機能仕様書
@@ -205,6 +205,7 @@ Firestoreはテーブル結合（JOIN）ができないため、一覧表示や�
 | `playlistTagsFixed` | string[] | ✅ | 固定タグIDリスト（ユーザーが外せないもの） |
 | `referenceUrl` | string | ✅ | YouTube再生リストの元URL |
 | `lastFetchedAt` | Timestamp? | — | 動画更新バッチによる最終更新日時 |
+| `youtubeItemCount` | number? | — | 動画更新バッチが前回確認した YouTube 側の動画数（`contentDetails.itemCount`）。これと違うときだけ動画一覧を取り直す（YouTube定期取得仕様書 §7）。登録時にも保存する。未記録なら次の回に取り直す |
 
 ---
 
@@ -676,6 +677,12 @@ YouTube定期取得バッチの実行結果ログ。
 | `skipReason` | string? | — | スキップ理由 |
 | `errorMessage` | string? | — | エラー内容 |
 | `quotaConsumed` | number | ✅ | 消費クォータ |
+| `refetchedCount` | number? | — | 動画数が変わって動画一覧を取り直した再生リストの数（`video_update`。YouTube定期取得仕様書 §7） |
+| `deferredCount` | number? | — | 1回あたりのクォータ上限で後回しにした再生リストの数 |
+| `newVideoDetails` | map[]? | — | 新着のあった再生リスト `{ playlistId, title, newVideos }`（新着の多い順、最大100件） |
+| `notFoundPlaylists` | map[]? | — | YouTube から返らない・公開でない再生リスト `{ playlistId, title }`（最大100件） |
+| `quotaExceeded` | boolean? | — | YouTube の1日のクォータが途中で尽きて中断した（このとき `status` は `"error"`） |
+| `errorPlaylists` | map[]? | — | 動画数の確認または取り直しに失敗した再生リスト `{ playlistId, title, message }`（`message` は「動画数の確認に失敗: …」「取り直しに失敗: …」。最大100件） |
 
 ---
 
@@ -1017,3 +1024,4 @@ ai_operators ──── (1) users
 | v1.23 | 2026-10-25 | 再生リスト提案フローの作り込み。`workflows` の本人による直接読み取りを通報（`review_report`）に限定（提案は運営メモ・内部メモを含むため提案履歴 API 経由）。`games.aliases`（別名）、`workflows.proposalData` に `newGamePlatforms`・`newGameRakuten`・`rejectReasonCode`、`notifications` に `review_result` 種別と `workflowId` を追加 |
 | v1.24 | 2026-10-27 | お問い合わせの画像添付。§3.17 `inquiries` に `attachments`・`hasAttachments`・`resolvedAt`、`messages` に `attachments` と添付画像の構造を追加。§3.31 `inquiry_upload_counters` を新設。§5.2 にインデックス、§6 に Storage のルール方針を追加 |
 | v1.25 | 2026-10-28 | フェーズ7-5（友人テスト前のコンテンツ充実）。コンテンツ収集をチャンネル起点に変更したことに合わせ、3.23 `collection_candidates` をタイトル・チャンネル起点のスキーマに改訂（ドキュメントIDを再生リストIDに、ゲーム推定・タグ候補を追加、ジャンル起点・AI判定のフィールドを削除）、3.24 `collection_batch_logs`・3.25 `collection_quota_logs` を改訂、3.32 `exploration_channels` を追加 |
+| v1.26 | 2026-11-01 | 新着動画取得の差分化。§3.2 `playlists` に `youtubeItemCount` を追加。§3.21 `batch_logs` に `refetchedCount`・`deferredCount`・`quotaExceeded`・`newVideoDetails`・`notFoundPlaylists`・`errorPlaylists` を追加 |
