@@ -15,12 +15,18 @@ test.describe.configure({ mode: 'serial' });
 
 async function runRefresh(page: Page) {
   await page.goto('/admin');
+  await expect(page.getByText(/最終実行:|実行履歴はまだありません/)).toBeVisible();
   const response = page.waitForResponse((r) => r.url().includes('/api/admin/refresh-new-videos'), { timeout: 120_000 });
   await page.getByRole('button', { name: '新着動画を再取得' }).click();
   const res = await response;
   expect(res.status()).toBe(200);
   await expect(page.getByText(/^完了しました/)).toBeVisible();
-  return res.json();
+  const body = await res.json();
+  // 画面の「直近の実行」がこの回の結果に置き換わるのを待つ
+  await expect(page.getByTestId('refresh-last-batch')).toContainText(
+    `公開 ${body.playlistsChecked} 件を確認、動画数が変わった ${body.playlistsRefetched} 件を取り直し、新着 ${body.totalNewVideos} 本`,
+  );
+  return body;
 }
 
 async function latestBatchLog(): Promise<DocumentData> {

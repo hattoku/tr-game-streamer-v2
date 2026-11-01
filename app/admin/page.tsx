@@ -12,7 +12,7 @@
  */
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { collection, getDocs, orderBy, limit, query, where } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
@@ -53,6 +53,8 @@ export default function AdminDashboardPage() {
 
   const [refreshBusy, setRefreshBusy] = useState(false);
   const [refreshResult, setRefreshResult] = useState<string | null>(null);
+  // 画面を開いたときの読み込みが、再取得の後の読み込みより遅れて返ってきても古い結果で上書きしないための通し番号
+  const lastBatchRequestRef = useRef(0);
 
   async function loadPendingReportCount() {
     const snap = await getDocs(
@@ -84,7 +86,9 @@ export default function AdminDashboardPage() {
   async function loadLastBatch() {
     // functionNameでの絞り込みは行わず直近1件のみ見る（orderByと別フィールドのequalityを
     // 組み合わせると複合インデックスが必要になるため。現状batch_logsへの書き込みはvideo_updateのみ）
+    const requestId = ++lastBatchRequestRef.current;
     const snap = await getDocs(query(collection(db, 'batch_logs'), orderBy('executedAt', 'desc'), limit(1)));
+    if (requestId !== lastBatchRequestRef.current) return;
     const doc = snap.docs[0];
     if (!doc) {
       setLastBatch(null);
