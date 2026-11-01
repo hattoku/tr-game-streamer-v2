@@ -85,13 +85,57 @@ export async function exploreChannels(options: {
       summary.processedChannels++;
       summary.playlistsFetched += playlists.length;
 
+      // 除外語に当たったものは捨てずに、却下済み（自動）として残す。次の探索で同じ判定をやり直さず、
+      // 却下の一覧で理由を見て「未処理に戻す」こともできる。動画数不足・非公開は変わりうるので残さない（§3.3）
+      const autoExcluded = new Map<string, string>();
       const passed = playlists.filter((p) => {
-        if (p.itemCount < MIN_VIDEO_COUNT || !p.isPublic || findExcludeWord(p.title)) {
+        if (p.itemCount < MIN_VIDEO_COUNT || !p.isPublic) {
           summary.skippedByFilter++;
           return false;
         }
-        return true;
+        const word = findExcludeWord(p.title);
+        if (word) {
+          autoExcluded.set(p.youtubePlaylistId, word);
+          summary.skippedByFilter++;
+        }
+        return !word;
       });
+      const excludedItems = playlists.filter((p) => autoExcluded.has(p.youtubePlaylistId));
+      const excludedKnown = await existingIds([
+        ...excludedItems.map((p) => adminDb.collection('playlists').doc(p.youtubePlaylistId)),
+        ...excludedItems.map((p) => adminDb.collection('collection_candidates').doc(p.youtubePlaylistId)),
+      ]);
+      for (let i = 0; i < excludedItems.length; i += 400) {
+        const batch = adminDb.batch();
+        let count = 0;
+        for (const p of excludedItems.slice(i, i + 400)) {
+          if (excludedKnown.has(p.youtubePlaylistId)) continue;
+          batch.set(adminDb.collection('collection_candidates').doc(p.youtubePlaylistId), {
+            playlistId: p.youtubePlaylistId,
+            playlistTitle: p.title,
+            channelId: p.channelId,
+            channelTitle: p.channelTitle,
+            explorationChannelId: channelDoc.id,
+            thumbnailUrl: p.thumbnailUrl,
+            videoCount: p.itemCount,
+            videoCountCheckedAt: executedAt,
+            playlistPublishedAt: p.publishedAt ? new Date(p.publishedAt) : null,
+            guessedGameId: null,
+            guessedGameTitle: null,
+            gameQuery: extractGameQuery(p.title),
+            titleTagIds: [],
+            source: 'channel',
+            status: 'rejected',
+            collectedAt: executedAt,
+            reviewedAt: executedAt,
+            reviewedBy: 'auto',
+            reviewComment: `auto_exclude:${autoExcluded.get(p.youtubePlaylistId)}`,
+            registeredPlaylistId: null,
+          });
+          count++;
+        }
+        if (count > 0) await batch.commit();
+      }
 
       const ids = passed.map((p) => p.youtubePlaylistId);
       const [registered, candidated] = await Promise.all([
@@ -117,6 +161,7 @@ export async function exploreChannels(options: {
             explorationChannelId: channelDoc.id,
             thumbnailUrl: p.thumbnailUrl,
             videoCount: p.itemCount,
+            videoCountCheckedAt: executedAt,
             playlistPublishedAt: p.publishedAt ? new Date(p.publishedAt) : null,
             guessedGameId: guessed?.id ?? null,
             guessedGameTitle: guessed?.title ?? null,
@@ -134,6 +179,17 @@ export async function exploreChannels(options: {
         await batch.commit();
       }
       summary.candidatesFound += fresh.length;
+
+      // 既に候補になっている再生リストは、動画数をこの探索の時点に合わせる（取得済みの一覧を使うのでクォータは増えない）。
+      // 承認時は YouTube から全動画を取り直すので登録内容は常に最新だが、一覧の「N本」を実態に近づけるため（レビューUI v2.2 §3.4）
+      const known = passed.filter((p) => candidated.has(p.youtubePlaylistId));
+      for (let i = 0; i < known.length; i += BATCH_LIMIT) {
+        const batch = adminDb.batch();
+        for (const p of known.slice(i, i + BATCH_LIMIT)) {
+          batch.update(adminDb.collection('collection_candidates').doc(p.youtubePlaylistId), { videoCount: p.itemCount, videoCountCheckedAt: executedAt });
+        }
+        await batch.commit();
+      }
 
       await channelDoc.ref.update({ lastExploredAt: executedAt, lastFoundCount: fresh.length, updatedAt: executedAt });
     }

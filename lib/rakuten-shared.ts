@@ -52,6 +52,8 @@ const PLATFORM_WORDS = [
 ];
 const PLATFORM_PATTERN = PLATFORM_WORDS.join('|');
 
+import { normalizeForMatch } from './exploration-rules';
+
 export function normalizeRakutenGameTitle(rakutenTitle: string): string {
   return (
     rakutenTitle
@@ -74,6 +76,29 @@ export function normalizeRakutenGameTitle(rakutenTitle: string): string {
       .replace(/\s+/g, ' ')
       .trim()
   );
+}
+
+/**
+ * 楽天ブックスの検索結果のうち、ゲーム名の商品とみなせるもの（収集候補の承認前の確認・承認時の照合で共通。
+ * 収集候補レビューUI仕様書 v2.3 §3.7）。検索結果の並び（楽天の関連度順）で、次の順に探す。
+ * 1. 版・機種・特典の表記を外した商品名がゲーム名と同じ（空白・記号・大文字小文字・全半角は無視）
+ * 2. 商品名がゲーム名で始まり、その後ろが「トリプルパック」「（カタカナ読み）」「PlayStation2 the Best」などの付け足し。
+ *    続きが数字・英字1〜2文字＋数字（RE:2）・ローマ数字のときは別の作品（デッドライジング → デッドライジング2）なので除く。ゲーム名が短い（4文字未満）ときも使わない
+ */
+export function matchRakutenItem<T extends { title: string }>(items: readonly T[], gameTitle: string): T | null {
+  const key = normalizeForMatch(gameTitle);
+  if (!key) return null;
+  const normalized = items.map((item) => ({ item, name: normalizeForMatch(normalizeRakutenGameTitle(item.title)) }));
+  const exact = normalized.find((n) => n.name === key);
+  if (exact) return exact.item;
+  if (key.length < 4) return null;
+  const prefixed = normalized.find((n) => {
+    if (!n.name.startsWith(key)) return false;
+    const rest = n.name.slice(key.length);
+    // 数字（デッドライジング2）・2文字までの英字＋数字（バイオハザード RE:2 の「re2」）・ローマ数字（ファイナルファンタジー VII）は別の作品
+    return !/^[a-z]{0,2}\d/.test(rest) && !/^(?:i{1,3}|iv|vi{0,3}|ix|x)(?![a-z])/.test(rest);
+  });
+  return prefixed?.item ?? null;
 }
 
 // 楽天ブックスのテーマ名のうち、プレミテのthemesマスタ（document/master/ゲームジャンル・テーママスタ

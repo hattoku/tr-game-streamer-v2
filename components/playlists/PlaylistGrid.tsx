@@ -38,6 +38,8 @@ export interface PlaylistSummary {
   channelIconUrl: string;
   gameId: string | null;
   gameName: string;
+  /** ゲーム未設定の再生リストが持つ未確定のゲーム名（検索の対象。v1.10）。無ければ空 */
+  gameHint: string;
   /** 登録時にゲームタイトルの`genreId`から1件セットされるジャンルID（register/route.ts参照）。TOPページ注目セクションのジャンルタブ絞り込みで使用 */
   gameGenreIds: string[];
   videoCount: number;
@@ -61,6 +63,7 @@ function toSummary(d: { id: string; data(): Record<string, unknown> }, tagsMap?:
     channelIconUrl: (data.channelIconUrl as string) ?? '',
     gameId: (data.gameId as string | null) ?? null,
     gameName: (data.gameName as string) ?? '',
+    gameHint: (data.gameHint as string | null) ?? '',
     gameGenreIds: (data.gameGenreIds as string[]) ?? [],
     videoCount: (data.videoCount as number) ?? 0,
     score: (data.score as number | null) ?? null,

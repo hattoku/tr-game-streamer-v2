@@ -24,6 +24,15 @@ export const EXCLUDE_WORDS = [
   'MV',
   '料理',
   '単発',
+  // ゲームではない企画・番組（実写・バラエティ・雑談など）。ゲームの実況でもよく使う語（検証・企画・やってみた）は入れない
+  '実写',
+  'くだらない',
+  'ドッキリ',
+  '大喜利',
+  'ラジオ',
+  '雑談',
+  '食べてみた',
+  '飲んでみた',
 ];
 
 /** タイトルの語句 → 付与するタグ名（運営者タグのみ。§3.5） */
@@ -94,7 +103,8 @@ const DECORATION_PATTERN =
   /(ゲーム)?実況(プレイ)?|プレイ動画|ゆっくり|初見|縛り(プレイ)?|ボイロ|VOICEROID|字幕(付き)?|ホラーゲーム|ゲーム|生配信|配信|最終回|完結|総集編|シリーズ|全\d+話|\d+人/gi;
 
 function stripDecoration(text: string): string {
-  return text.replace(DECORATION_PATTERN, '').replace(/^[\s・:：\-ー]+|[\s・:：\-ー]+$/g, '').trim();
+  // 先頭の「ー」は飾りだが、末尾の「ー」は長音（ホラー・ゲームなど）なので落とさない
+  return text.replace(DECORATION_PATTERN, '').replace(/^[\s・:：\-ー]+|[\s・:：\-]+$/g, '').trim();
 }
 
 /**
