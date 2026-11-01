@@ -28,10 +28,12 @@ interface UnsetPlaylist {
   thumbnailUrl: string;
   gameHint: string;
   registeredAt: number | null;
+  gameName: string;
+  gameSetAt: number | null;
 }
 
-async function fetchUnsetPlaylists(): Promise<UnsetPlaylist[]> {
-  const snap = await getDocs(query(collection(db, 'playlists'), where('gameId', '==', null)));
+async function fetchPlaylists(field: 'gameId' | 'gameSetBy', value: null | 'user'): Promise<UnsetPlaylist[]> {
+  const snap = await getDocs(query(collection(db, 'playlists'), where(field, '==', value)));
   return snap.docs
     .map((d) => {
       const data = d.data();
@@ -42,10 +44,16 @@ async function fetchUnsetPlaylists(): Promise<UnsetPlaylist[]> {
         thumbnailUrl: (data.thumbnailUrl as string) ?? '',
         gameHint: (data.gameHint as string | null) ?? '',
         registeredAt: (data.registeredAt as { toMillis(): number } | undefined)?.toMillis?.() ?? null,
+        gameName: (data.gameName as string) ?? '',
+        gameSetAt: (data.gameSetAt as { toMillis(): number } | null)?.toMillis?.() ?? null,
       };
     })
-    .sort((a, b) => (b.registeredAt ?? 0) - (a.registeredAt ?? 0));
+    .sort((a, b) => (b.gameSetAt ?? b.registeredAt ?? 0) - (a.gameSetAt ?? a.registeredAt ?? 0));
 }
+
+const fetchUnsetPlaylists = () => fetchPlaylists('gameId', null);
+/** 一般ユーザーが登録したゲーム（確認して、違えば戻す。v3.2 §6.5） */
+const fetchUserSetPlaylists = () => fetchPlaylists('gameSetBy', 'user');
 
 async function fetchGames(): Promise<GameOption[]> {
   const snap = await getDocs(collection(db, 'games'));
@@ -62,6 +70,7 @@ async function fetchGames(): Promise<GameOption[]> {
 export default function AdminUnsetPlaylistsPage() {
   const { toast } = useToast();
   const [playlists, setPlaylists] = useState<UnsetPlaylist[] | null>(null);
+  const [userSet, setUserSet] = useState<UnsetPlaylist[]>([]);
   const [games, setGames] = useState<GameOption[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [selectFor, setSelectFor] = useState<UnsetPlaylist | null>(null);
@@ -70,14 +79,30 @@ export default function AdminUnsetPlaylistsPage() {
   useEffect(() => {
     // 非同期 IIFE にして、effect 本体で同期的に setState しない形にする（react-hooks/set-state-in-effect）
     (async () => {
-      const [list, gameList] = await Promise.all([fetchUnsetPlaylists(), fetchGames()]);
+      const [list, gameList, byUser] = await Promise.all([fetchUnsetPlaylists(), fetchGames(), fetchUserSetPlaylists()]);
       setPlaylists(list);
+      setUserSet(byUser);
       setGames(gameList);
     })();
   }, []);
 
   async function reload() {
-    setPlaylists(await fetchUnsetPlaylists());
+    const [list, byUser] = await Promise.all([fetchUnsetPlaylists(), fetchUserSetPlaylists()]);
+    setPlaylists(list);
+    setUserSet(byUser);
+  }
+
+  async function revert(playlist: UnsetPlaylist) {
+    if (!window.confirm(`「${playlist.gameName}」を外して、ゲーム未設定に戻しますか？（このゲームは自動では付け直されません）`)) return;
+    setBusy(playlist.id);
+    const res = await postAdminApi('/api/admin/playlist-game', { action: 'unlink', playlistId: playlist.id });
+    setBusy(null);
+    if (res.ok) {
+      toast({ type: 'success', message: 'ゲーム未設定に戻しました' });
+      await reload();
+    } else {
+      toast({ type: 'error', message: '戻せませんでした' });
+    }
   }
 
   async function link(playlist: UnsetPlaylist, gameId: string) {
@@ -158,6 +183,30 @@ export default function AdminUnsetPlaylistsPage() {
             </li>
           ))}
         </ul>
+      )}
+
+      {userSet.length > 0 && (
+        <section className="flex flex-col gap-3" aria-label="ユーザーが登録したゲーム">
+          <h3 className="text-lg font-medium text-text-primary">ユーザーが登録したゲーム（{userSet.length}件）</h3>
+          <p className="text-md text-text-tertiary">一般ユーザーが付けたゲームです。違っていたら「戻す」で未設定に戻せます（戻したゲームは、その再生リストにはもう選べません）。</p>
+          <ul className="flex flex-col gap-2">
+            {userSet.map((p) => (
+              <li key={p.id}>
+                <Card className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <Link href={`/playlists/${p.id}`} className="block truncate text-base font-medium text-text-primary hover:underline">
+                      {p.title}
+                    </Link>
+                    <p className="text-md text-text-tertiary">ゲーム: {p.gameName} ／ 登録 {formatDateTime(p.gameSetAt)}</p>
+                  </div>
+                  <Button variant="secondary" onClick={() => revert(p)} disabled={busy !== null} aria-label={`${p.title}のゲームを外して戻す`}>
+                    戻す
+                  </Button>
+                </Card>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       <GameSelectModal

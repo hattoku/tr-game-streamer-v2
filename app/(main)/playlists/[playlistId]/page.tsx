@@ -19,6 +19,7 @@ import { ChevronLeftIcon, ChevronRightIcon, PauseIcon, PlayIcon } from '@/compon
 import { cn } from '@/components/ui/cn';
 import { ChannelCard } from '@/components/playlists/ChannelCard';
 import { GameInfoCard } from '@/components/playlists/GameInfoCard';
+import { GameRegisterCard } from '@/components/playlists/GameRegisterCard';
 import { ContainingCollectionsCard } from '@/components/collections/ContainingCollectionsCard';
 import { COLLECTIONS_ENABLED } from '@/lib/feature-flags';
 import { PlaylistInfoCard } from '@/components/playlists/PlaylistInfoCard';
@@ -215,6 +216,8 @@ export default function PlaylistDetailPage() {
   const [tags, setTags] = useState<ResolvedTag[]>([]);
   const [tagModalOpen, setTagModalOpen] = useState(false);
   const [game, setGame] = useState<GameInfo | null>(null);
+  // ゲーム未設定（gameId が null）の再生リストか。ゲームタイトルの代わりに「ゲームを登録」の案内を出す
+  const [gameUnset, setGameUnset] = useState(false);
 
   const [reverseOrder, setReverseOrder] = useState(false);
   const [mylist, setMylist] = useState<MylistState | null>(null);
@@ -406,6 +409,7 @@ export default function PlaylistDetailPage() {
       fetchTagsMap().then((tagsMap) => setTags(resolveTags(p.playlistTagIds ?? [], p.playlistTagsFixed ?? [], tagsMap)));
       // 関連ゲームはページ下部のため、初期表示を待たせず後から反映する
       setGame(null);
+      setGameUnset(!p.gameId);
       if (p.gameId) {
         fetchGameInfo(p.gameId).then(setGame).catch((err) => console.error(err));
       }
@@ -1173,6 +1177,16 @@ export default function PlaylistDetailPage() {
           {videoList}
           <div className="md:hidden">{reviewSection}</div>
           {game && <GameInfoCard {...game} />}
+          {gameUnset && (
+            <GameRegisterCard
+              playlistId={playlistId}
+              signedIn={!!user}
+              onRegistered={(gameId) => {
+                setGameUnset(false);
+                fetchGameInfo(gameId).then(setGame).catch((err) => console.error(err));
+              }}
+            />
+          )}
           {/* この再生リストを含む公開まとめ（まとめ機能仕様書 §7）。0件なら何も描画しない。まとめ機能の取り下げ（2026-11-01、詳細仕様書 v1.14）で出さない */}
           {COLLECTIONS_ENABLED && <ContainingCollectionsCard playlistId={playlistId} />}
         </div>
