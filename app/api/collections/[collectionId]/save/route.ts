@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { FieldValue } from 'firebase-admin/firestore';
 import { requireUser } from '@/lib/api-auth';
 import { adminDb } from '@/lib/firebase-admin';
+import { collectionsDisabledResponse } from '@/lib/collections-server';
 import { savedCollectionDocId } from '@/lib/collections-server';
 
 // まとめの保存（ページ 再生リスト まとめ機能仕様書 §8）。
@@ -20,6 +21,9 @@ class SaveError extends Error {
 }
 
 export async function GET(request: NextRequest, { params }: Params) {
+  // まとめ機能の取り下げ（2026-11-01、まとめ機能仕様書 v2.0）。COLLECTIONS_ENABLED が false の間は読み書きせず 404
+  const disabled = collectionsDisabledResponse();
+  if (disabled) return disabled;
   const auth = await requireUser(request);
   if ('errorResponse' in auth) return auth.errorResponse;
   const { collectionId } = await params;
@@ -28,6 +32,9 @@ export async function GET(request: NextRequest, { params }: Params) {
 }
 
 export async function POST(request: NextRequest, { params }: Params) {
+  // まとめ機能の取り下げ（2026-11-01、まとめ機能仕様書 v2.0）。COLLECTIONS_ENABLED が false の間は読み書きせず 404
+  const disabled = collectionsDisabledResponse();
+  if (disabled) return disabled;
   const auth = await requireUser(request);
   if ('errorResponse' in auth) return auth.errorResponse;
   const { collectionId } = await params;
@@ -54,6 +61,9 @@ export async function POST(request: NextRequest, { params }: Params) {
 }
 
 export async function DELETE(request: NextRequest, { params }: Params) {
+  // まとめ機能の取り下げ（2026-11-01、まとめ機能仕様書 v2.0）。COLLECTIONS_ENABLED が false の間は読み書きせず 404
+  const disabled = collectionsDisabledResponse();
+  if (disabled) return disabled;
   const auth = await requireUser(request);
   if ('errorResponse' in auth) return auth.errorResponse;
   const { collectionId } = await params;

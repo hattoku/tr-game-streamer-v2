@@ -1,4 +1,6 @@
+import { NextResponse } from 'next/server';
 import { adminDb } from '@/lib/firebase-admin';
+import { COLLECTIONS_ENABLED } from '@/lib/feature-flags';
 import {
   COLLECTION_DESCRIPTION_MAX,
   COLLECTION_PLAYLISTS_MAX,
@@ -9,6 +11,14 @@ import {
 
 // まとめ API（app/api/collections 配下）で共有する入力検証（まとめ機能仕様書 §3.2・§4.4）。
 // サーバー専用（firebase-admin を使うため API Route からのみ import すること）。
+
+/**
+ * まとめ機能の取り下げ（2026-11-01、まとめ機能仕様書 v2.0）。COLLECTIONS_ENABLED が false の間は、
+ * まとめの API が読み書きせずに返す 404 のレスポンス。出している間は null（そのまま処理を続ける）。
+ */
+export function collectionsDisabledResponse(): NextResponse | null {
+  return COLLECTIONS_ENABLED ? null : NextResponse.json({ error: 'not_found' }, { status: 404 });
+}
 
 const VISIBILITIES = new Set<CollectionVisibility>(['private', 'unlisted', 'public']);
 

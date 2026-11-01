@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireUser } from '@/lib/api-auth';
 import { adminDb } from '@/lib/firebase-admin';
+import { collectionsDisabledResponse } from '@/lib/collections-server';
 import { COLLECTION_PLAYLISTS_MAX } from '@/lib/collections-shared';
 import { arePublicPlaylists, fetchCreatorSnapshot, parseCollectionFields, readJsonObject } from '@/lib/collections-server';
 
@@ -31,6 +32,9 @@ async function loadOwnCollection(request: NextRequest, params: Params['params'])
 }
 
 export async function PATCH(request: NextRequest, { params }: Params) {
+  // まとめ機能の取り下げ（2026-11-01、まとめ機能仕様書 v2.0）。COLLECTIONS_ENABLED が false の間は読み書きせず 404
+  const disabled = collectionsDisabledResponse();
+  if (disabled) return disabled;
   const loaded = await loadOwnCollection(request, params);
   if ('errorResponse' in loaded) return loaded.errorResponse;
   const { uid, ref } = loaded;
@@ -71,6 +75,9 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 }
 
 export async function DELETE(request: NextRequest, { params }: Params) {
+  // まとめ機能の取り下げ（2026-11-01、まとめ機能仕様書 v2.0）。COLLECTIONS_ENABLED が false の間は読み書きせず 404
+  const disabled = collectionsDisabledResponse();
+  if (disabled) return disabled;
   const loaded = await loadOwnCollection(request, params);
   if ('errorResponse' in loaded) return loaded.errorResponse;
   // 他のユーザーの保存記録も一緒に消す（まとめ機能仕様書 §1: 削除されたまとめは保存したまとめ一覧から自動で外す）。

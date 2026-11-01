@@ -174,6 +174,8 @@ export async function registerPlaylist(params: {
     gameSetBy: gameId ? 'admin' : null,
     gameSetAt: gameId ? now : null,
     videoCount: items.length,
+    // 新着取得の差分判定の基準（共通 YouTube定期取得仕様書 §7.2）。登録の翌日に全ページを取り直さずに済む
+    youtubeItemCount: playlist.itemCount,
     latestVideoPublishedAt: items.length > 0
       ? items.reduce((latest, i) => (i.publishedAt > latest ? i.publishedAt : latest), items[0].publishedAt)
       : null,

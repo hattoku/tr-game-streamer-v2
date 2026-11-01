@@ -3,6 +3,7 @@
  * 未ログイン: ヒーロー（§4）→ 注目の再生リスト（§6）→ 新着のまとめ → タグピックアップ（§8）
  * ログイン済み: マイリスト（§5）→ 注目の再生リスト（§6）→ 新着の再生リスト（§7）→ 新着のまとめ → タグピックアップ（§8）
  * 新着のまとめ（2026-10-12、まとめ機能仕様書 §7）は公開まとめを別途取得し、取得前・0件・失敗時は出さない（他セクションの表示は待たせない）。
+ * まとめ機能の取り下げ（2026-11-01、TOP仕様書 v2.0 §7.5）で COLLECTIONS_ENABLED が false の間は取得も表示もしない。
  * 公開再生リスト全件（`fetchPublicPlaylists`）＋タグマスタ＋ジャンルマスタを1回だけ取得し、
  * 各セクション（`components/top/`）へ配列で渡して表示専用にする。マイリストセクションのみ
  * ログイン後に別途取得する（`useMylistEntries`、`components/top/MylistSection.tsx`内部）。
@@ -26,6 +27,7 @@ import { NewArrivalsSection } from '@/components/top/NewArrivalsSection';
 import { TagPickupSections } from '@/components/top/TagPickupSections';
 import { NewCollectionsSection } from '@/components/top/NewCollectionsSection';
 import { fetchPublicCollections, type CollectionData } from '@/lib/collections';
+import { COLLECTIONS_ENABLED } from '@/lib/feature-flags';
 import { fetchCompletedPlaylistIds } from '@/lib/mylist-entries';
 import { Skeleton } from '@/components/ui/Skeleton';
 
@@ -55,9 +57,11 @@ export default function HomePage() {
         setGenres(genresSnap.docs.map((d) => ({ id: d.id, name: (d.data().name as string) ?? '' })));
       },
     );
-    fetchPublicCollections()
-      .then(setCollections)
-      .catch(() => setCollections([]));
+    if (COLLECTIONS_ENABLED) {
+      fetchPublicCollections()
+        .then(setCollections)
+        .catch(() => setCollections([]));
+    }
   }, []);
 
   useEffect(() => {
@@ -97,7 +101,7 @@ export default function HomePage() {
             <SectionSkeleton />
           )}
           {user && <NewArrivalsSection playlists={playlists} />}
-          <NewCollectionsSection collections={collections} playlists={playlists} />
+          {COLLECTIONS_ENABLED && <NewCollectionsSection collections={collections} playlists={playlists} />}
           <TagPickupSections playlists={playlists} tags={tags} />
         </>
       ) : (
