@@ -91,7 +91,7 @@ export async function registerPlaylist(params: {
   fixedTagIds?: string[];
   /** 入った経路。省略は管理者の直接登録（`admin`）。収集候補の承認は `collection_candidate` */
   source?: PlaylistSource;
-  /** 所属する認定チャンネル（`exploration_channels` のドキュメントID）。分かるときだけ */
+  /** 所属する掲載チャンネル（`exploration_channels` のドキュメントID）。分かるときだけ */
   explorationChannelId?: string | null;
 }): Promise<RegisteredPlaylist | PlaylistApiError> {
   const { playlistUrl, gameId, channelDescription, sourceChannelId, registeredBy, proposedBy } = params;
