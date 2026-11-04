@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireUser } from '../../../../lib/api-auth';
 import { adminDb } from '../../../../lib/firebase-admin';
 import { PLAYLIST_PROPOSAL_TYPE, proposalRejectReasonLabel } from '../../../../lib/proposal-shared';
+import { CHANNEL_APPLICATION_TYPE, channelApplicationRejectReasonLabel } from '../../../../lib/channel-application-shared';
 
 // 自分の再生リスト登録提案の一覧（提案履歴、ページ 再生リストを追加する 仕様書 §9.4）。
 // workflows は rules 上本人も直接読めるが、運営メモ（operatorMemo）や内部向けの自由記述（step2History.comment）を
@@ -16,6 +17,31 @@ export async function GET(request: NextRequest) {
     .where('submittedBy', '==', auth.uid)
     .where('type', '==', PLAYLIST_PROPOSAL_TYPE)
     .get();
+  // チャンネル申請（段階6。ページ チャンネルを申請する 仕様書 §6）も種別を分けて並べる
+  const applicationSnap = await adminDb
+    .collection('workflows')
+    .where('submittedBy', '==', auth.uid)
+    .where('type', '==', CHANNEL_APPLICATION_TYPE)
+    .get();
+
+  const applications = applicationSnap.docs.map((d) => {
+    const data = d.data();
+    const p = data.proposalData ?? {};
+    const status = data.status === 'approved' ? 'approved' : data.status === 'rejected' ? 'rejected' : 'reviewing';
+    const history = (data.step2History ?? []) as Array<{ executedAt?: { toMillis?: () => number } }>;
+    const decided = status !== 'reviewing' ? history[history.length - 1] : undefined;
+    return {
+      kind: 'channel_application' as const,
+      id: d.id,
+      status,
+      channelName: (p.channelTitle as string) ?? '',
+      channelIconUrl: (p.channelIconUrl as string) ?? '',
+      youtubeChannelId: (p.youtubeChannelId as string) ?? '',
+      submittedAt: data.submittedAt?.toMillis?.() ?? 0,
+      decidedAt: decided?.executedAt?.toMillis?.() ?? null,
+      rejectReason: status === 'rejected' ? channelApplicationRejectReasonLabel(p.rejectReasonCode) : null,
+    };
+  });
 
   const proposals = snap.docs
     .map((d) => {
@@ -25,6 +51,7 @@ export async function GET(request: NextRequest) {
       const history = (data.step2History ?? []) as Array<{ executedAt?: { toMillis?: () => number } }>;
       const decided = status !== 'reviewing' ? history[history.length - 1] : undefined;
       return {
+        kind: 'playlist' as const,
         id: d.id,
         status,
         title: (p.title as string) ?? '',
@@ -41,7 +68,8 @@ export async function GET(request: NextRequest) {
         rejectReason: status === 'rejected' ? proposalRejectReasonLabel(p.rejectReasonCode) : null,
       };
     })
-    .sort((a, b) => b.submittedAt - a.submittedAt);
+  ;
 
-  return NextResponse.json({ proposals });
+  const all = [...proposals, ...applications].sort((a, b) => b.submittedAt - a.submittedAt);
+  return NextResponse.json({ proposals: all });
 }

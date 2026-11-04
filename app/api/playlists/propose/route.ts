@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireUser } from '../../../../lib/api-auth';
 import { adminDb } from '../../../../lib/firebase-admin';
 import { fetchValidPlaylist, hasPendingPlaylistProposal, newWorkflowRecord } from '../../../../lib/playlist-registration';
+import { getProposalChannelState } from '../../../../lib/channel-application-server';
 import {
   MAX_GAME_PROPOSAL_NOTE_LENGTH,
   MAX_GAME_TITLE_LENGTH,
@@ -90,6 +91,12 @@ export async function POST(request: NextRequest) {
   }
   if (typeof sourceChannelId === 'string' && sourceChannelId && sourceChannelId !== channel.youtubeChannelId) {
     return NextResponse.json({ error: 'channel_mismatch' }, { status: 422 });
+  }
+  // 提案できるのは掲載中のチャンネルの再生リストだけ（ページ 再生リストを追加する 仕様書 §10.1）。
+  // 未掲載はチャンネル申請へ、掲載を止めているチャンネルは受け付けない
+  const channelListing = await getProposalChannelState(channel.youtubeChannelId);
+  if (channelListing !== 'listed') {
+    return NextResponse.json({ error: channelListing === 'opted_out' ? 'channel_opted_out' : 'channel_not_listed' }, { status: 409 });
   }
   if (await hasPendingPlaylistProposal(playlist.youtubePlaylistId)) {
     return NextResponse.json({ error: 'already_proposed' }, { status: 409 });

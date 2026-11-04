@@ -53,6 +53,8 @@ interface PreviewResult {
   playlistAlreadyRegistered: boolean;
   /** 審査中の提案がある（§7.2）。一般ユーザーは提案不可、管理者は案内のみ */
   pendingProposal: boolean;
+  /** 掲載チャンネルか（一般ユーザーの提案の分岐、§10.1） */
+  channelListing: 'listed' | 'not_listed' | 'opted_out';
 }
 
 interface CompletionResult {
@@ -111,6 +113,8 @@ const ALREADY_PROPOSED_ERROR = { inline: 'この再生リストはすでに提�
 const PROPOSE_ERRORS: Record<string, { inline: string; toast: string }> = {
   ...REGISTER_ERRORS,
   already_proposed: ALREADY_PROPOSED_ERROR,
+  channel_not_listed: { inline: 'このチャンネルはまだ掲載していません。先にチャンネルの申請をお願いします', toast: '掲載していないチャンネルです' },
+  channel_opted_out: { inline: 'このチャンネルの再生リストは掲載していません', toast: '掲載していないチャンネルです' },
 };
 
 export default function NewPlaylistPage() {
@@ -274,8 +278,11 @@ export default function NewPlaylistPage() {
   const sourceChannelMismatch = !!preview && !!sourceChannelId && preview.channel.youtubeChannelId !== sourceChannelId;
   // 一般ユーザーは審査中の提案がある再生リストも提案できない（§7.2）。管理者は案内だけ出して登録はできる
   const alreadyProposed = !isAdmin && !!preview && (preview.playlistAlreadyRegistered || preview.pendingProposal);
+  // 一般ユーザーは掲載中のチャンネルの再生リストだけ提案できる（§10.1）。管理者は分岐しない
+  const channelNotListed = !isAdmin && !!preview && preview.playlistAlreadyRegistered === false && preview.channelListing !== 'listed';
   const constraintsOk =
     !!preview &&
+    !channelNotListed &&
     preview.playlist.isPublic &&
     preview.channelMatches &&
     !preview.playlistAlreadyRegistered &&
@@ -519,6 +526,30 @@ export default function NewPlaylistPage() {
                     </CheckLine>
                   )}
                   {sourceChannelMismatch && <CheckLine state="ng">{CHANNEL_MISMATCH_ERROR.inline}</CheckLine>}
+                  {channelNotListed && preview.playlist.isPublic && preview.channelMatches && !alreadyProposed && (
+                    preview.channelListing === 'opted_out' ? (
+                      <CheckLine state="ng">このチャンネルの再生リストは掲載していません</CheckLine>
+                    ) : (
+                      <li className="flex flex-col gap-2 text-base text-text-secondary" data-testid="channel-not-listed">
+                        <span className="flex items-start gap-2">
+                          <span className="mt-[3px] shrink-0">
+                            <InfoIcon size={15} className="text-toast-info" />
+                          </span>
+                          <span>
+                            このチャンネルはまだプレミテに掲載していません。先にチャンネルの申請をお願いします。掲載が決まると、このチャンネルの再生リストは運営が順に公開します
+                          </span>
+                        </span>
+                        <LinkButton
+                          href={`/channels/apply?channel=${encodeURIComponent(preview.channel.youtubeChannelId)}`}
+                          variant="secondary"
+                          size="sm"
+                          className="w-fit"
+                        >
+                          このチャンネルを申請する
+                        </LinkButton>
+                      </li>
+                    )
+                  )}
                   {showChannelState &&
                     (preview.channelAlreadyRegistered ? (
                       <CheckLine state="ok">プレミテ登録済みチャンネルです。再生リストと紐づけます。</CheckLine>

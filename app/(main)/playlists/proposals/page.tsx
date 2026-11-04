@@ -19,9 +19,22 @@ import { SkeletonText } from '@/components/ui/Skeleton';
 import { Tag } from '@/components/ui/Tag';
 import { InventoryIcon } from '@/components/ui/icons';
 import { PlaylistSummary } from '@/components/playlists/PlaylistSummary';
-import { ProposalSteps } from '@/components/playlists/ProposalSteps';
+import { CHANNEL_APPLICATION_STEPS, ProposalSteps } from '@/components/playlists/ProposalSteps';
+
+interface ChannelApplicationItem {
+  kind: 'channel_application';
+  id: string;
+  status: 'reviewing' | 'approved' | 'rejected';
+  channelName: string;
+  channelIconUrl: string;
+  youtubeChannelId: string;
+  submittedAt: number;
+  decidedAt: number | null;
+  rejectReason: string | null;
+}
 
 interface ProposalItem {
+  kind?: 'playlist';
   id: string;
   status: 'reviewing' | 'approved' | 'rejected';
   title: string;
@@ -52,7 +65,7 @@ export default function ProposalHistoryPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
-  const [items, setItems] = useState<ProposalItem[] | null>(null);
+  const [items, setItems] = useState<Array<ProposalItem | ChannelApplicationItem> | null>(null);
   const [loadError, setLoadError] = useState(false);
 
   // 未ログインはログイン後にこのページへ戻す（審査結果の通知から開くことがあるため）
@@ -80,9 +93,14 @@ export default function ProposalHistoryPage() {
     <div className="mx-auto flex w-full max-w-[720px] flex-col gap-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <SectionHeading>提案履歴</SectionHeading>
-        <LinkButton href="/playlists/new" variant="secondary" size="sm">
-          再生リストを提案する
-        </LinkButton>
+        <div className="flex flex-wrap gap-2">
+          <LinkButton href="/channels/apply" variant="secondary" size="sm">
+            チャンネルを申請する
+          </LinkButton>
+          <LinkButton href="/playlists/new" variant="secondary" size="sm">
+            再生リストを提案する
+          </LinkButton>
+        </div>
       </div>
 
       {loadError ? (
@@ -98,8 +116,8 @@ export default function ProposalHistoryPage() {
       ) : items.length === 0 ? (
         <EmptyState
           icon={<InventoryIcon />}
-          title="提案はまだありません"
-          description="おすすめの再生リストを提案すると、運営の確認状況をここで確認できます"
+          title="提案・申請はまだありません"
+          description="おすすめの再生リストの提案やチャンネルの申請をすると、運営の確認状況をここで確認できます"
           action={
             <LinkButton href="/playlists/new" variant="secondary">
               再生リストを提案する
@@ -108,7 +126,12 @@ export default function ProposalHistoryPage() {
         />
       ) : (
         <ul className="flex flex-col gap-3">
-          {items.map((p) => (
+          {items.map((p) =>
+            p.kind === 'channel_application' ? (
+              <li key={p.id}>
+                <ChannelApplicationCard item={p} />
+              </li>
+            ) : (
             <li key={p.id}>
               <Card className="flex flex-col gap-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -138,9 +161,45 @@ export default function ProposalHistoryPage() {
                 )}
               </Card>
             </li>
-          ))}
+            ),
+          )}
         </ul>
       )}
     </div>
+  );
+}
+
+/** チャンネル申請（ページ チャンネルを申請する 仕様書 §6）。再生リストの提案と並べて出す */
+function ChannelApplicationCard({ item }: { item: ChannelApplicationItem }) {
+  return (
+    <Card className="flex flex-col gap-4" data-testid="channel-application-card">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Tag>チャンネル申請</Tag>
+          <Tag emphasis={item.status === 'reviewing'}>{item.status === 'reviewing' ? '確認待ち' : item.status === 'approved' ? '承認' : '見送り'}</Tag>
+        </div>
+        <span className="text-md text-text-muted">申請日時: {formatDate(item.submittedAt)}</span>
+      </div>
+      <div className="flex items-center gap-3">
+        {item.channelIconUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={item.channelIconUrl} alt="" referrerPolicy="no-referrer" className="size-10 shrink-0 rounded-full bg-bg-btn object-cover" />
+        ) : (
+          <span className="block size-10 shrink-0 rounded-full bg-bg-btn" />
+        )}
+        <p className="text-base font-medium text-text-primary">{item.channelName}</p>
+      </div>
+      <ProposalSteps labels={CHANNEL_APPLICATION_STEPS} current={item.status === 'approved' ? 3 : 2} rejected={item.status === 'rejected'} hereLabel />
+      {item.status === 'reviewing' && <p className="text-md text-text-muted">運営の確認待ちです。掲載が決まるとお知らせでお伝えします。</p>}
+      {item.status === 'approved' && (
+        <p className="text-md text-text-muted">掲載が決まりました。このチャンネルの再生リストは、運営の確認のあと順に公開します。</p>
+      )}
+      {item.status === 'rejected' && (
+        <p className="text-base text-text-secondary">
+          見送り理由: {item.rejectReason ?? '掲載の基準に合いませんでした'}
+          <span className="ml-2 text-md text-text-muted">（{formatDate(item.decidedAt)}）</span>
+        </p>
+      )}
+    </Card>
   );
 }
