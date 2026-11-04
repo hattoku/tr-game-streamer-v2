@@ -4,6 +4,7 @@ import { adminDb } from '@/lib/firebase-admin';
 import { recalculatePlaylistScore } from '@/lib/review-score';
 import { FieldValue } from 'firebase-admin/firestore';
 import { registerPlaylist, type PlaylistApiError } from '@/lib/playlist-registration';
+import { linkPlaylistToGame } from '@/lib/playlist-game-linking';
 import { GAME_PROPOSAL_TYPE, PLAYLIST_PROPOSAL_TYPE, proposalRejectReasonLabel } from '@/lib/proposal-shared';
 
 // 審査ワークフローの承認・却下・運営メモ更新API（管理_審査ワークフロー仕様書 §9, §11）。
@@ -135,12 +136,40 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         return NextResponse.json({ error: 'game_not_found' }, { status: 404 });
       }
       updates['proposalData.createdGameId'] = createdGameId;
+      // 再生リストに付けたい提案（v1.16）は、その再生リストにこのゲームを付ける（すでに付いていれば何もしない）
+      const targetPlaylistId = (workflow.proposalData?.playlistId as string | undefined) ?? null;
+      if (targetPlaylistId) {
+        const linked = await linkPlaylistToGame(targetPlaylistId, createdGameId, 'admin', uid);
+        // 提案のあとに別の経路（ユーザーの登録・自動照合）で別のゲームが付いていた、または再生リストが無いときは、
+        // 承認として通知してしまわないよう、承認せず管理者に知らせる（すでに同じゲームが付いているのは成功）
+        const sameGame = linked === 'already_set' && (await adminDb.collection('playlists').doc(targetPlaylistId).get()).data()?.gameId === createdGameId;
+        if (linked !== 'linked' && !sameGame) {
+          return NextResponse.json({ error: linked === 'already_set' ? 'playlist_game_already_set' : linked }, { status: 409 });
+        }
+      }
     }
     if (action === 'reject' && workflow.type === PLAYLIST_PROPOSAL_TYPE) {
       updates['proposalData.rejectReasonCode'] = body.rejectReasonCode;
     }
-    // 審査結果通知（§14.4）。再生リスト登録提案のみ（旧形式のゲームタイトル登録提案は対象外）
+    // 審査結果通知（§14.4）。再生リスト登録提案と、再生リストに付けたいゲームタイトル提案（v1.16）。旧形式のゲームタイトル登録提案は対象外
     let notification: Record<string, unknown> | null = null;
+    const gameForPlaylistId = workflow.type === GAME_PROPOSAL_TYPE ? ((workflow.proposalData?.playlistId as string | undefined) ?? null) : null;
+    if (gameForPlaylistId && workflow.submittedBy) {
+      const gameTitle = (workflow.proposalData?.gameTitle as string) ?? '';
+      notification = {
+        userId: workflow.submittedBy,
+        type: 'review_result',
+        workflowId,
+        playlistId: gameForPlaylistId,
+        playlistTitle: (workflow.proposalData?.playlistTitle as string) ?? '',
+        message:
+          action === 'approve'
+            ? `ゲームタイトル「${gameTitle}」の提案が承認され、再生リストに登録されました`
+            : `ゲームタイトル「${gameTitle}」の提案は見送りになりました（運営の判断で、既存のゲームタイトルに合わせるか、登録を見送りました）`,
+        isRead: false,
+        createdAt: now,
+      };
+    }
     if (workflow.type === PLAYLIST_PROPOSAL_TYPE && workflow.submittedBy) {
       const playlistTitle = (workflow.proposalData?.title as string) ?? '';
       const registeredPlaylistId = (updates['proposalData.registeredPlaylistId'] as string | undefined) ?? null;
