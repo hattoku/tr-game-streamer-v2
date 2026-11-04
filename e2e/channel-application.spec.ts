@@ -11,9 +11,9 @@ import { db as e2eDb } from './support/cleanup';
 import { randomId } from './support/collection';
 
 // 申請の送信で使うチャンネル（project ごとに別）
-const SUBMIT_CHANNEL: Record<string, { handle: string; id: string }> = {
-  desktop: { handle: '@GoogleDevelopers', id: 'UC_x5XG1OV2P6uZZ5FSM9Ttw' },
-  mobile: { handle: '@AndroidDevelopers', id: 'UCVHFbqXqoYvEWM1Ddxl0QDg' },
+const SUBMIT_CHANNEL: Record<string, { handle: string; id: string; name: string }> = {
+  desktop: { handle: '@GoogleDevelopers', id: 'UC_x5XG1OV2P6uZZ5FSM9Ttw', name: 'Google for Developers' },
+  mobile: { handle: '@AndroidDevelopers', id: 'UCVHFbqXqoYvEWM1Ddxl0QDg', name: 'Android Developers' },
 };
 // 掲載状態を書き換えるテストで使う YouTube 公式チャンネルと、その再生リスト
 const STATE_CHANNEL = { handle: '@YouTube', id: 'UCBR8-60-B28hp2BmDPdntcQ' };
@@ -134,7 +134,8 @@ test('§4 チャンネルの確認、必須項目、送信、完了画面、提�
       await submit.click();
       await expect(userPage.getByRole('heading', { name: '申請を送りました（確認待ち）' })).toBeVisible();
       await userPage.getByRole('link', { name: '提案履歴を見る' }).click();
-      const card = userPage.getByTestId('channel-application-card').first();
+      // 同じ会員が desktop・mobile で別のチャンネルを申請するので、チャンネル名で自分の分に絞る
+      const card = userPage.getByTestId('channel-application-card').filter({ hasText: channel.name }).first();
       await expect(card).toContainText('チャンネル申請');
       await expect(card).toContainText('確認待ち');
       expect(await hasHorizontalScroll(userPage)).toBe(false);
@@ -146,7 +147,7 @@ test('§4 チャンネルの確認、必須項目、送信、完了画面、提�
       await expect(userPage.getByText('このチャンネルは申請済みです（確認待ち）')).toBeVisible();
       await expect(userPage.getByRole('button', { name: '申請する' })).toBeDisabled();
       // 他の人の申請でも同じ（管理者の uid で確認 API を叩く）
-      const adminToken = await captureIdToken(adminPage, '/admin');
+      const adminToken = await captureIdToken(adminPage, '/playlists/proposals');
       const res = await adminPage.request.post('/api/channels/apply/preview', {
         headers: { Authorization: `Bearer ${adminToken}` },
         data: { input: channel.id },
@@ -169,9 +170,9 @@ test('§4 チャンネルの確認、必須項目、送信、完了画面、提�
       await expect(adminPage.getByText('見送り理由: その他（掲載の基準に合わない）')).toBeVisible();
 
       await userPage.goto('/playlists/proposals');
-      await expect(userPage.getByTestId('channel-application-card').first()).toContainText('見送り理由: その他（掲載の基準に合わない）');
+      await expect(userPage.getByTestId('channel-application-card').filter({ hasText: channel.name }).first()).toContainText('見送り理由: その他（掲載の基準に合わない）');
       await userPage.goto('/notifications');
-      await expect(userPage.getByText(/の申請は見送りになりました（その他（掲載の基準に合わない））/).first()).toBeVisible();
+      await expect(userPage.getByText(`チャンネル「${channel.name}」の申請は見送りになりました（その他（掲載の基準に合わない））`).first()).toBeVisible();
     });
   } finally {
     await deleteWorkflowsFor(uid, [channel.id]);
@@ -205,7 +206,7 @@ test('§8 1日の申請は5件まで（日本時間）', async ({ adminPage }, t
   const uid = await uidOf(TEST_USER_EMAILS.admin);
   const limitIds = Array.from({ length: 5 }, () => randomId('UCE2E'));
   try {
-    const token = await captureIdToken(adminPage, '/admin');
+    const token = await captureIdToken(adminPage, '/playlists/proposals');
     const preview = async () =>
       (await (await adminPage.request.post('/api/channels/apply/preview', { headers: { Authorization: `Bearer ${token}` }, data: { input: SUBMIT_CHANNEL.desktop.id } })).json());
     expect((await preview()).limitReached).toBe(false);
@@ -260,7 +261,7 @@ test('審査 §15.2 掲載停止のチャンネルは承認できない', async 
     await adminPage.getByRole('link').filter({ hasText: title }).first().click();
     await adminPage.getByRole('button', { name: '承認する' }).first().click();
     await adminPage.getByRole('dialog').getByRole('button', { name: '承認する' }).click();
-    await expect(adminPage.getByText('このチャンネルは掲載停止中のため承認できません')).toBeVisible();
+    await expect(adminPage.locator('p[role="alert"]').filter({ hasText: 'このチャンネルは掲載停止中のため承認できません' })).toBeVisible();
     const docs = await e2eDb().collection('exploration_channels').where('youtubeChannelId', '==', fakeChannelId).get();
     expect(docs.docs.every((d) => d.data().status === 'opted_out')).toBe(true);
   } finally {
@@ -272,7 +273,7 @@ test('審査 §15.2 掲載停止のチャンネルは承認できない', async 
 test('再生リストを追加する §10.1 掲載していないチャンネルは申請へ誘導し、提案は送れない', async ({ userPage }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop', '掲載状態を書き換えるため desktop のみ');
   test.setTimeout(120_000);
-  const token = await captureIdToken(userPage, '/playlists/new');
+  const token = await captureIdToken(userPage, '/playlists/proposals');
   const propose = async () =>
     userPage.request.post('/api/playlists/propose', {
       headers: { Authorization: `Bearer ${token}` },
@@ -333,7 +334,8 @@ test('§1 実況者・事務所の方へ: 4つの案内と、お問い合わせ�
   await expect(guestPage.getByText('チャンネル名またはチャンネルのURLを書き添えてください')).toBeVisible();
 });
 
-test('§3 フッターに「実況者・事務所の方へ」があり、チャンネル詳細からはリンクしない', async ({ guestPage }) => {
+test('§3 フッターに「実況者・事務所の方へ」があり、チャンネル詳細からはリンクしない', async ({ guestPage }, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop', 'フッターはPC幅の部品（モバイルはハンバーガーメニュー）');
   await guestPage.goto('/channels');
   await expect(guestPage.locator('footer').getByRole('link', { name: '実況者・事務所の方へ' })).toHaveAttribute('href', '/creators');
   const first = guestPage.locator('main a[href^="/channels/"]:not([href="/channels/apply"]):visible').first();
