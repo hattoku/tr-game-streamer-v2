@@ -88,6 +88,10 @@ export async function purgeStalePlaylists(monitored: Set<string>, now: Date): Pr
         channelIconUrl: '',
         videoCount: 0,
         latestVideoPublishedAt: null,
+        // 動画一覧は消えたので未取得に戻す（掲載を再開したとき、中身のない掲載にならない）
+        youtubeItemCount: null,
+        fullRefetchedAt: null,
+        lastFetchedAt: null,
         youtubeDataRemovedAt: now,
       });
       summary.strippedPlaylists++;

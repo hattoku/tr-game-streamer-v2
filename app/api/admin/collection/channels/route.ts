@@ -266,6 +266,8 @@ export async function POST(request: NextRequest) {
   const youtubeChannelId = (data.youtubeChannelId as string | null | undefined) ?? null;
 
   if (action === 'exclude') {
+    // 掲載停止のチャンネルは、本人の申し出で止めたもの。掲載しないに化けさせない（再開は resume だけ）
+    if (data.status === 'opted_out' || data.status === 'excluded') return NextResponse.json({ error: 'invalid_status' }, { status: 409 });
     // 掲載チャンネルを外すと、再生リストはすべて非表示（channel_off）になる。消さない（§10.6）
     const turnedOff = data.status === 'active' ? await turnChannelOff(id, youtubeChannelId, 'channel_excluded') : 0;
     await ref.update({ status: 'excluded', ...(note ? { statusNote: note } : {}), updatedAt: now });

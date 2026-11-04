@@ -24,19 +24,30 @@ export type ListingChangeError =
 
 export type ListingChangeResult = { ok: true; changed: boolean; fetchedVideos: boolean } | { ok: false; error: ListingChangeError };
 
+interface LiveRefs {
+  gameRef: FirebaseFirestore.DocumentReference | null;
+  tagRefs: FirebaseFirestore.DocumentReference[];
+}
+
+/** 件数を直すゲーム・タグのうち、存在するものだけ（消されたドキュメントを update するとトランザクションごと失敗するため）。書き込みの前に呼ぶ */
+async function readLiveRefs(tx: Transaction, data: DocumentData, tagIds: string[]): Promise<LiveRefs> {
+  const gameId = data.gameId as string | null | undefined;
+  const refs = [...(gameId ? [adminDb.collection('games').doc(gameId)] : []), ...tagIds.map((id) => adminDb.collection('tags').doc(id))];
+  const snaps = refs.length > 0 ? await tx.getAll(...refs) : [];
+  const live = snaps.filter((s) => s.exists).map((s) => s.ref);
+  return { gameRef: gameId ? (live.find((r) => r.path === `games/${gameId}`) ?? null) : null, tagRefs: live.filter((r) => r.parent.id === 'tags') };
+}
+
 /** 件数を増やす・減らす（listed に入る・出るとき）。読み取りは呼び出し側で済ませておく（トランザクションは読み取りが先） */
 function applyCountDelta(
   tx: Transaction,
   data: DocumentData,
-  tagIds: string[],
+  live: LiveRefs,
   delta: 1 | -1,
   channelSnap: FirebaseFirestore.DocumentSnapshot | null,
 ) {
-  const gameId = data.gameId as string | null | undefined;
-  if (gameId) tx.update(adminDb.collection('games').doc(gameId), { playlistCount: FieldValue.increment(delta) });
-  for (const tagId of tagIds) {
-    tx.update(adminDb.collection('tags').doc(tagId), { usagePlaylistCount: FieldValue.increment(delta) });
-  }
+  if (live.gameRef) tx.update(live.gameRef, { playlistCount: FieldValue.increment(delta) });
+  for (const ref of live.tagRefs) tx.update(ref, { usagePlaylistCount: FieldValue.increment(delta) });
   const channelId = data.channelId as string | undefined;
   if (!channelId || !channelSnap) return;
   if (channelSnap.exists) {
@@ -126,8 +137,9 @@ export async function listPlaylist(
     if (current.listingStatus === 'channel_off') return { ok: false, error: 'channel_off' } as const;
     if (current.listingStatus === 'listed') return { ok: true, changed: false, fetchedVideos: fetched !== null } as const;
     const channelSnap = current.channelId ? await tx.get(adminDb.collection('channels').doc(current.channelId as string)) : null;
-
     const playlistTagIds = [...new Set([...((current.playlistTagIds as string[] | undefined) ?? []), ...requestedTags])];
+    const live = await readLiveRefs(tx, current, playlistTagIds);
+
     const playlistTagsFixed = [...new Set([...((current.playlistTagsFixed as string[] | undefined) ?? []), ...requestedTags])];
     const update: Record<string, unknown> = {
       listingStatus: 'listed',
@@ -149,7 +161,7 @@ export async function listPlaylist(
       });
     }
     tx.update(ref, update);
-    applyCountDelta(tx, current, playlistTagIds, 1, channelSnap);
+    applyCountDelta(tx, current, live, 1, channelSnap);
     return { ok: true, changed: true, fetchedVideos: fetched !== null } as const;
   });
 }
@@ -172,8 +184,9 @@ export async function unlistPlaylist(
     const wasListed = current.listingStatus === 'listed';
     const channelSnap = wasListed && current.channelId ? await tx.get(adminDb.collection('channels').doc(current.channelId as string)) : null;
     if (current.listingStatus === target && current.listingSetBy === params.setBy && current.listingReason === params.reason) return { ok: true, changed: false, fetchedVideos: false } as const;
+    const live = wasListed ? await readLiveRefs(tx, current, (current.playlistTagIds as string[] | undefined) ?? []) : null;
     tx.update(ref, { listingStatus: target, listingReason: params.reason, listingSetBy: params.setBy, listingSetAt: new Date(), previousListingStatus: null });
-    if (wasListed) applyCountDelta(tx, current, (current.playlistTagIds as string[] | undefined) ?? [], -1, channelSnap);
+    if (wasListed) applyCountDelta(tx, current, live!, -1, channelSnap);
     return { ok: true, changed: true, fetchedVideos: false } as const;
   });
 }
@@ -209,6 +222,7 @@ export async function turnChannelOff(explorationChannelId: string, youtubeChanne
       }
       const wasListed = current.listingStatus === 'listed';
       const channelSnap = wasListed && current.channelId ? await tx.get(adminDb.collection('channels').doc(current.channelId as string)) : null;
+      const live = wasListed ? await readLiveRefs(tx, current, (current.playlistTagIds as string[] | undefined) ?? []) : null;
       tx.update(doc.ref, {
         listingStatus: 'channel_off',
         listingReason: reason,
@@ -218,7 +232,7 @@ export async function turnChannelOff(explorationChannelId: string, youtubeChanne
         previousListingReason: current.listingReason ?? null,
         previousListingSetBy: current.listingSetBy ?? 'admin',
       });
-      if (wasListed) applyCountDelta(tx, current, (current.playlistTagIds as string[] | undefined) ?? [], -1, channelSnap);
+      if (live) applyCountDelta(tx, current, live, -1, channelSnap);
       return true;
     });
     if (done) changed++;
@@ -249,7 +263,9 @@ export async function restoreChannelPlaylists(explorationChannelId: string, yout
         setBy = 'auto';
       }
       const channelSnap = target === 'listed' && current.channelId ? await tx.get(adminDb.collection('channels').doc(current.channelId as string)) : null;
+      const live = target === 'listed' ? await readLiveRefs(tx, current, (current.playlistTagIds as string[] | undefined) ?? []) : null;
       tx.update(doc.ref, {
+        youtubeDataRemovedAt: FieldValue.delete(),
         listingStatus: target,
         listingReason: reason,
         listingSetBy: setBy,
@@ -258,7 +274,7 @@ export async function restoreChannelPlaylists(explorationChannelId: string, yout
         previousListingReason: null,
         previousListingSetBy: null,
       });
-      if (target === 'listed') applyCountDelta(tx, current, (current.playlistTagIds as string[] | undefined) ?? [], 1, channelSnap);
+      if (live) applyCountDelta(tx, current, live, 1, channelSnap);
       return target;
     });
     if (result) restored++;

@@ -283,7 +283,7 @@ export async function refreshNewVideos(): Promise<RefreshSummary> {
 
   // ④ 30日ルール: 動画一覧を取ってから25日を過ぎるものを、古い順に（1日あたり対象の1/25、少なくとも10件）
   const stale = unchanged
-    .filter((d) => d.data().youtubeItemCount != null && now.getTime() - videosAgeBase(d.data()) > REFETCH_AFTER_DAYS * DAY_MS - DAY_MS)
+    .filter((d) => d.data().youtubeItemCount != null && now.getTime() - videosAgeBase(d.data()) > REFETCH_AFTER_DAYS * DAY_MS)
     .sort((a, b) => videosAgeBase(a.data()) - videosAgeBase(b.data()));
   const dailyLimit = Math.max(10, Math.ceil(docs.length / REFETCH_AFTER_DAYS));
   // 期限（30日）に近いものは上限を超えて優先する
@@ -314,7 +314,7 @@ export async function refreshNewVideos(): Promise<RefreshSummary> {
       for (const id of chunk) {
         const yt = result.get(id);
         const ref = adminDb.collection('playlists').doc(id);
-        if (yt) await ref.update({ title: yt.title || undefined, thumbnailUrl: yt.thumbnailUrl || undefined, metaFetchedAt: now });
+        if (yt) await ref.update({ ...(yt.title ? { title: yt.title } : {}), ...(yt.thumbnailUrl ? { thumbnailUrl: yt.thumbnailUrl } : {}), metaFetchedAt: now });
       }
     } catch (e) {
       if (!(e instanceof YouTubeApiError)) throw e;
