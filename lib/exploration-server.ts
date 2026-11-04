@@ -1,44 +1,42 @@
-// チャンネル起点の再生リスト探索の本体（サーバー専用）。
-// 管理_Ai運営者 コンテンツ収集機能仕様書 v3.0 §3.2〜3.5。探索API（管理画面のボタン・Cloud Scheduler）から呼ぶ。
-import type { DocumentReference, DocumentSnapshot } from 'firebase-admin/firestore';
+// 手動の巡回（サーバー専用）。管理_Ai運営者 コンテンツ収集機能仕様書 §10.3・§10.11、共通 YouTube定期取得仕様書 §8.6。
+// 確認画面の「巡回を実行」・掲載チャンネル画面の「このチャンネルだけ巡回」・チャンネルを登録済みにした直後・
+// チャンネル申請の承認（段階6）から呼ぶ。巡回（取り込みと判定）と、そのチャンネルの「自動で掲載する予定」の掲載だけを行い、
+// 新着の監視・30日の取り直しは毎日の「新着動画の再取得」（lib/new-videos-refresh.ts）に任せる。
+// クォータは収集の枠（1日 6,000。collection_quota_logs）で数える。
+// 段階3までは「探索 → 収集候補」の処理だった。名前と引数は段階6の呼び出し元のためにそのまま残している。
 import { adminDb } from './firebase-admin';
-import { extractGameQuery, findExcludeWord, guessGame, matchTitleTagNames, MIN_VIDEO_COUNT } from './exploration-rules';
-import { fetchChannelPlaylists, getQuotaConsumed, resetQuotaCounter, YouTubeApiError } from './youtube';
-import { addCollectionQuotaUsage } from './collection-quota';
+import {
+  activeChannelsForSweep,
+  emptyNewCounts,
+  isQuotaExceededError,
+  listAutoPending,
+  loadGamesForSweep,
+  loadListingRules,
+  sweepChannel,
+  type NewPlaylistCounts,
+} from './channel-sweep';
+import { getQuotaConsumed, resetQuotaCounter, YouTubeApiError } from './youtube';
+import { addCollectionQuotaUsage, getCollectionQuotaUsedToday } from './collection-quota';
+import { COLLECTION_DAILY_QUOTA_LIMIT } from './collection-quota-shared';
 
-/** 運営者タグ（origin: operator）の名前→ID。タグ候補・チャンネル単位タグはこの範囲に限る（§3.5） */
-export async function fetchOperatorTagIdsByName(): Promise<Map<string, string>> {
-  const snap = await adminDb.collection('tags').where('origin', '==', 'operator').get();
-  return new Map(snap.docs.map((d) => [d.data().name as string, d.id]));
-}
-
-async function existingIds(refs: DocumentReference[]): Promise<Set<string>> {
-  const found = new Set<string>();
-  const CHUNK = 100;
-  for (let i = 0; i < refs.length; i += CHUNK) {
-    const snaps = await adminDb.getAll(...refs.slice(i, i + CHUNK));
-    snaps.forEach((s) => {
-      if (s.exists) found.add(s.id);
-    });
-  }
-  return found;
-}
+export { fetchOperatorTagIdsByName } from './operator-tags';
 
 export interface ExploreSummary {
   processedChannels: number;
   playlistsFetched: number;
+  /** 新しく取り込んだ再生リストの数（掲載状態を問わない） */
   candidatesFound: number;
-  skippedByFilter: number;
-  skippedExisting: number;
+  newPlaylists: NewPlaylistCounts;
+  autoListed: number;
+  autoDeferred: number;
   quotaConsumed: number;
   errors: Array<{ explorationChannelId: string; message: string }>;
   status: 'success' | 'partial' | 'error';
 }
 
 /**
- * 探索対象チャンネル（status: active）の再生リストを取得し、ハードフィルタを通ったものを
- * collection_candidates（ドキュメントID＝再生リストID）に保存する。
- * explorationChannelId を渡すとそのチャンネルだけを探索する。
+ * 掲載チャンネル（status: active）を巡回する。explorationChannelId を渡すとそのチャンネルだけ。
+ * 想定外のエラー（Firestore の書き込み失敗等）は、そこまでのクォータ消費と実行ログを残してから投げる。
  */
 export async function exploreChannels(options: {
   trigger: 'manual' | 'cron';
@@ -48,150 +46,51 @@ export async function exploreChannels(options: {
   const executedAt = new Date();
   resetQuotaCounter();
 
-  const channelDocs: DocumentSnapshot[] = options.explorationChannelId
-    ? [await adminDb.collection('exploration_channels').doc(options.explorationChannelId).get()]
-    : (await adminDb.collection('exploration_channels').where('status', '==', 'active').get()).docs;
-  const channels = channelDocs.filter((d) => d.exists && d.data()!.status === 'active' && d.data()!.youtubeChannelId);
-
-  const [gamesSnap, operatorTags] = await Promise.all([adminDb.collection('games').get(), fetchOperatorTagIdsByName()]);
-  const games = gamesSnap.docs.map((d) => ({ id: d.id, title: (d.data().title as string) ?? '' }));
+  const channels = await activeChannelsForSweep(options.explorationChannelId);
+  const [rules, games, usedBefore] = await Promise.all([loadListingRules(), loadGamesForSweep(), getCollectionQuotaUsedToday()]);
+  const ctx = { rules, games, now: executedAt };
+  const remaining = () => COLLECTION_DAILY_QUOTA_LIMIT - usedBefore - getQuotaConsumed();
 
   const summary: ExploreSummary = {
     processedChannels: 0,
     playlistsFetched: 0,
     candidatesFound: 0,
-    skippedByFilter: 0,
-    skippedExisting: 0,
+    newPlaylists: emptyNewCounts(),
+    autoListed: 0,
+    autoDeferred: 0,
     quotaConsumed: 0,
     errors: [],
     status: 'success',
   };
 
-  // 途中で想定外のエラー（Firestore の書き込み失敗等）が起きても、そこまでのクォータ消費と実行ログは必ず残す
   let fatalError: unknown = null;
+  const swept = new Set<string>();
   try {
     for (const channelDoc of channels) {
-      const channel = channelDoc.data()!;
-      let playlists;
-      try {
-        playlists = await fetchChannelPlaylists(channel.youtubeChannelId as string);
-      } catch (e) {
-        summary.errors.push({
-          explorationChannelId: channelDoc.id,
-          message: e instanceof YouTubeApiError ? e.message : 'youtube_api_error',
-        });
+      if (remaining() <= 0) {
+        summary.errors.push({ explorationChannelId: channelDoc.id, message: 'quota_exceeded' });
         continue;
       }
-      summary.processedChannels++;
-      summary.playlistsFetched += playlists.length;
-
-      // 除外語に当たったものは捨てずに、却下済み（自動）として残す。次の探索で同じ判定をやり直さず、
-      // 却下の一覧で理由を見て「未処理に戻す」こともできる。動画数不足・非公開は変わりうるので残さない（§3.3）
-      const autoExcluded = new Map<string, string>();
-      const passed = playlists.filter((p) => {
-        if (p.itemCount < MIN_VIDEO_COUNT || !p.isPublic) {
-          summary.skippedByFilter++;
-          return false;
+      try {
+        const result = await sweepChannel(channelDoc, ctx);
+        swept.add(channelDoc.id);
+        summary.processedChannels++;
+        summary.playlistsFetched += result.playlistsFetched;
+        for (const [k, v] of Object.entries(result.newCounts)) {
+          summary.newPlaylists[k as keyof NewPlaylistCounts] += v;
+          summary.candidatesFound += v;
         }
-        const word = findExcludeWord(p.title);
-        if (word) {
-          autoExcluded.set(p.youtubePlaylistId, word);
-          summary.skippedByFilter++;
-        }
-        return !word;
-      });
-      const excludedItems = playlists.filter((p) => autoExcluded.has(p.youtubePlaylistId));
-      const excludedKnown = await existingIds([
-        ...excludedItems.map((p) => adminDb.collection('playlists').doc(p.youtubePlaylistId)),
-        ...excludedItems.map((p) => adminDb.collection('collection_candidates').doc(p.youtubePlaylistId)),
-      ]);
-      for (let i = 0; i < excludedItems.length; i += 400) {
-        const batch = adminDb.batch();
-        let count = 0;
-        for (const p of excludedItems.slice(i, i + 400)) {
-          if (excludedKnown.has(p.youtubePlaylistId)) continue;
-          batch.set(adminDb.collection('collection_candidates').doc(p.youtubePlaylistId), {
-            playlistId: p.youtubePlaylistId,
-            playlistTitle: p.title,
-            channelId: p.channelId,
-            channelTitle: p.channelTitle,
-            explorationChannelId: channelDoc.id,
-            thumbnailUrl: p.thumbnailUrl,
-            videoCount: p.itemCount,
-            videoCountCheckedAt: executedAt,
-            playlistPublishedAt: p.publishedAt ? new Date(p.publishedAt) : null,
-            guessedGameId: null,
-            guessedGameTitle: null,
-            gameQuery: extractGameQuery(p.title),
-            titleTagIds: [],
-            source: 'channel',
-            status: 'rejected',
-            collectedAt: executedAt,
-            reviewedAt: executedAt,
-            reviewedBy: 'auto',
-            reviewComment: `auto_exclude:${autoExcluded.get(p.youtubePlaylistId)}`,
-            registeredPlaylistId: null,
-          });
-          count++;
-        }
-        if (count > 0) await batch.commit();
+      } catch (e) {
+        if (!(e instanceof YouTubeApiError)) throw e;
+        summary.errors.push({ explorationChannelId: channelDoc.id, message: e.message });
+        if (isQuotaExceededError(e)) break;
       }
-
-      const ids = passed.map((p) => p.youtubePlaylistId);
-      const [registered, candidated] = await Promise.all([
-        existingIds(ids.map((id) => adminDb.collection('playlists').doc(id))),
-        existingIds(ids.map((id) => adminDb.collection('collection_candidates').doc(id))),
-      ]);
-      const fresh = passed.filter((p) => !registered.has(p.youtubePlaylistId) && !candidated.has(p.youtubePlaylistId));
-      summary.skippedExisting += passed.length - fresh.length;
-
-      const BATCH_LIMIT = 400;
-      for (let i = 0; i < fresh.length; i += BATCH_LIMIT) {
-        const batch = adminDb.batch();
-        for (const p of fresh.slice(i, i + BATCH_LIMIT)) {
-          const guessed = guessGame(p.title, games);
-          const titleTagIds = matchTitleTagNames(p.title)
-            .map((name) => operatorTags.get(name))
-            .filter((id): id is string => !!id);
-          batch.set(adminDb.collection('collection_candidates').doc(p.youtubePlaylistId), {
-            playlistId: p.youtubePlaylistId,
-            playlistTitle: p.title,
-            channelId: p.channelId,
-            channelTitle: p.channelTitle,
-            explorationChannelId: channelDoc.id,
-            thumbnailUrl: p.thumbnailUrl,
-            videoCount: p.itemCount,
-            videoCountCheckedAt: executedAt,
-            playlistPublishedAt: p.publishedAt ? new Date(p.publishedAt) : null,
-            guessedGameId: guessed?.id ?? null,
-            guessedGameTitle: guessed?.title ?? null,
-            gameQuery: extractGameQuery(p.title),
-            titleTagIds,
-            source: 'channel',
-            status: 'pending',
-            collectedAt: executedAt,
-            reviewedAt: null,
-            reviewedBy: null,
-            reviewComment: null,
-            registeredPlaylistId: null,
-          });
-        }
-        await batch.commit();
-      }
-      summary.candidatesFound += fresh.length;
-
-      // 既に候補になっている再生リストは、動画数をこの探索の時点に合わせる（取得済みの一覧を使うのでクォータは増えない）。
-      // 承認時は YouTube から全動画を取り直すので登録内容は常に最新だが、一覧の「N本」を実態に近づけるため（レビューUI v2.2 §3.4）
-      const known = passed.filter((p) => candidated.has(p.youtubePlaylistId));
-      for (let i = 0; i < known.length; i += BATCH_LIMIT) {
-        const batch = adminDb.batch();
-        for (const p of known.slice(i, i + BATCH_LIMIT)) {
-          batch.update(adminDb.collection('collection_candidates').doc(p.youtubePlaylistId), { videoCount: p.itemCount, videoCountCheckedAt: executedAt });
-        }
-        await batch.commit();
-      }
-
-      await channelDoc.ref.update({ lastExploredAt: executedAt, lastFoundCount: fresh.length, updatedAt: executedAt });
+    }
+    if (swept.size > 0) {
+      const auto = await listAutoPending({ canSpend: (units) => units <= remaining(), explorationChannelIds: swept });
+      summary.autoListed = auto.listed;
+      summary.autoDeferred = auto.deferred;
+      auto.errors.forEach((e) => summary.errors.push({ explorationChannelId: '', message: `${e.title}: ${e.message}` }));
     }
   } catch (e) {
     fatalError = e;
@@ -206,10 +105,10 @@ export async function exploreChannels(options: {
       executedAt,
       trigger: options.trigger,
       executedBy: options.executedBy,
+      kind: 'sweep',
       ...summary,
     });
   }
   if (fatalError) throw fatalError;
-
   return summary;
 }

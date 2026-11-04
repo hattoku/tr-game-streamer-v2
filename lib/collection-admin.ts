@@ -1,11 +1,11 @@
 // コンテンツ収集の管理画面（/admin/collection 配下）で共用するクライアント側の読み込み・API呼び出し。
 // 管理 AI運営者向け収集候補レビューUI仕様書 v2.0。exploration_channels・collection_candidates 等は
 // rules で管理者の読み取りのみ許可しているため、読み込みはクライアントSDK、書き込みは API Route 経由。
-import { collection, doc, getDoc, getDocs, limit, orderBy, query, where } from 'firebase/firestore';
+import { collection, doc, getCountFromServer, getDoc, getDocs, limit, orderBy, query, where } from 'firebase/firestore';
 import { auth, db } from './firebase';
 import { todayJst } from './collection-quota-shared';
 
-export type ExplorationChannelStatus = 'unresolved' | 'pending_confirm' | 'active' | 'excluded';
+export type ExplorationChannelStatus = 'unresolved' | 'pending_confirm' | 'active' | 'excluded' | 'opted_out';
 
 export interface ChannelCandidate {
   youtubeChannelId: string;
@@ -13,6 +13,8 @@ export interface ChannelCandidate {
   iconUrl: string;
   subscriberCount: number | null;
 }
+
+export type PublishMode = 'confirm' | 'auto';
 
 export interface ExplorationChannel {
   id: string;
@@ -24,8 +26,12 @@ export interface ExplorationChannel {
   subscriberCount: number | null;
   searchCandidates: ChannelCandidate[];
   tagIds: string[];
-  lastExploredAt: number | null;
-  lastFoundCount: number | null;
+  publishMode: PublishMode;
+  featuredOrder: number | null;
+  authorizedVia: string | null;
+  statusNote: string | null;
+  lastSweptAt: number | null;
+  lastSweepNewCount: number | null;
   createdAt: number;
 }
 
@@ -48,85 +54,83 @@ export async function fetchExplorationChannels(): Promise<ExplorationChannel[]> 
         subscriberCount: data.subscriberCount ?? null,
         searchCandidates: data.searchCandidates ?? [],
         tagIds: data.tagIds ?? [],
-        lastExploredAt: toMillis(data.lastExploredAt),
-        lastFoundCount: data.lastFoundCount ?? null,
+        publishMode: data.publishMode === 'auto' ? 'auto' : 'confirm',
+        featuredOrder: typeof data.featuredOrder === 'number' ? data.featuredOrder : null,
+        authorizedVia: data.authorizedVia ?? null,
+        statusNote: data.statusNote ?? null,
+        lastSweptAt: toMillis(data.lastSweptAt) ?? toMillis(data.lastExploredAt),
+        lastSweepNewCount: data.lastSweepNewCount ?? data.lastFoundCount ?? null,
         createdAt: toMillis(data.createdAt) ?? 0,
       };
     })
     .sort((a, b) => a.createdAt - b.createdAt);
 }
 
-export type CandidateStatus = 'pending' | 'registered' | 'rejected';
+/** 掲載状態（`playlists.listingStatus`）。lib/listing.ts と同じ値 */
+export type ListingTab = 'unconfirmed' | 'listed' | 'non_game' | 'excluded' | 'too_short' | 'channel_off';
 
-/** 承認前に楽天ブックスを検索した結果（収集候補レビューUI仕様書 v2.2 §3.7）。lib/collection-game.ts の RakutenPick と同じ形 */
-export interface RakutenPick {
-  jan: string;
-  title: string;
-  hardware: string;
-  imageUrl: string;
-  salesDate: string;
-  /** 楽天ブックスの商品ページ（v2.3 で追加。それより前に保存した結果には無い） */
-  itemUrl?: string;
-}
-
-/** 楽天ブックスの商品ページ。itemUrl の無い古い結果は JAN で楽天ブックスを検索するページにする */
-export function rakutenItemPageUrl(item: RakutenPick): string {
-  return item.itemUrl || `https://books.rakuten.co.jp/search?sitem=${encodeURIComponent(item.jan)}`;
-}
-
-export interface RakutenSearchResult {
-  /** 検索したときのゲーム名 */
-  title: string;
-  /** 実際に結果が出た検索語（0件のときは短くして探し直すため、ゲーム名と違うことがある） */
-  query: string;
-  items: RakutenPick[];
-}
-
-export interface CollectionCandidate {
+export interface ListingPlaylist {
   id: string;
-  playlistTitle: string;
-  channelId: string;
-  channelTitle: string;
-  explorationChannelId: string;
+  title: string;
   thumbnailUrl: string;
+  channelName: string;
+  explorationChannelId: string;
   videoCount: number;
-  /** videoCount を数えた探索の日時（v2.2 より前の候補は collectedAt） */
-  videoCountCheckedAt: number | null;
   playlistPublishedAt: number | null;
-  guessedGameId: string | null;
-  gameQuery: string;
-  titleTagIds: string[];
-  status: CandidateStatus;
-  reviewComment: string | null;
-  rakutenSearch: RakutenSearchResult | null;
+  registeredAt: number | null;
+  gameId: string | null;
+  gameName: string;
+  gameHint: string;
+  listingStatus: string;
+  listingReason: string | null;
+  listingSetBy: string | null;
+  listingSetAt: number | null;
+  hasVideos: boolean;
+  tagIds: string[];
 }
 
-export async function fetchCandidates(status: CandidateStatus): Promise<CollectionCandidate[]> {
-  const snap = await getDocs(query(collection(db, 'collection_candidates'), where('status', '==', status)));
+const LIST_LIMIT = 1000;
+
+/** 掲載状態ごとの再生リスト（管理者は isPublic が false のものも読める）。新しく取り込んだ順 */
+export async function fetchListingPlaylists(status: ListingTab, explorationChannelId?: string): Promise<ListingPlaylist[]> {
+  const constraints = [where('listingStatus', '==', status), ...(explorationChannelId ? [where('explorationChannelId', '==', explorationChannelId)] : []), limit(LIST_LIMIT)];
+  const snap = await getDocs(query(collection(db, 'playlists'), ...constraints));
   return snap.docs
-    .map((d): CollectionCandidate => {
+    .map((d): ListingPlaylist => {
       const data = d.data();
       return {
         id: d.id,
-        playlistTitle: data.playlistTitle ?? '',
-        channelId: data.channelId ?? '',
-        channelTitle: data.channelTitle ?? '',
-        explorationChannelId: data.explorationChannelId ?? '',
+        title: data.title ?? '',
         thumbnailUrl: data.thumbnailUrl ?? '',
+        channelName: data.channelName ?? '',
+        explorationChannelId: data.explorationChannelId ?? '',
         videoCount: data.videoCount ?? 0,
-        videoCountCheckedAt: toMillis(data.videoCountCheckedAt) ?? toMillis(data.collectedAt),
         playlistPublishedAt: toMillis(data.playlistPublishedAt),
-        guessedGameId: data.guessedGameId ?? null,
-        gameQuery: data.gameQuery ?? '',
-        titleTagIds: data.titleTagIds ?? [],
-        status: data.status ?? 'pending',
-        reviewComment: data.reviewComment ?? null,
-        rakutenSearch: data.rakutenSearch
-          ? { title: data.rakutenSearch.title ?? '', query: data.rakutenSearch.query ?? '', items: data.rakutenSearch.items ?? [] }
-          : null,
+        registeredAt: toMillis(data.registeredAt),
+        gameId: data.gameId ?? null,
+        gameName: data.gameName ?? '',
+        gameHint: data.gameHint ?? '',
+        listingStatus: data.listingStatus ?? 'listed',
+        listingReason: data.listingReason ?? null,
+        listingSetBy: data.listingSetBy ?? null,
+        listingSetAt: toMillis(data.listingSetAt),
+        hasVideos: data.youtubeItemCount != null,
+        tagIds: data.playlistTagIds ?? [],
       };
     })
-    .sort((a, b) => (b.playlistPublishedAt ?? 0) - (a.playlistPublishedAt ?? 0));
+    .sort((a, b) => (b.playlistPublishedAt ?? b.registeredAt ?? 0) - (a.playlistPublishedAt ?? a.registeredAt ?? 0));
+}
+
+/** 掲載状態ごとの件数（チャンネルで絞ることもできる） */
+export async function countListing(status: ListingTab, explorationChannelId?: string): Promise<number> {
+  const constraints = [where('listingStatus', '==', status), ...(explorationChannelId ? [where('explorationChannelId', '==', explorationChannelId)] : [])];
+  return (await getCountFromServer(query(collection(db, 'playlists'), ...constraints))).data().count;
+}
+
+export interface ListingRulesDoc {
+  excludedWords: string[];
+  nonGameWords: string[];
+  minVideoCount: number;
 }
 
 export async function fetchCollectionQuotaUsedToday(): Promise<number> {
@@ -142,16 +146,33 @@ export interface CollectionBatchLog {
   status: string;
 }
 
+/** 直近の巡回（手動の巡回と、毎日の新着動画の再取得に含まれる巡回のうち新しい方） */
 export async function fetchLastCollectionBatch(): Promise<CollectionBatchLog | null> {
-  const snap = await getDocs(query(collection(db, 'collection_batch_logs'), orderBy('executedAt', 'desc'), limit(1)));
-  const data = snap.docs[0]?.data();
-  if (!data) return null;
+  const [manualSnap, dailySnap] = await Promise.all([
+    getDocs(query(collection(db, 'collection_batch_logs'), orderBy('executedAt', 'desc'), limit(1))),
+    getDocs(query(collection(db, 'batch_logs'), orderBy('executedAt', 'desc'), limit(1))),
+  ]);
+  const manual = manualSnap.docs[0]?.data();
+  const daily = dailySnap.docs[0]?.data();
+  const manualAt = toMillis(manual?.executedAt) ?? 0;
+  const dailyAt = toMillis(daily?.executedAt) ?? 0;
+  if (daily && dailyAt >= manualAt && daily.sweptChannelCount != null) {
+    const counts = (daily.sweepNewPlaylists ?? {}) as Record<string, number>;
+    return {
+      executedAt: dailyAt,
+      trigger: 'cron',
+      processedChannels: daily.sweptChannelCount ?? 0,
+      candidatesFound: Object.values(counts).reduce((a, b) => a + b, 0),
+      status: daily.status ?? '',
+    };
+  }
+  if (!manual) return null;
   return {
-    executedAt: toMillis(data.executedAt) ?? 0,
-    trigger: data.trigger === 'cron' ? 'cron' : 'manual',
-    processedChannels: data.processedChannels ?? 0,
-    candidatesFound: data.candidatesFound ?? 0,
-    status: data.status ?? '',
+    executedAt: manualAt,
+    trigger: manual.trigger === 'cron' ? 'cron' : 'manual',
+    processedChannels: manual.processedChannels ?? 0,
+    candidatesFound: manual.candidatesFound ?? 0,
+    status: manual.status ?? '',
   };
 }
 
