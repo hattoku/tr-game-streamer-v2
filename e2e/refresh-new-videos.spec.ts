@@ -39,7 +39,10 @@ async function latestBatchLog(): Promise<DocumentData> {
 async function pickRealPlaylist(): Promise<QueryDocumentSnapshot> {
   const snap = await e2eDb().collection('playlists').where('isPublic', '==', true).get();
   for (const d of snap.docs) {
-    if (d.id.startsWith('PLE2E') || (d.data().videoCount ?? 0) < 2) continue;
+    // 巡回で作っただけの再生リスト（動画一覧が未取得）は除く
+    if (d.id.startsWith('PLE2E') || (d.data().videoCount ?? 0) < 2 || d.data().youtubeItemCount == null) continue;
+    const own = await e2eDb().collection('videos').where('playlistId', '==', d.id).limit(2).get();
+    if (own.size < 2) continue;
     const mylist = await e2eDb().collection('mylist').where('playlistId', '==', d.id).limit(1).get();
     if (mylist.empty) return d;
   }
