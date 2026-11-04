@@ -121,3 +121,34 @@ test('再生後に一時停止した位置が保存され、スリープ復帰�
   await userPage.reload();
   await expect(userPage.getByRole('button', { name: '続きから再生する' }).first()).toBeVisible();
 });
+
+test('再生を始めたあとにスリープから復帰したら、「続きから再生する」と前回の位置の進捗バーを表示する（プレーヤーの不調からの復帰）', async ({ userPage }) => {
+  await setProgress(uid, playlistId, videoIds[0], 120);
+  await userPage.goto(`/playlists/${playlistId}`);
+  await playerIframe(userPage).waitFor({ state: 'attached', timeout: 30_000 });
+  await userPage.getByRole('button', { name: '続きから再生する' }).last().click();
+  // 再生開始後のコントローラ行に切り替わる
+  await expect(userPage.getByRole('button', { name: /^シアター/ })).toBeVisible();
+  // 再生が始まった環境では一時停止してから眠らせる（再生中は作り直さない仕様のため）
+  const pause = userPage.getByRole('button', { name: '一時停止' });
+  if (await pause.waitFor({ timeout: 15_000 }).then(() => true, () => false)) {
+    await userPage.waitForTimeout(2_000);
+    await pause.click();
+    await expect(userPage.getByRole('button', { name: '再生', exact: true })).toBeVisible();
+  }
+  const before = await playerIframe(userPage).elementHandle({ timeout: 30_000 });
+
+  await simulateLongSleep(userPage);
+
+  await expect.poll(() => before!.evaluate((el) => el.isConnected), { timeout: 15_000 }).toBe(false);
+  // 再生開始前の表示に戻り、どこまで見たかが分かる
+  await expect(userPage.getByRole('button', { name: '続きから再生する' }).first()).toBeVisible();
+  await expect(userPage.getByRole('progressbar', { name: '前回の再生位置' })).toBeVisible();
+  await expect(userPage.getByRole('button', { name: /^シアター/ })).toHaveCount(0);
+  const seconds = await getProgressSeconds(uid, playlistId, videoIds[0]);
+  expect(seconds).toBeGreaterThanOrEqual(120);
+
+  // 押すと再生開始後の表示に戻る
+  await userPage.getByRole('button', { name: '続きから再生する' }).last().click();
+  await expect(userPage.getByRole('button', { name: /^シアター/ })).toBeVisible();
+});
