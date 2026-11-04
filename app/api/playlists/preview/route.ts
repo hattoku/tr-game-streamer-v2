@@ -3,6 +3,7 @@ import { requireUser } from '../../../../lib/api-auth';
 import { adminDb } from '../../../../lib/firebase-admin';
 import { extractPlaylistId, fetchChannelSnippet, fetchPlaylistSnippet, YouTubeApiError } from '../../../../lib/youtube';
 import { hasPendingPlaylistProposal } from '../../../../lib/playlist-registration';
+import { getProposalChannelState } from '../../../../lib/channel-application-server';
 
 // 「再生リストを追加する」フォームのURL入力(blur)で叩く、書き込みなしのプレビューAPI
 // （ページ 再生リストを追加する 仕様書.md 4.1節）。管理者の登録・一般ユーザーの提案（フェーズ7ステップ7-4）の
@@ -39,10 +40,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'channel_not_found' }, { status: 502 });
   }
 
-  const [playlistDoc, channelDoc, pendingProposal] = await Promise.all([
+  const [playlistDoc, channelDoc, pendingProposal, channelListing] = await Promise.all([
     adminDb.collection('playlists').doc(playlist.youtubePlaylistId).get(),
     adminDb.collection('channels').doc(channel.youtubeChannelId).get(),
     hasPendingPlaylistProposal(playlist.youtubePlaylistId),
+    // 掲載チャンネルか（一般ユーザーの提案の分岐。ページ 再生リストを追加する 仕様書 §10.1）
+    getProposalChannelState(channel.youtubeChannelId),
   ]);
 
   return NextResponse.json({
@@ -57,5 +60,7 @@ export async function POST(request: NextRequest) {
     playlistAlreadyRegistered: playlistDoc.exists,
     // 審査中の提案がある（§7.2）。一般ユーザーは提案不可、管理者は案内のみ（直接登録はできる）
     pendingProposal,
+    /** `listed`＝掲載中のチャンネル／`not_listed`＝掲載していない（チャンネル申請へ誘導）／`opted_out`＝掲載を止めている */
+    channelListing,
   });
 }

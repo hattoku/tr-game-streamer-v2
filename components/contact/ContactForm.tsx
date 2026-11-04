@@ -28,11 +28,11 @@ import { AttachmentPicker, type PickedImage } from '@/components/contact/Attachm
 
 const LINK_CLASS = 'text-text-primary underline underline-offset-[3px] hover:text-text-secondary';
 
-export function ContactForm() {
+export function ContactForm({ initialCategory }: { initialCategory?: InquiryCategory } = {}) {
   const { user, loading } = useAuth();
   const { toast } = useToast();
 
-  const [category, setCategory] = useState<InquiryCategory | ''>('');
+  const [category, setCategory] = useState<InquiryCategory | ''>(initialCategory ?? '');
   const [body, setBody] = useState('');
   // 行ごとに安定した key を持たせる（途中の行を×で消したときに入力値がずれないように）
   const [urls, setUrls] = useState<Array<{ key: number; value: string }>>([{ key: 0, value: '' }]);

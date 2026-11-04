@@ -152,11 +152,15 @@ export async function fetchPlaylistSnippet(playlistId: string): Promise<Playlist
 export interface PlaylistItemCount {
   itemCount: number;
   isPublic: boolean;
+  /** 再生リストのタイトル・サムネイル（30日ルールのメタ情報の取り直しに使う。コンテンツ収集機能仕様書 §10.11） */
+  title: string;
+  thumbnailUrl: string;
 }
 
 /**
- * 再生リストIDのリストから、YouTube 側の動画数と公開状態を取得する（playlists.list の id 指定、50件ごとに1ユニット）。
- * 削除された再生リストは結果に含まれない。新着動画取得の差分判定に使う（共通 YouTube定期取得仕様書 §7）。
+ * 再生リストIDのリストから、YouTube 側の動画数と公開状態・タイトル・サムネイルを取得する（playlists.list の id 指定、
+ * 50件ごとに1ユニット。part を増やしても消費は変わらない）。
+ * 削除された再生リストは結果に含まれない。新着動画取得の差分判定に使う（共通 YouTube定期取得仕様書 §7・§8.6）。
  */
 export async function fetchPlaylistItemCounts(playlistIds: string[]): Promise<Map<string, PlaylistItemCount>> {
   const result = new Map<string, PlaylistItemCount>();
@@ -164,14 +168,24 @@ export async function fetchPlaylistItemCounts(playlistIds: string[]): Promise<Ma
   for (let i = 0; i < playlistIds.length; i += CHUNK_SIZE) {
     const chunk = playlistIds.slice(i, i + CHUNK_SIZE);
     const data = await callApi<{
-      items?: Array<{ id: string; contentDetails: { itemCount: number }; status: { privacyStatus: string } }>;
+      items?: Array<{
+        id: string;
+        snippet?: { title?: string; thumbnails?: Thumbnails };
+        contentDetails: { itemCount: number };
+        status: { privacyStatus: string };
+      }>;
     }>('playlists', {
-      part: 'contentDetails,status',
+      part: 'snippet,contentDetails,status',
       id: chunk.join(','),
       maxResults: '50',
     });
     for (const item of data.items ?? []) {
-      result.set(item.id, { itemCount: item.contentDetails.itemCount, isPublic: item.status.privacyStatus === 'public' });
+      result.set(item.id, {
+        itemCount: item.contentDetails.itemCount,
+        isPublic: item.status.privacyStatus === 'public',
+        title: item.snippet?.title ?? '',
+        thumbnailUrl: bestThumbnailUrl(item.snippet?.thumbnails),
+      });
     }
   }
   return result;
@@ -405,4 +419,36 @@ export async function resolveChannelRef(ref: ChannelRef): Promise<ChannelDetail 
   });
   const item = data.items?.[0];
   return item ? toChannelDetail(item) : null;
+}
+
+/**
+ * チャンネルの再生リストを先頭の1ページだけ取得する（playlists.list、1ユニット）。
+ * チャンネル申請の審査詳細（管理 審査ワークフロー仕様書 §15.2「最大20件、YouTube から都度取得」）で使う。
+ * 全件を取る fetchChannelPlaylists と違い、ページをたどらない。
+ */
+export async function fetchChannelPlaylistsFirstPage(channelId: string, max = 20): Promise<{ playlists: ChannelPlaylist[]; totalResults: number }> {
+  const data = await callApi<{
+    items: Array<{
+      id: string;
+      snippet: { title: string; thumbnails: Thumbnails; channelId: string; channelTitle: string; publishedAt?: string };
+      contentDetails: { itemCount: number };
+      status: { privacyStatus: string };
+    }>;
+    pageInfo?: { totalResults?: number };
+  }>('playlists', {
+    part: 'snippet,contentDetails,status',
+    channelId,
+    maxResults: String(Math.min(50, Math.max(1, max))),
+  });
+  const playlists = (data.items ?? []).map((item) => ({
+    youtubePlaylistId: item.id,
+    title: item.snippet.title,
+    thumbnailUrl: bestThumbnailUrl(item.snippet.thumbnails),
+    channelId: item.snippet.channelId,
+    channelTitle: item.snippet.channelTitle,
+    itemCount: item.contentDetails.itemCount,
+    isPublic: item.status.privacyStatus === 'public',
+    publishedAt: item.snippet.publishedAt ?? null,
+  }));
+  return { playlists, totalResults: data.pageInfo?.totalResults ?? playlists.length };
 }

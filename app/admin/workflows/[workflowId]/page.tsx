@@ -23,8 +23,10 @@ import { ChevronLeftIcon } from '@/components/ui/icons';
 import { ReportWorkflowDetail } from '@/components/admin/workflows/ReportWorkflowDetail';
 import { PlaylistProposalDetail } from '@/components/admin/workflows/PlaylistProposalDetail';
 import { GameProposalDetail } from '@/components/admin/workflows/GameProposalDetail';
+import { ChannelApplicationDetail } from '@/components/admin/workflows/ChannelApplicationDetail';
+import { CHANNEL_APPLICATION_TYPE } from '@/lib/channel-application-shared';
 
-const SUPPORTED_TYPES = new Set(['review_report', PLAYLIST_PROPOSAL_TYPE, GAME_PROPOSAL_TYPE]);
+const SUPPORTED_TYPES = new Set(['review_report', PLAYLIST_PROPOSAL_TYPE, GAME_PROPOSAL_TYPE, CHANNEL_APPLICATION_TYPE]);
 
 export default function AdminWorkflowDetailPage() {
   const { workflowId } = useParams<{ workflowId: string }>();
@@ -64,6 +66,8 @@ export default function AdminWorkflowDetailPage() {
         <PlaylistProposalDetail workflowId={workflowId} data={data} />
       ) : data.type === GAME_PROPOSAL_TYPE ? (
         <GameProposalDetail workflowId={workflowId} data={data} />
+      ) : data.type === CHANNEL_APPLICATION_TYPE ? (
+        <ChannelApplicationDetail workflowId={workflowId} data={data} />
       ) : (
         <ReportWorkflowDetail workflowId={workflowId} data={data} />
       )}

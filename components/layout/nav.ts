@@ -59,6 +59,7 @@ export const SEARCH_TAB_NAV: NavItem[] = FOOTER_SERVICE_NAV;
 /** フッター「サポート」グループ（§3.3） */
 export const FOOTER_SUPPORT_NAV: NavItem[] = [
   { label: '初めての方へ', href: '/about' },
+  { label: '実況者・事務所の方へ', href: '/creators' },
   { label: 'お問い合わせ', href: '/contact' },
   { label: 'このサイトについて', href: '/site-info' },
 ];

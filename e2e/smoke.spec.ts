@@ -11,6 +11,7 @@ const GUEST_PAGES: PageCase[] = [
   { path: '/games', heading: 'ゲームタイトルから探す' },
   { path: '/channels', heading: 'チャンネル名から探す' },
   { path: '/about', heading: '初めての方へ' },
+  { path: '/creators', heading: '実況者・事務所の方へ' },
   { path: '/terms', heading: '利用規約' },
   { path: '/privacy', heading: 'プライバシーポリシー' },
   { path: '/contact', heading: 'お問い合わせ' },
@@ -23,6 +24,7 @@ const USER_PAGES: PageCase[] = [
   { path: '/notifications', heading: '通知' },
   { path: '/settings', heading: '設定' },
   { path: '/contact/history', heading: 'お問い合わせ履歴' },
+  { path: '/channels/apply', heading: 'チャンネルを申請する' },
 ];
 
 const ADMIN_PAGES: PageCase[] = [
@@ -30,7 +32,7 @@ const ADMIN_PAGES: PageCase[] = [
   { path: '/admin/workflows', heading: '審査ワークフロー' },
   { path: '/admin/inquiries', heading: 'お問い合わせ' },
   { path: '/admin/collection', heading: 'コンテンツ収集' },
-  { path: '/admin/collection/channels', heading: '探索対象チャンネル' },
+  { path: '/admin/collection/channels', heading: '掲載チャンネル' },
 ];
 
 // 一覧ページから最初の1件をたどって開く詳細ページ（データが無い環境では飛ばす）

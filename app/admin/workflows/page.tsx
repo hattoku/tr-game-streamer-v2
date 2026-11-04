@@ -17,6 +17,7 @@ import Link from 'next/link';
 import { collection, getDocs, doc, getDoc, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { reportReasonLabel } from '@/lib/report-reasons';
+import { CHANNEL_APPLICATION_TYPE } from '@/lib/channel-application-shared';
 import { GAME_PROPOSAL_TYPE, PROPOSAL_TYPE_LABEL, PROPOSAL_TYPES } from '@/lib/proposal-shared';
 import { Card, SectionHeading } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -84,7 +85,12 @@ async function fetchProposalRows(): Promise<WorkflowRow[]> {
   return snap.docs.map((d): WorkflowRow => {
     const data = d.data();
     const type = data.type as string;
-    const name = type === GAME_PROPOSAL_TYPE ? (data.proposalData?.gameTitle as string) : (data.proposalData?.title as string);
+    const name =
+      type === GAME_PROPOSAL_TYPE
+        ? (data.proposalData?.gameTitle as string)
+        : type === CHANNEL_APPLICATION_TYPE
+          ? (data.proposalData?.channelTitle as string)
+          : (data.proposalData?.title as string);
     return {
       id: d.id,
       summary: `${PROPOSAL_TYPE_LABEL[type] ?? type} — 「${name ?? ''}」`,
@@ -120,7 +126,7 @@ export default function AdminWorkflowsPage() {
         rows={proposalRows}
         emptyIcon={<InventoryIcon />}
         emptyTitle="提案はありません"
-        emptyDescription="一般ユーザーが再生リストやゲームタイトルの登録を提案すると、ここに一覧表示されます"
+        emptyDescription="一般ユーザーが再生リストやゲームタイトルの登録の提案、チャンネルの申請をすると、ここに一覧表示されます"
         noMatchText="該当する提案はありません"
       />
     </div>
