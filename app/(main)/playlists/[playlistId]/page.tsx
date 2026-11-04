@@ -716,7 +716,9 @@ export default function PlaylistDetailPage() {
   }
 
   // 現在の動画を、保存済みの位置で一時停止（cue）状態のプレーヤーとして作り直す。
-  // 再生開始前（サムネイル表示中）なら「続きから再生する」の位置、開始後なら最後に正常に読み取れた位置
+  // 再生開始前（サムネイル表示中）なら「続きから再生する」の位置、開始後なら最後に正常に読み取れた位置。
+  // 作り直した直後の埋め込みプレーヤーは未再生の表示（シークバーなし）になり、どこまで見たか分からないため、
+  // ページを開いたときと同じ再生開始前の表示（サムネイル・「続きから再生する」・前回の位置の進捗バー）に戻す
   function rebuildPlayer() {
     const video = currentVideoRef.current;
     if (!video || !window.YT?.Player) return;
@@ -724,8 +726,10 @@ export default function PlaylistDetailPage() {
     const seconds = last?.youtubeVideoId === video.youtubeVideoId ? last.seconds : resumeSeconds;
     debugLog(`rebuild at ${seconds}`);
     autoAdvanceRef.current = null;
+    autoStartingRef.current = false;
     setIsPlaying(false);
     setResumeSeconds(seconds);
+    setPlayerStarted(false);
     createPlayer(video, seconds, false);
   }
   useEffect(() => {
