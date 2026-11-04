@@ -35,6 +35,8 @@ interface UnsetPlaylist {
 async function fetchPlaylists(field: 'gameId' | 'gameSetBy', value: null | 'user'): Promise<UnsetPlaylist[]> {
   const snap = await getDocs(query(collection(db, 'playlists'), where(field, '==', value)));
   return snap.docs
+    // 掲載中のものだけ出す（取り込んだ確認待ち・非表示の再生リストは「自動掲載の確認」でゲームを付ける。仕様書 §6.5）
+    .filter((d) => (d.data().listingStatus ?? 'listed') === 'listed')
     .map((d) => {
       const data = d.data();
       return {

@@ -1,7 +1,7 @@
 // テストデータの後始末（Admin SDK）。テスト用会員（users.isTestUser == true）が持ち主で、本文が E2E_MARK で始まる
 // お問い合わせを、メッセージ（サブコレクション）・返信通知・添付画像（Storage）ごと削除する。手で作ったデータは対象にしない。
 // テスト用会員の画像添付の1日の上限カウンター（inquiry_upload_counters）も消す（実行を繰り返しても上限に当たらないように）。
-// あわせて、収集候補のテスト（e2e/collection-approve.spec.ts）が作った、再生リストタイトルが E2E_MARK で始まる
+// あわせて、再生リストタイトルが E2E_MARK で始まる
 // collection_candidates と、タイトルが E2E_MARK で始まり再生リストの無い games、新着取得のテストが作った
 // ID が PLE2E で始まる playlists を削除する。
 // 認証は GOOGLE_APPLICATION_CREDENTIALS（stg 用サービスアカウント。roles/datastore.user）。接続先は stg 固定。
@@ -42,7 +42,9 @@ async function cleanupCollectionData(): Promise<{ candidates: number; games: num
   const applications = (await db().collection('workflows').where('type', '==', 'channel_application').get()).docs.filter((d) =>
     String(d.data().proposalData?.youtubeChannelId ?? '').startsWith('UCE2E'),
   );
-  const refs = [...candidates.docs, ...games, ...playlists, ...channels, ...exploration, ...applications].map((d) => d.ref);
+  // 自動掲載のテスト（e2e/listing-collection.spec.ts）が作った、名前が E2E_MARK で始まる掲載チャンネル
+  const explorationChannels = await startsWithMark('exploration_channels', 'name');
+  const refs = [...candidates.docs, ...games, ...playlists, ...channels, ...exploration, ...applications, ...explorationChannels.docs].map((d) => d.ref);
   for (let i = 0; i < refs.length; i += 400) {
     const batch = db().batch();
     refs.slice(i, i + 400).forEach((ref) => batch.delete(ref));
