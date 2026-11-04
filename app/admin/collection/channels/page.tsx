@@ -1,6 +1,9 @@
 /**
- * 探索対象チャンネル（/admin/collection/channels）。管理 AI運営者向け収集候補レビューUI仕様書 v2.0 §6、
- * 管理_Ai運営者 コンテンツ収集機能仕様書 v3.0 §3.1。
+ * 掲載チャンネル（/admin/collection/channels）。管理 AI運営者向け収集候補レビューUI仕様書 v3.3 §9、
+ * 管理_Ai運営者 コンテンツ収集機能仕様書 v4.3 §10.2・§10.6。
+ *
+ * 掲載チャンネル（登録済み）の掲載方法（自動／確認）・表示順・タグの設定、掲載から外す・掲載を止める・戻す操作を行う。
+ * 登録済みにしたチャンネルは、その場で1回巡回して再生リストを取り込む。
  *
  * 名前（1行1件）またはチャンネルURL・@ハンドルで追加し、名前は YouTube のチャンネル検索で候補を出して確定する。
  * 名前検索は1件約101ユニットかかるため、まとめて特定は1回40件まで（80件なら2日に分ける。§6）。
@@ -26,6 +29,7 @@ import { fetchTagsMap, type TagInfo } from '@/lib/tags';
 import { groupOperatorTags } from '@/lib/tag-categories';
 import { COLLECTION_DAILY_QUOTA_LIMIT, NAME_SEARCH_COST } from '@/lib/collection-quota-shared';
 import {
+  countListing,
   fetchCollectionQuotaUsedToday,
   fetchExplorationChannels,
   formatDateTime,
@@ -38,12 +42,20 @@ import {
 
 const RESOLVE_BATCH = 40;
 
-const TAB_ORDER: ExplorationChannelStatus[] = ['pending_confirm', 'unresolved', 'active', 'excluded'];
+const TAB_ORDER: ExplorationChannelStatus[] = ['pending_confirm', 'unresolved', 'active', 'excluded', 'opted_out'];
 const TAB_LABEL: Record<ExplorationChannelStatus, string> = {
   pending_confirm: '確認待ち',
   unresolved: '未特定',
-  active: '探索中',
-  excluded: '除外',
+  active: '登録済み',
+  excluded: '掲載しない',
+  opted_out: '掲載停止',
+};
+
+const AUTHORIZED_VIA_LABEL: Record<string, string> = {
+  admin: '運営の登録',
+  creator_application: '本人・事務所の申請',
+  viewer_recommendation: '視聴者の推薦',
+  migration: '移行',
 };
 
 function ChannelAvatar({ src, alt }: { src: string | null; alt: string }) {
@@ -67,11 +79,23 @@ export default function AdminExplorationChannelsPage() {
   const [refInputs, setRefInputs] = useState<Record<string, string>>({});
   const [tagTarget, setTagTarget] = useState<ExplorationChannel | null>(null);
   const [draftTagIds, setDraftTagIds] = useState<Set<string>>(new Set());
+  const [listingCounts, setListingCounts] = useState<Record<string, { listed: number; unconfirmed: number }>>({});
+  const [orderInputs, setOrderInputs] = useState<Record<string, string>>({});
+  // 掲載から外す・掲載を止める（理由メモとお問い合わせID）
+  const [offTarget, setOffTarget] = useState<{ channel: ExplorationChannel; kind: 'exclude' | 'opt_out' } | null>(null);
+  const [offNote, setOffNote] = useState('');
+  const [offInquiry, setOffInquiry] = useState('');
 
   async function reload() {
     const [list, used] = await Promise.all([fetchExplorationChannels(), fetchCollectionQuotaUsedToday()]);
     setChannels(list);
     setQuotaUsed(used);
+    // 登録済みのチャンネルごとの再生リスト数（掲載中・確認待ち。件数の集計）
+    const active = list.filter((c) => c.status === 'active');
+    const entries = await Promise.all(
+      active.map(async (c) => [c.id, { listed: await countListing('listed', c.id).catch(() => 0), unconfirmed: await countListing('unconfirmed', c.id).catch(() => 0) }] as const),
+    );
+    setListingCounts(Object.fromEntries(entries));
   }
 
   useEffect(() => {
@@ -83,7 +107,7 @@ export default function AdminExplorationChannelsPage() {
   }, []);
 
   const counts = useMemo(() => {
-    const c: Record<ExplorationChannelStatus, number> = { pending_confirm: 0, unresolved: 0, active: 0, excluded: 0 };
+    const c: Record<ExplorationChannelStatus, number> = { pending_confirm: 0, unresolved: 0, active: 0, excluded: 0, opted_out: 0 };
     channels?.forEach((ch) => c[ch.status]++);
     return c;
   }, [channels]);
@@ -119,7 +143,11 @@ export default function AdminExplorationChannelsPage() {
   function errorMessage(error: unknown): string {
     switch (error) {
       case 'duplicate_channel':
-        return 'このチャンネルは既に探索対象に登録されています';
+        return 'このチャンネルは既に登録されています（掲載停止中のチャンネルは、掲載停止のタブで再開してください）';
+      case 'invalid_status':
+        return 'このチャンネルの状態では実行できません';
+      case 'channel_not_resolved':
+        return 'YouTubeのチャンネルが決まっていません。未特定に戻してから特定してください';
       case 'channel_not_found':
         return 'チャンネルが見つかりませんでした。URLを確認してください';
       case 'invalid_ref':
@@ -135,7 +163,7 @@ export default function AdminExplorationChannelsPage() {
     run('add', '/api/admin/collection/channels', { action: 'add', lines }, (b) => {
       setLines('');
       const notFound = Array.isArray(b.notFound) ? b.notFound.length : 0;
-      return `追加しました（名前 ${b.addedNames}件・URL指定 ${b.addedActive}件、重複 ${b.duplicates}件${notFound ? `、見つからないURL ${notFound}件` : ''}）`;
+      return `追加しました（名前 ${b.addedNames}件・URL指定 ${b.addedActive}件、重複 ${b.duplicates}件${notFound ? `、見つからないURL ${notFound}件` : ''}）。URL指定のチャンネルは再生リストを取り込みました`;
     });
   }
 
@@ -168,11 +196,23 @@ export default function AdminExplorationChannelsPage() {
     if (saved) setTagTarget(null);
   }
 
+  async function confirmOff() {
+    if (!offTarget) return;
+    const { channel, kind } = offTarget;
+    const ok = await run(
+      `${kind}-${channel.id}`,
+      '/api/admin/collection/channels',
+      { action: kind, id: channel.id, note: offNote, ...(kind === 'opt_out' ? { inquiryId: offInquiry } : {}) },
+      (b) => `${b.turnedOff}件の再生リストを非表示にしました`,
+    );
+    if (ok) setOffTarget(null);
+  }
+
   return (
     <div className="flex flex-col gap-5">
       <SectionHeading>コンテンツ収集</SectionHeading>
       <CollectionNav />
-      <h2 className="text-xl font-medium text-text-primary">探索対象チャンネル</h2>
+      <h2 className="text-xl font-medium text-text-primary">掲載チャンネル</h2>
 
       <Card className="flex flex-col gap-3">
         <Field
@@ -238,10 +278,11 @@ export default function AdminExplorationChannelsPage() {
                     {c.status === 'active' && (
                       <p className="text-md text-text-tertiary">
                         {c.name !== c.channelTitle && <>登録名: {c.name} ・ </>}
-                        {formatSubscribers(c.subscriberCount)} ・ 最終探索 {formatDateTime(c.lastExploredAt)}
-                        {c.lastFoundCount !== null && `（新規候補 ${c.lastFoundCount}件）`}
+                        {c.subscriberCount !== null && <>{formatSubscribers(c.subscriberCount)} ・ </>}最終巡回 {formatDateTime(c.lastSweptAt)}
+                        {c.lastSweepNewCount !== null && `（新しく取り込んだ ${c.lastSweepNewCount}件）`}
                       </p>
                     )}
+                    {(c.status === 'excluded' || c.status === 'opted_out') && c.statusNote && <p className="text-md text-text-tertiary">メモ: {c.statusNote}</p>}
                   </div>
                   {c.status === 'active' && c.youtubeChannelId && (
                     <a
@@ -300,6 +341,42 @@ export default function AdminExplorationChannelsPage() {
                       </div>
                     )}
                   </fieldset>
+                )}
+
+                {c.status === 'active' && (
+                  <div className="flex flex-col gap-2 text-md text-text-tertiary">
+                    <p>
+                      掲載の入口: {AUTHORIZED_VIA_LABEL[c.authorizedVia ?? ''] ?? '-'} ・ 再生リスト 掲載中 {listingCounts[c.id]?.listed ?? '-'}件・
+                      <Link href={`/admin/collection?channel=${c.id}`} className="underline">
+                        確認待ち {listingCounts[c.id]?.unconfirmed ?? '-'}件
+                      </Link>
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span>掲載方法:</span>
+                      <Chip active={c.publishMode === 'confirm'} disabled={busy !== null} onClick={() => c.publishMode !== 'confirm' && run(`mode-${c.id}`, '/api/admin/collection/channels', { action: 'set_mode', id: c.id, publishMode: 'confirm' }, () => '確認してから掲載にしました')}>
+                        確認してから掲載
+                      </Chip>
+                      <Chip active={c.publishMode === 'auto'} disabled={busy !== null} onClick={() => c.publishMode !== 'auto' && run(`mode-${c.id}`, '/api/admin/collection/channels', { action: 'set_mode', id: c.id, publishMode: 'auto' }, () => '自動で掲載にしました（この先に取り込む再生リストから）')}>
+                        自動で掲載
+                      </Chip>
+                      <span className="ml-2">表示順:</span>
+                      <Input
+                        value={orderInputs[c.id] ?? (c.featuredOrder === null ? '' : String(c.featuredOrder))}
+                        onChange={(e) => setOrderInputs((prev) => ({ ...prev, [c.id]: e.target.value }))}
+                        onBlur={() => {
+                          const raw = (orderInputs[c.id] ?? '').trim();
+                          if (orderInputs[c.id] === undefined) return;
+                          const value = raw === '' ? null : Number(raw);
+                          if (value !== null && !Number.isFinite(value)) return;
+                          if (value === c.featuredOrder) return;
+                          void run(`order-${c.id}`, '/api/admin/collection/channels', { action: 'set_order', id: c.id, featuredOrder: value }, () => '表示順を保存しました');
+                        }}
+                        inputMode="numeric"
+                        aria-label={`${c.channelTitle ?? c.name}の表示順`}
+                        className="w-20"
+                      />
+                    </div>
+                  </div>
                 )}
 
                 {c.status === 'active' && (
@@ -362,30 +439,41 @@ export default function AdminExplorationChannelsPage() {
                         disabled={busy !== null}
                         loading={busy === `explore-${c.id}`}
                         onClick={() =>
-                          run(`explore-${c.id}`, '/api/admin/collection/explore', { explorationChannelId: c.id }, (b) => `新しい候補を${b.candidatesFound}件追加しました`)
+                          run(`explore-${c.id}`, '/api/admin/collection/explore', { explorationChannelId: c.id }, (b) => `新しい再生リストを${b.candidatesFound}件取り込みました`)
                         }
                       >
-                        このチャンネルだけ探索
+                        このチャンネルだけ巡回
+                      </Button>
+                      <Button variant="ghost" size="sm" disabled={busy !== null} onClick={() => { setOffNote(''); setOffTarget({ channel: c, kind: 'exclude' }); }}>
+                        掲載から外す
+                      </Button>
+                      <Button variant="ghost" size="sm" disabled={busy !== null} onClick={() => { setOffNote(''); setOffInquiry(''); setOffTarget({ channel: c, kind: 'opt_out' }); }}>
+                        掲載を止める
                       </Button>
                     </>
                   )}
-                  {c.status === 'excluded' || c.status === 'active' ? (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      disabled={busy !== null}
-                      onClick={() =>
-                        run(
-                          `status-${c.id}`,
-                          '/api/admin/collection/channels',
-                          { action: c.status === 'excluded' ? 'restore' : 'exclude', id: c.id },
-                          () => (c.status === 'excluded' ? '未特定に戻しました' : '除外しました'),
-                        )
-                      }
-                    >
-                      {c.status === 'excluded' ? '未特定に戻す' : '除外'}
+                  {c.status === 'excluded' && (
+                    <>
+                      {c.youtubeChannelId ? (
+                        <Button variant="secondary" size="sm" disabled={busy !== null} loading={busy === `relist-${c.id}`} onClick={() => run(`relist-${c.id}`, '/api/admin/collection/channels', { action: 'relist', id: c.id }, (b) => `掲載しました（再生リスト${b.restored}件を元に戻しました）`)}>
+                          掲載する
+                        </Button>
+                      ) : (
+                        <Button variant="ghost" size="sm" disabled={busy !== null} onClick={() => run(`status-${c.id}`, '/api/admin/collection/channels', { action: 'restore', id: c.id }, () => '未特定に戻しました')}>
+                          未特定に戻す
+                        </Button>
+                      )}
+                      <Button variant="ghost" size="sm" disabled={busy !== null} onClick={() => { setOffNote(''); setOffInquiry(''); setOffTarget({ channel: c, kind: 'opt_out' }); }}>
+                        掲載を止める
+                      </Button>
+                    </>
+                  )}
+                  {c.status === 'opted_out' && (
+                    <Button variant="secondary" size="sm" disabled={busy !== null} loading={busy === `resume-${c.id}`} onClick={() => run(`resume-${c.id}`, '/api/admin/collection/channels', { action: 'resume', id: c.id }, (b) => `掲載を再開しました（再生リスト${b.restored}件を元に戻しました）`)}>
+                      掲載を再開する
                     </Button>
-                  ) : (
+                  )}
+                  {c.status === 'active' || c.status === 'excluded' || c.status === 'opted_out' ? null : (
                     <Button
                       variant="ghost"
                       size="sm"
@@ -403,10 +491,41 @@ export default function AdminExplorationChannelsPage() {
       )}
 
       <Modal
+        open={offTarget !== null}
+        onOpenChange={(open) => !open && setOffTarget(null)}
+        title={offTarget?.kind === 'opt_out' ? '掲載を止める' : '掲載から外す'}
+        description={
+          offTarget?.kind === 'opt_out'
+            ? `実況者・事務所からの申し出で、${offTarget.channel.channelTitle ?? offTarget.channel.name}の再生リストを今すぐすべて非表示にします。データは消しません。`
+            : `${offTarget?.channel.channelTitle ?? offTarget?.channel.name ?? ''}の再生リスト（掲載中 ${offTarget ? (listingCounts[offTarget.channel.id]?.listed ?? 0) : 0}件を含む）を、すべて非表示にします。データは消しません。`
+        }
+        maxWidthClassName="max-w-[520px]"
+      >
+        <div className="flex flex-col gap-3">
+          {offTarget?.kind === 'opt_out' && (
+            <Field label="申し出のお問い合わせID（任意）" htmlFor="off-inquiry">
+              <Input id="off-inquiry" value={offInquiry} onChange={(e) => setOffInquiry(e.target.value)} />
+            </Field>
+          )}
+          <Field label="理由メモ（運営内部向け・任意）" htmlFor="off-note">
+            <Textarea id="off-note" rows={3} value={offNote} onChange={(e) => setOffNote(e.target.value)} />
+          </Field>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setOffTarget(null)} disabled={busy !== null}>
+              キャンセル
+            </Button>
+            <Button variant="primary" onClick={confirmOff} loading={busy !== null && busy.endsWith(offTarget?.channel.id ?? '')}>
+              {offTarget?.kind === 'opt_out' ? '掲載を止める' : '掲載から外す'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
         open={tagTarget !== null}
         onOpenChange={(open) => !open && setTagTarget(null)}
         title="チャンネル単位のタグ"
-        description="このチャンネルの再生リストを承認するときに、固定タグとして付けます"
+        description="このチャンネルの再生リストを掲載するときに、固定タグとして付けます"
         maxWidthClassName="max-w-[560px]"
       >
         <div className="flex flex-col gap-4">

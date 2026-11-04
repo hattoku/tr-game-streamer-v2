@@ -1,6 +1,6 @@
 # プレミテ Firestore データモデル設計書
 
-**バージョン**: v2.4  
+**バージョン**: v2.5  
 **作成日**: 2026年3月30日（更新）  
 **対象**: 開発チーム  
 **関連ドキュメント**: プレミテ企画書 / プレミテ_技術スタック仕様書 / 各機能仕様書
@@ -221,6 +221,11 @@ Firestoreはテーブル結合（JOIN）ができないため、一覧表示や�
 | `source` | string? | — | 入った経路（v2.0）。`"channel_sweep"`（掲載チャンネルの巡回）／`"user_proposal"`（一般ユーザーの提案）／`"admin"`（管理者の直接登録）／`"collection_candidate"`（v2.0 より前の収集候補の承認）。移行で分かる範囲を付ける |
 | `explorationChannelId` | string? | — | 所属する掲載チャンネル（`exploration_channels` のドキュメントID、v2.0） |
 | `fullRefetchedAt` | Timestamp? | — | 動画一覧を全件取り直した最後の日時（v2.0、段階4）。30日を超えないように取り直す（YouTube定期取得仕様書 §8.4、YouTube API 規約 III.E.4） |
+| `metaFetchedAt` | Timestamp? | — | YouTube のメタ情報（タイトル・サムネイル・動画数）を最後に取り直した日時（v2.5、段階4）。巡回と動画数の確認で書く。30日の消し込みの判定に使う（無ければ `lastFetchedAt`→`registeredAt`） |
+| `playlistPublishedAt` | Timestamp? | — | YouTube で再生リストが作られた日時（`snippet.publishedAt`。v2.5、巡回で作ったものだけ） |
+| `youtubeDataRemovedAt` | Timestamp? | — | 掲載停止（`opt_out`）で30日を過ぎ、YouTube 由来の項目を消した日時（v2.5。コンテンツ収集機能仕様書 §10.11） |
+
+> **v2.5 の注記（段階4）**: 巡回で作った再生リストは、動画一覧を取るまで `youtubeItemCount` が null で、`videoCount` は YouTube の動画数（巡回のたびに更新）。`registeredBy` は `"system"`。`listingReason` の値はコンテンツ収集機能仕様書 §10.11（`word:<言葉>`・`too_short`・`confirm`・`auto_pending`・`auto`・`admin`・`migration`・`candidate_rejected`・`channel_excluded`・`opt_out`）。
 
 > **v2.0 の注記**: 掲載していない再生リスト（`listed` 以外）は、`videos` を持たないことがある（動画一覧は `listed` になったとき、またはマイリスト登録者がいるときに取る。コンテンツ収集機能仕様書 §10.3・§10.7）。`games.playlistCount`・`channels.playlistCount` などの件数は `listed` だけを数える。ゲーム未設定（`gameId` が null）は PR #14（v1.28）の定義に従い、掲載の妨げにしない。
 
@@ -704,6 +709,12 @@ YouTube定期取得バッチの実行結果ログ。
 | `notFoundPlaylists` | map[]? | — | YouTube から返らない・公開でない再生リスト `{ playlistId, title }`（最大100件） |
 | `quotaExceeded` | boolean? | — | YouTube の1日のクォータが途中で尽きて中断した（このとき `status` は `"error"`） |
 | `errorPlaylists` | map[]? | — | 動画数の確認または取り直しに失敗した再生リスト `{ playlistId, title, message }`（`message` は「動画数の確認に失敗: …」「取り直しに失敗: …」。最大100件） |
+| `sweptChannelCount` | number? | — | 巡回した掲載チャンネルの数（v2.5・段階4。YouTube定期取得仕様書 §8.6） |
+| `sweepNewPlaylists` | map? | — | 巡回で新しく取り込んだ再生リストの件数を掲載状態ごとに（`{ unconfirmed, non_game, excluded, too_short }`。v2.5） |
+| `fullRefetchedCount` | number? | — | 30日の取り直しで全件を取り直した再生リストの数（v2.5） |
+| `autoListedCount` | number? | — | 自動で掲載した（動画一覧を取って `listed` にした）再生リストの数（v2.5） |
+| `purgedCount` | number? | — | 30日の消し込みで消した・YouTube 由来の項目を消した再生リストの数（v2.5） |
+| `sweepErrors` | map[]? | — | 巡回に失敗したチャンネル `{ explorationChannelId, message }`（v2.5） |
 
 ---
 
@@ -751,6 +762,8 @@ YouTube API クォータ消費の記録。
 | `reviewComment` | string? | — | 却下理由など（自動却下時は `"not_public"` 等） |
 | `registeredPlaylistId` | string? | — | 登録した `playlists` のドキュメントID |
 | `rakutenSearch` | map? | — | 承認前の楽天ブックス検索の結果（収集候補レビューUI仕様書 v2.2 §3.7）。`title`（検索したゲーム名・検索語）・`query`（結果が出た検索語）・`items`（最大10件。各 `jan`・`title`・`hardware`・`imageUrl`・`salesDate`・`itemUrl`（v1.27 で追加。商品ページ。それより前の結果には無い））・`searchedAt`。未検索は無し |
+
+> v2.5（段階4）: 新しくは作らない。巡回が掲載チャンネルの再生リストを取り込んだときにその候補を消し、残りも `collectedAt` から30日で消す（YouTube API 規約。コンテンツ収集機能仕様書 §10.11）。
 
 > v1.25 で旧設計（ジャンル起点）の `genreId`・`genreName`・`aiOperatorId`・`aiResult`・`aiFlags`・`aiComment`・`latestVideoPublishedAt` と `approved` 状態を削除した。AI判定のフィールドは Gemini 導入時に追加する。
 
@@ -946,6 +959,8 @@ AI運営者（審査AI）の設定。プラットフォーム共通で1体のみ
 | `statusNote` | string? | — | 掲載から外した・掲載を止めた理由のメモ（運営内部向け、v2.0。お問い合わせのIDなど） |
 | `lastSweptAt` | Timestamp? | — | 最終巡回日時（v2.0・段階4） |
 | `lastSweepNewCount` | number? | — | 前回の巡回で新しく取り込んだ再生リスト数（v2.0・段階4） |
+
+> v2.5（段階4）: `subscriberCount` は巡回のたびに null にする（YouTube API 規約で統計値は30日を超えて持たない）。`searchCandidates[].subscriberCount` は `updatedAt` から30日を過ぎたら null にする。`lastExploredAt`・`lastFoundCount` は巡回でも `lastSweptAt`・`lastSweepNewCount` と同じ値を書く（段階3までの画面との互換）。
 | `createdAt` | Timestamp | ✅ | 登録日時 |
 | `createdBy` | string | ✅ | 登録した管理者のuserId |
 | `updatedAt` | Timestamp | ✅ | 更新日時 |
@@ -1104,4 +1119,5 @@ ai_operators ──── (1) users
 | v2.1 | 2026-11-01 | main の v2.0 に、PR #14 の v1.26〜v1.29（`collection_candidates` の楽天検索結果、`playlists` の `gameHint`・`gameSetBy`・`gameSetAt`・`rejectedGameIds`、`playlist_game_changes`）を統合。版番号の衝突（v1.26）は PR #14 側を v1.26b 相当として扱う |
 | v2.4 | 2026-11-01 | `workflows.proposalData`（`game_title_register`）に、ゲーム未設定の再生リストに付けたいゲームタイトルの提案の形（`playlistId`・`playlistTitle`）を追加 |
 | v2.3 | 2026-11-01 | `gameSetBy` に `user`、`playlist_game_changes.by` に `user` を追加、3.34 `game_link_counters` を追加（一般ユーザーのゲーム登録と1日の上限） |
+| v2.5 | 2026-11-04 | 段階4の実装。§3.2 `playlists` に `metaFetchedAt`・`playlistPublishedAt`・`youtubeDataRemovedAt` を追加し、巡回で作る再生リストの値と `listingReason` の値を注記。§3.21 `batch_logs` に巡回の結果の項目を追加。§3.32 `exploration_channels` の登録者数の保存期間を注記。§3.23 `collection_candidates` は巡回に取り込んだら消し、残りも30日で消す（コンテンツ収集機能仕様書 §10.11） |
 | v2.2 | 2026-11-01 | 段階3の実装。§3.2 `playlists` の掲載状態（`listingStatus` ほか）と `source`・`explorationChannelId` を実装。管理者の登録・承認は `listed`（`listingReason: admin`）で作り、既存データは移行スクリプトで `listed`（`listingReason: migration`）または `channel_off` にする。`games.playlistCount`・`channels.playlistCount`・`tags.usagePlaylistCount` は掲載中の再生リストだけを数える（コンテンツ収集機能仕様書 §10.9）。フィールドの追加・変更はなし |
