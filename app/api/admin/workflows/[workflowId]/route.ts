@@ -7,8 +7,7 @@ import { registerPlaylist, type PlaylistApiError } from '@/lib/playlist-registra
 import { linkPlaylistToGame } from '@/lib/playlist-game-linking';
 import { GAME_PROPOSAL_TYPE, PLAYLIST_PROPOSAL_TYPE, proposalRejectReasonLabel } from '@/lib/proposal-shared';
 import { CHANNEL_APPLICATION_TYPE } from '@/lib/channel-application-shared';
-import { decideChannelApplication } from '@/lib/channel-application-server';
-import { getProposalChannelState } from '@/lib/channel-application-server';
+import { decideChannelApplication, getProposalChannelState } from '@/lib/channel-application-server';
 
 // 審査ワークフローの承認・却下・運営メモ更新API（管理_審査ワークフロー仕様書 §9, §11）。
 // 対象typeは`review_report`（通報、フェーズ6ステップ3）と、提案系の`playlist_register`・`game_title_register`

@@ -5,6 +5,7 @@
 // 申請の承認で掲載チャンネルに加える（publishMode: confirm）ことだけを行う。
 import type { DocumentReference, DocumentSnapshot } from 'firebase-admin/firestore';
 import { FieldValue } from 'firebase-admin/firestore';
+import { after } from 'next/server';
 import { adminDb } from './firebase-admin';
 import {
   extractPlaylistId,
@@ -18,7 +19,6 @@ import {
 import {
   CHANNEL_APPLICATION_TYPE,
   channelApplicationRejectReasonLabel,
-  DAILY_APPLICATION_LIMIT,
   type ApplyChannelState,
 } from './channel-application-shared';
 import { todayJst } from './collection-quota-shared';
@@ -137,7 +137,7 @@ export async function decideChannelApplication(params: {
   uid: string;
   comment: string | null;
   rejectReasonCode: unknown;
-}): Promise<{ ok: true; imported: boolean } | ChannelApiError> {
+}): Promise<{ ok: true; /** 取り込みを予約した（応答のあとに実行。結果は見ない） */ imported: boolean } | ChannelApiError> {
   const { workflowRef, workflow, workflowId, action, uid, comment } = params;
   const proposal = (workflow.proposalData ?? {}) as Record<string, unknown>;
   const youtubeChannelId = typeof proposal.youtubeChannelId === 'string' ? proposal.youtubeChannelId : '';
@@ -201,7 +201,10 @@ export async function decideChannelApplication(params: {
           await existing.ref.update(fields);
           newlyActivatedId = existing.id;
         } else {
-          const ref = await adminDb.collection('exploration_channels').add({
+          // ドキュメントIDを YouTube のチャンネルIDにして、同じチャンネルの別の申請を同時に承認しても二重に作らない
+          // （作成済みなら create が失敗するので、その場合は作った側のドキュメントを active にするだけ）
+          const ref = adminDb.collection('exploration_channels').doc(youtubeChannelId);
+          const created = {
             name: fields.channelTitle,
             ...fields,
             tagIds: [],
@@ -209,7 +212,12 @@ export async function decideChannelApplication(params: {
             lastFoundCount: null,
             createdAt: now,
             createdBy: uid,
-          });
+          };
+          try {
+            await ref.create(created);
+          } catch {
+            await ref.update(fields);
+          }
           newlyActivatedId = ref.id;
         }
         updates['proposalData.explorationChannelId'] = newlyActivatedId;
@@ -257,17 +265,19 @@ export async function decideChannelApplication(params: {
   });
   if (!committed) return { error: 'already_processed', status: 409 };
 
-  // 掲載チャンネルに加えたら、その場で再生リストを1回取り込む（§15.2）。失敗しても承認は取り消さない（次の巡回で拾う）
+  // 掲載チャンネルに加えたら、再生リストを1回取り込む（§15.2）。再生リストの多いチャンネルでも承認の応答が
+  // タイムアウトしないよう、応答のあとに実行する。失敗しても承認は取り消さない（次の巡回で拾う）
   if (newlyActivatedId) {
-    try {
-      const quota = await checkCollectionQuota(1);
-      if (quota.ok) {
-        await exploreChannels({ trigger: 'manual', executedBy: uid, explorationChannelId: newlyActivatedId });
-        imported = true;
+    const explorationChannelId = newlyActivatedId;
+    imported = true;
+    after(async () => {
+      try {
+        const quota = await checkCollectionQuota(1);
+        if (quota.ok) await exploreChannels({ trigger: 'manual', executedBy: uid, explorationChannelId });
+      } catch (e) {
+        console.error('チャンネル申請の承認後の取り込みに失敗', e);
       }
-    } catch (e) {
-      console.error('チャンネル申請の承認後の取り込みに失敗', e);
-    }
+    });
   }
   return { ok: true, imported };
 }

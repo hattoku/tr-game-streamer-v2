@@ -25,13 +25,26 @@ async function uidOf(email: string): Promise<string> {
   return snap.docs[0].id;
 }
 
-async function deleteWorkflowsFor(uid: string) {
+/** 指定のチャンネルの申請だけを消す（desktop・mobile が同じ会員を使うので、他方の申請を巻き込まないよう channelIds で絞る） */
+async function deleteWorkflowsFor(uid: string, channelIds: string[]) {
   const snap = await e2eDb().collection('workflows').where('submittedBy', '==', uid).where('type', '==', 'channel_application').get();
-  for (const wf of snap.docs) {
+  for (const wf of snap.docs.filter((d) => channelIds.includes(d.data().proposalData?.youtubeChannelId))) {
     const notes = await e2eDb().collection('notifications').where('workflowId', '==', wf.id).get();
     await Promise.all(notes.docs.map((n) => n.ref.delete()));
     await wf.ref.delete();
   }
+}
+
+/** 実在チャンネル（@YouTube）の掲載チャンネルを書き換える前の状態。終わったら元に戻す（stg に本当に登録されている場合に備える） */
+const stashed = new Map<string, Array<{ id: string; data: Record<string, unknown> }>>();
+async function stashExplorationChannels(youtubeChannelId: string) {
+  const snap = await e2eDb().collection('exploration_channels').where('youtubeChannelId', '==', youtubeChannelId).get();
+  stashed.set(youtubeChannelId, snap.docs.map((d) => ({ id: d.id, data: d.data() })));
+}
+async function restoreExplorationChannels(youtubeChannelId: string) {
+  await deleteExplorationChannels(youtubeChannelId);
+  for (const d of stashed.get(youtubeChannelId) ?? []) await e2eDb().collection('exploration_channels').doc(d.id).set(d.data);
+  stashed.delete(youtubeChannelId);
 }
 
 async function deleteExplorationChannels(youtubeChannelId: string) {
@@ -95,7 +108,7 @@ test('§4 チャンネルの確認、必須項目、送信、完了画面、提�
   test.setTimeout(180_000);
   const channel = SUBMIT_CHANNEL[testInfo.project.name];
   const uid = await uidOf(TEST_USER_EMAILS.user);
-  await deleteWorkflowsFor(uid);
+  await deleteWorkflowsFor(uid, [channel.id]);
   try {
     await userPage.goto('/channels/apply');
     await expect(userPage.getByRole('heading', { name: 'チャンネルを申請する' })).toBeVisible();
@@ -142,8 +155,10 @@ test('§4 チャンネルの確認、必須項目、送信、完了画面、提�
     });
 
     await test.step('管理者が定型の理由で見送ると、本人の履歴と通知に出る', async () => {
-      await adminPage.goto('/admin/workflows');
-      await adminPage.getByRole('link').filter({ hasText: 'チャンネル申請' }).first().click();
+      const wf = (await e2eDb().collection('workflows').where('submittedBy', '==', uid).where('type', '==', 'channel_application').get()).docs.find(
+        (d) => d.data().proposalData?.youtubeChannelId === channel.id,
+      );
+      await adminPage.goto(`/admin/workflows/${wf!.id}`);
       await expect(adminPage.getByText('申請の種別: 視聴者の推薦')).toBeVisible();
       await expect(adminPage.getByText('掲載チャンネルとしての今の状態:')).toBeVisible();
       await adminPage.getByRole('button', { name: '却下する' }).click();
@@ -159,13 +174,14 @@ test('§4 チャンネルの確認、必須項目、送信、完了画面、提�
       await expect(userPage.getByText(/の申請は見送りになりました（その他（掲載の基準に合わない））/).first()).toBeVisible();
     });
   } finally {
-    await deleteWorkflowsFor(uid);
+    await deleteWorkflowsFor(uid, [channel.id]);
   }
 });
 
 test('§4 掲載中・掲載停止のチャンネルは申請できない（再生リスト提案も同じ）', async ({ userPage }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop', '掲載状態を書き換えるため desktop のみ');
   test.setTimeout(120_000);
+  await stashExplorationChannels(STATE_CHANNEL.id);
   try {
     await seedExplorationChannel(STATE_CHANNEL.id, 'active');
     await userPage.goto('/channels/apply');
@@ -179,7 +195,7 @@ test('§4 掲載中・掲載停止のチャンネルは申請できない（再�
     await expect(userPage.getByText('このチャンネルは掲載していません', { exact: true })).toBeVisible();
     await expect(userPage.getByRole('button', { name: '申請する' })).toBeDisabled();
   } finally {
-    await deleteExplorationChannels(STATE_CHANNEL.id);
+    await restoreExplorationChannels(STATE_CHANNEL.id);
   }
 });
 
@@ -187,19 +203,19 @@ test('§8 1日の申請は5件まで（日本時間）', async ({ adminPage }, t
   test.skip(testInfo.project.name !== 'desktop', '上限の確認は desktop のみ');
   // 一般ユーザーの申請と数が混ざらないよう、管理者の uid で確認 API を叩く（確認 API は管理者も呼べる）
   const uid = await uidOf(TEST_USER_EMAILS.admin);
-  await deleteWorkflowsFor(uid);
+  const limitIds = Array.from({ length: 5 }, () => randomId('UCE2E'));
   try {
     const token = await captureIdToken(adminPage, '/admin');
     const preview = async () =>
       (await (await adminPage.request.post('/api/channels/apply/preview', { headers: { Authorization: `Bearer ${token}` }, data: { input: SUBMIT_CHANNEL.desktop.id } })).json());
     expect((await preview()).limitReached).toBe(false);
-    for (let i = 0; i < 5; i++) await seedWorkflow({ submittedBy: uid, youtubeChannelId: randomId('UCE2E'), channelTitle: uniqueText('上限') });
+    for (const id of limitIds) await seedWorkflow({ submittedBy: uid, youtubeChannelId: id, channelTitle: uniqueText('上限') });
     expect((await preview()).limitReached).toBe(true);
     const res = await adminPage.request.post('/api/channels/apply', { headers: { Authorization: `Bearer ${token}` }, data: { input: SUBMIT_CHANNEL.desktop.id, applicantType: 'viewer' } });
     // 管理者は申請できない（403）。上限の確認 API だけを見る
     expect(res.status()).toBe(403);
   } finally {
-    await deleteWorkflowsFor(uid);
+    await deleteWorkflowsFor(uid, limitIds);
   }
 });
 
@@ -209,7 +225,6 @@ test('審査 §15.2 承認すると掲載チャンネルに加わり（確認し
   const uid = await uidOf(TEST_USER_EMAILS.user);
   const fakeChannelId = randomId('UCE2E');
   const title = uniqueText('承認するチャンネル');
-  await deleteWorkflowsFor(uid);
   try {
     await seedWorkflow({ submittedBy: uid, youtubeChannelId: fakeChannelId, channelTitle: title, applicantType: 'creator' });
     await adminPage.goto('/admin/workflows');
@@ -228,7 +243,7 @@ test('審査 §15.2 承認すると掲載チャンネルに加わり（確認し
     await userPage.goto('/playlists/proposals');
     await expect(userPage.getByTestId('channel-application-card').filter({ hasText: title })).toContainText('承認');
   } finally {
-    await deleteWorkflowsFor(uid);
+    await deleteWorkflowsFor(uid, [fakeChannelId]);
     await deleteExplorationChannels(fakeChannelId);
   }
 });
@@ -238,7 +253,6 @@ test('審査 §15.2 掲載停止のチャンネルは承認できない', async 
   const uid = await uidOf(TEST_USER_EMAILS.user);
   const fakeChannelId = randomId('UCE2E');
   const title = uniqueText('掲載停止のチャンネル');
-  await deleteWorkflowsFor(uid);
   try {
     await seedExplorationChannel(fakeChannelId, 'opted_out');
     await seedWorkflow({ submittedBy: uid, youtubeChannelId: fakeChannelId, channelTitle: title });
@@ -250,7 +264,7 @@ test('審査 §15.2 掲載停止のチャンネルは承認できない', async 
     const docs = await e2eDb().collection('exploration_channels').where('youtubeChannelId', '==', fakeChannelId).get();
     expect(docs.docs.every((d) => d.data().status === 'opted_out')).toBe(true);
   } finally {
-    await deleteWorkflowsFor(uid);
+    await deleteWorkflowsFor(uid, [fakeChannelId]);
     await deleteExplorationChannels(fakeChannelId);
   }
 });
@@ -264,6 +278,7 @@ test('再生リストを追加する §10.1 掲載していないチャンネル
       headers: { Authorization: `Bearer ${token}` },
       data: { playlistUrl: STATE_PLAYLIST_URL, newGameTitle: uniqueText('提案のゲーム') },
     });
+  await stashExplorationChannels(STATE_CHANNEL.id);
   try {
     await deleteExplorationChannels(STATE_CHANNEL.id);
     await userPage.goto('/playlists/new');
@@ -297,7 +312,7 @@ test('再生リストを追加する §10.1 掲載していないチャンネル
     await expect(userPage.getByText('チャンネルが作成した再生リストです')).toBeVisible();
     await expect(userPage.getByTestId('channel-not-listed')).toHaveCount(0);
   } finally {
-    await deleteExplorationChannels(STATE_CHANNEL.id);
+    await restoreExplorationChannels(STATE_CHANNEL.id);
   }
 });
 

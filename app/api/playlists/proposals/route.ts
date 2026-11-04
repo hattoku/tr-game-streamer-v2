@@ -67,8 +67,7 @@ export async function GET(request: NextRequest) {
         registeredPlaylistId: status === 'approved' ? ((p.registeredPlaylistId as string) ?? null) : null,
         rejectReason: status === 'rejected' ? proposalRejectReasonLabel(p.rejectReasonCode) : null,
       };
-    })
-  ;
+    });
 
   const all = [...proposals, ...applications].sort((a, b) => b.submittedAt - a.submittedAt);
   return NextResponse.json({ proposals: all });
