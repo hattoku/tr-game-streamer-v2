@@ -442,22 +442,6 @@ export default function NewPlaylistPage() {
             <ProposalSteps current={1} />
             <p className="mt-3 text-md text-text-muted">運営が確認してから公開します。</p>
           </Card>
-          {/* 実況者・事務所の方が迷わないための案内（ページ 再生リストを追加する 仕様書 §10.6）。
-              ご自身のチャンネルの掲載は、再生リストの提案ではなくチャンネルの申請から */}
-          <Card className="mb-4 flex flex-col gap-3" data-testid="creator-guide">
-            <p className="text-base font-medium text-text-primary">実況者・事務所の方へ</p>
-            <p className="text-md text-text-secondary">
-              ご自身（または所属タレント）のチャンネルの掲載をご希望の場合は、再生リストの提案ではなく、チャンネルの申請をお願いします。
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <LinkButton href="/channels/apply" variant="secondary" size="sm">
-                チャンネルを申請する
-              </LinkButton>
-              <LinkButton href="/creators" variant="ghost" size="sm">
-                実況者・事務所の方へ
-              </LinkButton>
-            </div>
-          </Card>
         </>
       )}
 
@@ -754,6 +738,27 @@ export default function NewPlaylistPage() {
           </div>
         </div>
       </Card>
+
+      {!isAdmin && (
+        <>
+          {/* 実況者・事務所の方が迷わないための案内（ページ 再生リストを追加する 仕様書 §10.6）。想定ケースは少ないので、フォームの下に置く。
+              ご自身のチャンネルの掲載は、再生リストの提案ではなくチャンネルの申請から */}
+          <Card className="mt-4 flex flex-col gap-3" data-testid="creator-guide">
+            <p className="text-base font-medium text-text-primary">実況者・事務所の方へ</p>
+            <p className="text-md text-text-secondary">
+              ご自身（または所属タレント）のチャンネルの掲載をご希望の場合は、再生リストの提案ではなく、チャンネルの申請をお願いします。
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <LinkButton href="/channels/apply" variant="secondary" size="sm">
+                チャンネルを申請する
+              </LinkButton>
+              <LinkButton href="/creators" variant="ghost" size="sm">
+                実況者・事務所の方へ
+              </LinkButton>
+            </div>
+          </Card>
+        </>
+      )}
 
       <GameSelectModal
         open={gameModalOpen}
