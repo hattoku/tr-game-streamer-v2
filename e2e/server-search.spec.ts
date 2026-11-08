@@ -106,8 +106,15 @@ interface PlaylistPage {
 async function openSearch(page: Page, path: string, label: string, keyword: string) {
   await page.goto(path);
   // モバイルでは検索条件がアコーディオンに畳まれている
+  // 読み込み直後のクリックは画面の準備前で効かないことがあるため、開くまで押し直す
   const toggle = page.locator('button[aria-expanded]').filter({ hasText: '検索条件' });
-  if (await toggle.isVisible()) await toggle.click();
+  await page.getByRole('heading', { level: 1 }).waitFor();
+  if (await toggle.isVisible()) {
+    await expect(async () => {
+      if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click();
+      await expect(toggle).toHaveAttribute('aria-expanded', 'true', { timeout: 1_000 });
+    }).toPass({ timeout: 15_000 });
+  }
   await page.getByLabel(label).filter({ visible: true }).fill(keyword);
 }
 
