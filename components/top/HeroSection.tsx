@@ -34,8 +34,8 @@ export function HeroSection() {
       <form onSubmit={handleSubmit} className="relative max-w-[520px]">
         <Input
           type="text"
-          placeholder="ゲームタイトル・チャンネル名で検索"
-          aria-label="ゲームタイトル・チャンネル名で検索"
+          placeholder="チャンネル名・ゲームタイトルで検索"
+          aria-label="チャンネル名・ゲームタイトルで検索"
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
           className="pr-10"

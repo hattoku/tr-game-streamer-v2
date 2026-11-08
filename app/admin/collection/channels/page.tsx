@@ -2,7 +2,8 @@
  * 掲載チャンネル（/admin/collection/channels）。管理 AI運営者向け収集候補レビューUI仕様書 v3.3 §9、
  * 管理_Ai運営者 コンテンツ収集機能仕様書 v4.3 §10.2・§10.6。
  *
- * 掲載チャンネル（登録済み）の掲載方法（自動／確認）・表示順・タグの設定、掲載から外す・掲載を止める・戻す操作を行う。
+ * 掲載チャンネル（登録済み）の掲載方法（自動／確認）・ピン留め（段階5。旧: 表示順）・タグの設定、掲載から外す・掲載を止める・戻す操作を行う。
+ * 登録済みの行には人気の点数と内訳を出し、「人気の数字を今すぐ集計する」で集計できる（v3.4 §9.2、共通 人気のチャンネル 集計 仕様書）。
  * 登録済みにしたチャンネルは、その場で1回巡回して再生リストを取り込む。
  *
  * 名前（1行1件）またはチャンネルURL・@ハンドルで追加し、名前は YouTube のチャンネル検索で候補を出して確定する。
@@ -32,13 +33,16 @@ import {
   countListing,
   fetchCollectionQuotaUsedToday,
   fetchExplorationChannels,
+  fetchPopularityOverview,
   formatDateTime,
   formatSubscribers,
   postAdminApi,
   quotaExceededMessage,
   type ExplorationChannel,
   type ExplorationChannelStatus,
+  type PopularityOverview,
 } from '@/lib/collection-admin';
+import { popularityScore, RECENT_DAYS, ZERO_POPULARITY } from '@/lib/popularity-shared';
 
 const RESOLVE_BATCH = 40;
 
@@ -81,15 +85,21 @@ export default function AdminExplorationChannelsPage() {
   const [draftTagIds, setDraftTagIds] = useState<Set<string>>(new Set());
   const [listingCounts, setListingCounts] = useState<Record<string, { listed: number; unconfirmed: number }>>({});
   const [orderInputs, setOrderInputs] = useState<Record<string, string>>({});
+  const [popularity, setPopularity] = useState<PopularityOverview | null>(null);
   // 掲載から外す・掲載を止める（理由メモとお問い合わせID）
   const [offTarget, setOffTarget] = useState<{ channel: ExplorationChannel; kind: 'exclude' | 'opt_out' } | null>(null);
   const [offNote, setOffNote] = useState('');
   const [offInquiry, setOffInquiry] = useState('');
 
   async function reload() {
-    const [list, used] = await Promise.all([fetchExplorationChannels(), fetchCollectionQuotaUsedToday()]);
+    const [list, used, pop] = await Promise.all([
+      fetchExplorationChannels(),
+      fetchCollectionQuotaUsedToday(),
+      fetchPopularityOverview().catch(() => null),
+    ]);
     setChannels(list);
     setQuotaUsed(used);
+    setPopularity(pop);
     // 登録済みのチャンネルごとの再生リスト数（掲載中・確認待ち。件数の集計）
     const active = list.filter((c) => c.status === 'active');
     const entries = await Promise.all(
@@ -243,6 +253,24 @@ export default function AdminExplorationChannelsPage() {
         </TabsList>
       </Tabs>
 
+      {tab === 'active' && (
+        <Card className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-base text-text-secondary" data-testid="popularity-last-run">
+            人気の数字: 最後に集計 {formatDateTime(popularity?.lastRunAt ?? null)}（毎日 4:00 にも自動で集計します）
+          </p>
+          <Button
+            variant="secondary"
+            loading={busy === 'popularity'}
+            disabled={busy !== null}
+            onClick={() =>
+              run('popularity', '/api/admin/popularity/recompute', {}, (b) => `${Number(b.processedCount ?? 0).toLocaleString('ja-JP')} チャンネルを集計しました`)
+            }
+          >
+            人気の数字を今すぐ集計する
+          </Button>
+        </Card>
+      )}
+
       {tab === 'unresolved' && counts.unresolved > 0 && (
         <Card className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-base text-text-secondary">
@@ -359,7 +387,7 @@ export default function AdminExplorationChannelsPage() {
                       <Chip active={c.publishMode === 'auto'} disabled={busy !== null} onClick={() => c.publishMode !== 'auto' && run(`mode-${c.id}`, '/api/admin/collection/channels', { action: 'set_mode', id: c.id, publishMode: 'auto' }, () => '自動で掲載にしました（この先に取り込む再生リストから）')}>
                         自動で掲載
                       </Chip>
-                      <span className="ml-2">表示順:</span>
+                      <span className="ml-2">ピン留め（先頭に出す順）:</span>
                       <Input
                         value={orderInputs[c.id] ?? (c.featuredOrder === null ? '' : String(c.featuredOrder))}
                         onChange={(e) => setOrderInputs((prev) => ({ ...prev, [c.id]: e.target.value }))}
@@ -369,13 +397,17 @@ export default function AdminExplorationChannelsPage() {
                           const value = raw === '' ? null : Number(raw);
                           if (value !== null && !Number.isFinite(value)) return;
                           if (value === c.featuredOrder) return;
-                          void run(`order-${c.id}`, '/api/admin/collection/channels', { action: 'set_order', id: c.id, featuredOrder: value }, () => '表示順を保存しました');
+                          void run(`order-${c.id}`, '/api/admin/collection/channels', { action: 'set_order', id: c.id, featuredOrder: value }, () =>
+                            value === null ? 'ピン留めを外しました' : 'ピン留めを保存しました',
+                          );
                         }}
                         inputMode="numeric"
-                        aria-label={`${c.channelTitle ?? c.name}の表示順`}
-                        className="w-20"
+                        aria-label={`${c.channelTitle ?? c.name}のピン留め`}
+                        placeholder="空欄で外す"
+                        className="w-28"
                       />
                     </div>
+                    <PopularityLine counts={c.youtubeChannelId ? popularity?.channels[c.youtubeChannelId] : undefined} loaded={popularity !== null} everRun={!!popularity?.lastRunAt} />
                   </div>
                 )}
 
@@ -554,5 +586,17 @@ export default function AdminExplorationChannelsPage() {
         </div>
       </Modal>
     </div>
+  );
+}
+
+/** 人気の点数と内訳（§9.2 v3.4）。一度も集計していなければ「人気 0点（未集計）」 */
+function PopularityLine({ counts, loaded, everRun }: { counts: PopularityOverview['channels'][string] | undefined; loaded: boolean; everRun: boolean }) {
+  if (!loaded) return <p>人気: -</p>;
+  const c = counts ?? ZERO_POPULARITY;
+  return (
+    <p data-testid="channel-popularity">
+      人気 {popularityScore(c).toLocaleString('ja-JP')}点（マイリスト {c.mylistUsers}人・レビュー {c.reviewUsers}人・視聴 {c.viewerUsers}人／直近{RECENT_DAYS}日{' '}
+      {c.recentMylistUsers}・{c.recentReviewUsers}・{c.recentViewerUsers}人）{everRun ? '' : '（未集計）'}
+    </p>
   );
 }

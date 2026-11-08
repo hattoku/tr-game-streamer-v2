@@ -1,6 +1,6 @@
 # プレミテ Firestore データモデル設計書
 
-**バージョン**: v2.7  
+**バージョン**: v2.8  
 **作成日**: 2026年3月30日（更新）  
 **対象**: 開発チーム  
 **関連ドキュメント**: プレミテ企画書 / プレミテ_技術スタック仕様書 / 各機能仕様書
@@ -45,6 +45,8 @@
    - 3.30 [notifications](#330-notifications)
    - 3.31 [inquiry_upload_counters](#331-inquiry_upload_counters)
    - 3.32 [exploration_channels](#332-exploration_channels)
+   - 3.35 [playlist_viewers](#335-playlist_viewers)
+   - 3.36 [batch_state](#336-batch_state)
 4. [リレーション図](#4-リレーション図)
 5. [インデックス設計](#5-インデックス設計)
 6. [セキュリティルール方針](#6-セキュリティルール方針)
@@ -118,6 +120,8 @@ Firestoreはテーブル結合（JOIN）ができないため、一覧表示や�
 | 29 | `new_title_candidates` | 新作タイトル検知候補 | AI運営者 コンテンツ収集仕様書 |
 | 30 | `notifications` | ユーザー向けサイト内通知（ベルアイコン・通知一覧） | ユーザー通知機能仕様書 |
 | 31 | `exploration_channels` | 掲載チャンネル（v2.0。旧称: 探索対象チャンネル） | AI運営者コンテンツ収集仕様書 §3.1・§10.2 |
+| 32 | `playlist_viewers` | 再生リストを見始めた人の記録（1ユーザー×1再生リストで1件、v2.8） | 共通 人気のチャンネル 集計 仕様書 §2.3 |
+| 33 | `batch_state` | 定期処理の続きの位置（前回の集計時刻など、v2.8） | 共通 人気のチャンネル 集計 仕様書 §3 |
 
 ---
 
@@ -271,6 +275,7 @@ YouTubeチャンネルの情報。
 | `playlistCount` | number | ✅ | プレミテに登録された再生リスト数（集計キャッシュ）。v2.0 から掲載中（`listed`）だけを数える |
 | `registeredAt` | Timestamp | ✅ | プレミテへの登録日時 |
 | `lastFetchedAt` | Timestamp? | — | チャンネル更新バッチによる最終更新日時 |
+| `popularity` | map? | — | 人気の集計（v2.8・段階5。共通 人気のチャンネル 集計 仕様書 §4）。`{ mylistUsers, reviewUsers, viewerUsers, recentMylistUsers, recentReviewUsers, recentViewerUsers, computedAt }`。掲載中の再生リストについて、同じ人を1人として数えた人数（`recent*` は直近30日）。点数は保存せず読むたびに計算する。無ければ全部0。書き込みは集計の API（Admin SDK）だけ |
 
 ---
 
@@ -695,7 +700,7 @@ YouTube定期取得バッチの実行結果ログ。
 
 | フィールド | 型 | 必須 | 説明 |
 |-----------|-----|:---:|------|
-| `functionName` | string | ✅ | `"video_update"` / `"channel_update"` |
+| `functionName` | string | ✅ | `"video_update"` / `"channel_update"` / `"channel_popularity"`（人気の集計、v2.8） |
 | `executedAt` | Timestamp | ✅ | 実行開始日時 |
 | `processedCount` | number | ✅ | 処理件数 |
 | `newVideoCount` | number? | — | 新規検出動画数 |
@@ -715,6 +720,8 @@ YouTube定期取得バッチの実行結果ログ。
 | `autoListedCount` | number? | — | 自動で掲載した（動画一覧を取って `listed` にした）再生リストの数（v2.5） |
 | `purgedCount` | number? | — | 30日の消し込みで消した・YouTube 由来の項目を消した再生リストの数（v2.5） |
 | `sweepErrors` | map[]? | — | 巡回に失敗したチャンネル `{ explorationChannelId, message }`（v2.5） |
+| `updatedChannelCount` | number? | — | 人気の数字を書き直したチャンネルの数（`channel_popularity`、v2.8） |
+| `newViewerCount` | number? | — | 新しく作った `playlist_viewers` の数（`channel_popularity`、v2.8） |
 
 ---
 
@@ -951,7 +958,7 @@ AI運営者（審査AI）の設定。プラットフォーム共通で1体のみ
 | `lastExploredAt` | Timestamp? | — | 最終探索日時 |
 | `lastFoundCount` | number? | — | 前回の探索で新しく保存した候補数 |
 | `publishMode` | string | ✅（段階4〜） | 掲載方法（v2.0）。`"confirm"`（確認してから掲載、**既定**）／`"auto"`（自動で掲載） |
-| `featuredOrder` | number? | — | 「人気のチャンネル」の仮の表示順（v2.0・段階5。小さいほど先。null は並べない）。人気の決め方が決まるまで運営が手で付ける |
+| `featuredOrder` | number? | — | 「人気のチャンネル」・チャンネル一覧の人気順で先頭に出すピン留めの順（v2.8・段階5。小さいほど先。null はピン留めしない＝人気の点数で並ぶ）。v2.0〜v2.7 では「仮の表示順（null は並べない）」だった |
 | `authorizedVia` | string? | — | 掲載の入口（v2.0）。`"admin"`（運営の直接登録）／`"creator_application"`（本人・事務所の申請）／`"viewer_recommendation"`（視聴者の推薦）／`"migration"`（段階3の移行） |
 | `applicationWorkflowId` | string? | — | 申請から掲載した場合のワークフローID（v2.0・段階6） |
 | `authorizedAt` | Timestamp? | — | 掲載した日時（v2.0） |
@@ -988,6 +995,25 @@ AI運営者（審査AI）の設定。プラットフォーム共通で1体のみ
 | `date` | string | ✅ | 日付（日本時間、`YYYY-MM-DD`） |
 | `count` | number | ✅ | その日に登録した件数 |
 | `updatedAt` | Timestamp | ✅ | 更新日時 |
+
+### 3.35 `playlist_viewers`
+
+再生リストを見始めた人の記録（v2.8・段階5。共通 人気のチャンネル 集計 仕様書 §2.3）。人気の集計が `watch_history` の増えた分から作る。視聴履歴を消しても残す。ドキュメントIDは `{userId}_{playlistId}`。クライアントからは読み書きできない（Admin SDK のみ。rules の既定の拒否）。
+
+| フィールド | 型 | 必須 | 説明 |
+|-----------|-----|------|------|
+| `userId` | string | ✅ | ユーザーID |
+| `playlistId` | string | ✅ | 再生リストのドキュメントID |
+| `firstWatchedAt` | Timestamp | ✅ | 初めて再生した日時（作ったときに見つかった `watch_history.watchedAt` の一番古いもの。変えない） |
+| `createdAt` | Timestamp | ✅ | 記録を作った日時 |
+
+### 3.36 `batch_state`
+
+定期処理の続きの位置（v2.8）。ドキュメントIDは処理の名前。クライアントからは読み書きできない（Admin SDK のみ）。
+
+| ドキュメントID | フィールド | 説明 |
+|---|---|---|
+| `channel_popularity` | `lastRunAt`（Timestamp） | 最後に終わった人気の集計を始めた日時（集計中の視聴を読み逃さないよう、始めた時刻を残す）。次の集計はこれより5分前以降の `watch_history` だけを読む |
 
 ---
 
@@ -1064,7 +1090,7 @@ ai_operators ──── (1) users
 ## 7. データ整合性・削除ポリシー
 
 ### 7.1 退会時の物理削除
-- `users`, `reviews`, `mylist`, `watch_history`, `watch_progress`, `helpful_votes`, `collections` を物理削除。
+- `users`, `reviews`, `mylist`, `watch_history`, `watch_progress`, `helpful_votes`, `collections`, `playlist_viewers`（v2.8）を物理削除。
 - `saved_collections` は本人の保存記録に加え、削除される本人のまとめに対する他ユーザーの保存記録も物理削除する（3.14.1節）。
 
 ### 7.2 マスタ削除時の影響
@@ -1123,3 +1149,4 @@ ai_operators ──── (1) users
 | v2.5 | 2026-11-04 | 段階4の実装。§3.2 `playlists` に `metaFetchedAt`・`playlistPublishedAt`・`youtubeDataRemovedAt` を追加し、巡回で作る再生リストの値と `listingReason` の値を注記。§3.21 `batch_logs` に巡回の結果の項目を追加。§3.32 `exploration_channels` の登録者数の保存期間を注記。§3.23 `collection_candidates` は巡回に取り込んだら消し、残りも30日で消す（コンテンツ収集機能仕様書 §10.11） |
 | v2.7 | 2026-11-08 | 段階7 一覧のサーバー側検索化。§5.1 検索面の複合インデックスは検索面では使わなくなった旨を注記。フィールドの追加・変更はなし（v2.6 は段階6の PR #24 が使う） |
 | v2.2 | 2026-11-01 | 段階3の実装。§3.2 `playlists` の掲載状態（`listingStatus` ほか）と `source`・`explorationChannelId` を実装。管理者の登録・承認は `listed`（`listingReason: admin`）で作り、既存データは移行スクリプトで `listed`（`listingReason: migration`）または `channel_off` にする。`games.playlistCount`・`channels.playlistCount`・`tags.usagePlaylistCount` は掲載中の再生リストだけを数える（コンテンツ収集機能仕様書 §10.9）。フィールドの追加・変更はなし |
+| v2.8 | 2026-11-08 | 段階5 人気のチャンネル。§3.4 `channels.popularity`、§3.32 `featuredOrder` をピン留めの順に、§3.21 `batch_logs` に `channel_popularity`、§3.35 `playlist_viewers`・§3.36 `batch_state` を追加。§7.1 退会時の削除に `playlist_viewers` を追加（共通 人気のチャンネル 集計 仕様書） |

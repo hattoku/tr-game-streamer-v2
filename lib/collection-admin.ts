@@ -4,6 +4,7 @@
 import { collection, doc, getCountFromServer, getDoc, getDocs, limit, orderBy, query, where } from 'firebase/firestore';
 import { auth, db } from './firebase';
 import { todayJst } from './collection-quota-shared';
+import type { PopularityCounts } from './popularity-shared';
 
 export type ExplorationChannelStatus = 'unresolved' | 'pending_confirm' | 'active' | 'excluded' | 'opted_out';
 
@@ -186,6 +187,19 @@ export async function postAdminApi<T = Record<string, unknown>>(path: string, bo
   });
   const json = (await res.json().catch(() => ({}))) as T;
   return { ok: res.ok, status: res.status, body: json };
+}
+
+/** 人気の数字（共通 人気のチャンネル 集計 仕様書 §6）。channels は YouTube のチャンネルID → 人数 */
+export interface PopularityOverview {
+  lastRunAt: number | null;
+  channels: Record<string, PopularityCounts>;
+}
+
+export async function fetchPopularityOverview(): Promise<PopularityOverview> {
+  const idToken = await auth.currentUser?.getIdToken();
+  const res = await fetch('/api/admin/popularity', { headers: { Authorization: `Bearer ${idToken}` }, cache: 'no-store' });
+  if (!res.ok) throw new Error(`status ${res.status}`);
+  return (await res.json()) as PopularityOverview;
 }
 
 /** クォータ超過（429）のときのメッセージ */

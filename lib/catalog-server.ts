@@ -15,6 +15,7 @@ import { adminDb } from './firebase-admin';
 import { checkRateLimit } from './rate-limit';
 import { LISTED } from './listing';
 import { isListedTag, resolveTags, type TagInfo } from './tags-shared';
+import { popularityScore, readPopularity } from './popularity-shared';
 import {
   normalizeForSearch,
   paginate,
@@ -28,6 +29,7 @@ import {
   type PlaylistSearchResult,
   type PlaylistSort,
   type PlaylistSummary,
+  type PopularChannelItem,
   type TopCatalog,
 } from './catalog-shared';
 
@@ -56,6 +58,14 @@ interface ChannelRecord {
   name: string;
   iconUrl: string;
   searchText: string;
+  /** 人気の点数（`channels.popularity` の人数から計算。共通 人気のチャンネル 集計 仕様書 §2.2） */
+  popularityScore: number;
+}
+
+/** 登録済みの掲載チャンネルのピン留め（`exploration_channels.featuredOrder`、§5） */
+interface PinRecord {
+  youtubeChannelId: string | null;
+  featuredOrder: number | null;
 }
 
 interface GameRecord {
@@ -118,7 +128,21 @@ function toPlaylistRecord(d: QueryDocumentSnapshot<DocumentData>): PlaylistRecor
 function toChannelRecord(d: QueryDocumentSnapshot<DocumentData>): ChannelRecord {
   const data = d.data();
   const name = str(data.name);
-  return { id: d.id, name, iconUrl: str(data.iconUrl), searchText: normalizeForSearch(name) };
+  return {
+    id: d.id,
+    name,
+    iconUrl: str(data.iconUrl),
+    searchText: normalizeForSearch(name),
+    popularityScore: popularityScore(readPopularity(data.popularity)),
+  };
+}
+
+function toPinRecord(d: QueryDocumentSnapshot<DocumentData>): PinRecord {
+  const data = d.data();
+  return {
+    youtubeChannelId: typeof data.youtubeChannelId === 'string' && data.youtubeChannelId ? data.youtubeChannelId : null,
+    featuredOrder: typeof data.featuredOrder === 'number' && Number.isFinite(data.featuredOrder) ? data.featuredOrder : null,
+  };
 }
 
 function toGameRecord(d: QueryDocumentSnapshot<DocumentData>): GameRecord {
@@ -242,6 +266,7 @@ interface CatalogState {
   channels: LiveCollection<ChannelRecord>;
   games: LiveCollection<GameRecord>;
   tags: LiveCollection<TagInfo>;
+  pins: LiveCollection<PinRecord>;
   derived: Map<string, unknown>;
 }
 
@@ -260,6 +285,8 @@ function state(): CatalogState {
       channels: new LiveCollection('channels', () => adminDb.collection('channels'), toChannelRecord),
       games: new LiveCollection('games', () => adminDb.collection('games'), toGameRecord),
       tags: new LiveCollection('tags', () => adminDb.collection('tags'), toTagInfo),
+      // ピン留め（段階5）。登録済み（active）の掲載チャンネルだけ。等価条件のみのため複合インデックスは不要
+      pins: new LiveCollection('exploration_channels', () => adminDb.collection('exploration_channels').where('status', '==', 'active'), toPinRecord),
       derived: new Map(),
     };
   }
@@ -356,6 +383,8 @@ export async function searchPlaylists(params: PlaylistSearchParams): Promise<Pla
     ...page,
     items: page.items.map((r) => toSummary(r, tagsMap)),
     totalVideoCount: filtered.reduce((sum, r) => sum + r.summary.videoCount, 0),
+    totalReviewCount: filtered.reduce((sum, r) => sum + r.summary.reviewCount, 0),
+    totalMylistCount: filtered.reduce((sum, r) => sum + r.summary.mylistCount, 0),
   };
 }
 
@@ -364,6 +393,7 @@ export async function searchPlaylists(params: PlaylistSearchParams): Promise<Pla
 interface ChannelAggregate {
   playlistCount: number;
   videoCount: number;
+  reviewCount: number;
   topPlaylists: PlaylistRecord[];
 }
 
@@ -374,9 +404,10 @@ function channelAggregates(listed: ListedPlaylists): Map<string, ChannelAggregat
     // スコア順の一覧を先頭から見るので、各チャンネルの最初の3件がそのままピックアップになる
     for (const r of listed.sorted.score) {
       if (!r.channelId) continue;
-      const entry = map.get(r.channelId) ?? { playlistCount: 0, videoCount: 0, topPlaylists: [] };
+      const entry = map.get(r.channelId) ?? { playlistCount: 0, videoCount: 0, reviewCount: 0, topPlaylists: [] };
       entry.playlistCount += 1;
       entry.videoCount += r.summary.videoCount;
+      entry.reviewCount += r.summary.reviewCount;
       if (entry.topPlaylists.length < PICKUP_COUNT) entry.topPlaylists.push(r);
       map.set(r.channelId, entry);
     }
@@ -390,36 +421,74 @@ export interface ChannelSearchParams {
   page: number;
 }
 
-/** チャンネル名から探す。掲載中の再生リストが1件以上あるチャンネルだけ（ページ チャンネル 探す 仕様書 §9.1） */
-export async function searchChannels(params: ChannelSearchParams): Promise<CatalogPage<ChannelListItem>> {
-  const [listed, channels] = await Promise.all([listedPlaylists(), state().channels.get()]);
+interface ChannelIndex {
+  /** 掲載中の再生リストがあるチャンネルを人気順（§5）に並べたもの */
+  popular: ChannelListItem[];
+  searchTextById: Map<string, string>;
+}
+
+const byChannelName = (a: ChannelListItem, b: ChannelListItem) => collator.compare(a.name, b.name) || (a.id < b.id ? -1 : 1);
+
+/**
+ * 掲載中の再生リストが1件以上あるチャンネルを、人気順に並べる（共通 人気のチャンネル 集計 仕様書 §5）。
+ * ピン留め（`featuredOrder` の小さい順）→ 人気の点数の高い順 → 再生リスト数の多い順 → チャンネル名順。
+ * チャンネル一覧の `sort=popular` と TOP の「人気のチャンネル」で同じ並びを使う。
+ */
+async function channelIndex(): Promise<ChannelIndex> {
+  const s = state();
+  const [listed, channels, pins] = await Promise.all([listedPlaylists(), s.channels.get(), s.pins.get()]);
   const aggregates = channelAggregates(listed);
-  const items = memo('channels.items', [listed.versions[0], channels.version], () => {
+  return memo('channels.index', [listed.versions[0], channels.version, pins.version], () => {
+    // 同じ YouTube チャンネルに登録済みの行が複数あれば、小さい方の順を使う
+    const pinOrder = new Map<string, number>();
+    for (const p of pins.map.values()) {
+      if (!p.youtubeChannelId || p.featuredOrder === null) continue;
+      const prev = pinOrder.get(p.youtubeChannelId);
+      if (prev === undefined || p.featuredOrder < prev) pinOrder.set(p.youtubeChannelId, p.featuredOrder);
+    }
+    const scoreById = new Map<string, number>();
     const list: ChannelListItem[] = [];
     for (const c of channels.map.values()) {
       const agg = aggregates.get(c.id);
       if (!agg) continue;
+      scoreById.set(c.id, c.popularityScore);
       list.push({
         id: c.id,
         name: c.name,
         iconUrl: c.iconUrl,
         playlistCount: agg.playlistCount,
         videoCount: agg.videoCount,
+        reviewCount: agg.reviewCount,
         topPlaylists: agg.topPlaylists.map((r) => ({ id: r.summary.id, title: r.summary.title, thumbnailUrl: r.summary.thumbnailUrl, score: r.summary.score })),
       });
     }
-    return list;
+    list.sort((a, b) => {
+      const pa = pinOrder.get(a.id);
+      const pb = pinOrder.get(b.id);
+      if (pa !== undefined || pb !== undefined) {
+        if (pa === undefined) return 1;
+        if (pb === undefined) return -1;
+        if (pa !== pb) return pa - pb;
+      }
+      return (scoreById.get(b.id) ?? 0) - (scoreById.get(a.id) ?? 0) || b.playlistCount - a.playlistCount || byChannelName(a, b);
+    });
+    return { popular: list, searchTextById: new Map([...channels.map.values()].map((c) => [c.id, c.searchText])) };
   });
-  const searchTextById = new Map([...channels.map.values()].map((c) => [c.id, c.searchText]));
+}
+
+/** チャンネル名から探す。掲載中の再生リストが1件以上あるチャンネルだけ（ページ チャンネル 探す 仕様書 §9.1） */
+export async function searchChannels(params: ChannelSearchParams): Promise<CatalogPage<ChannelListItem>> {
+  const { popular, searchTextById } = await channelIndex();
   const matchKeyword = keywordMatcher(params.keyword);
-  const filtered = matchKeyword ? items.filter((c) => matchKeyword(searchTextById.get(c.id) ?? '')) : [...items];
-  const byName = (a: ChannelListItem, b: ChannelListItem) => collator.compare(a.name, b.name) || (a.id < b.id ? -1 : 1);
-  filtered.sort((a, b) => {
-    if (params.sort === 'name') return byName(a, b);
-    const diff = params.sort === 'videoCount' ? b.videoCount - a.videoCount : b.playlistCount - a.playlistCount;
-    // 同数はチャンネル名順（§5.2）
-    return diff || byName(a, b);
-  });
+  const filtered = matchKeyword ? popular.filter((c) => matchKeyword(searchTextById.get(c.id) ?? '')) : [...popular];
+  if (params.sort !== 'popular') {
+    filtered.sort((a, b) => {
+      if (params.sort === 'name') return byChannelName(a, b);
+      const diff = params.sort === 'videoCount' ? b.videoCount - a.videoCount : b.playlistCount - a.playlistCount;
+      // 同数はチャンネル名順（§5.2）
+      return diff || byChannelName(a, b);
+    });
+  }
   return paginate(filtered, params.page);
 }
 
@@ -482,8 +551,19 @@ export async function searchGames(params: GameSearchParams): Promise<CatalogPage
 
 /** TOP の各セクションの再生リスト（ページ top 仕様書 §6・§7・§8） */
 export async function topCatalog(): Promise<TopCatalog> {
-  const listed = await listedPlaylists();
-  return memo('top', listed.versions, () => {
+  // 人気のチャンネルの索引が用意できないときは、そのセクションだけ出さない（ページ top 仕様書 §6A.3）
+  const [listed, channels] = await Promise.all([
+    listedPlaylists(),
+    channelIndex().catch((error: unknown): ChannelIndex => {
+      console.error('[catalog] 人気のチャンネルを用意できませんでした', error);
+      return { popular: [], searchTextById: new Map() };
+    }),
+  ]);
+  // 人気のチャンネル（§6A）。チャンネル一覧の人気順の先頭20件
+  const popularChannels = channels.popular
+    .slice(0, TOP_CAROUSEL_LIMIT)
+    .map((c): PopularChannelItem => ({ id: c.id, name: c.name, iconUrl: c.iconUrl, playlistCount: c.playlistCount }));
+  const playlistSections = memo('top', listed.versions, () => {
     const picked = new Map<string, PlaylistRecord>();
     const ids = (list: PlaylistRecord[]) => list.map((r) => (picked.set(r.summary.id, r), r.summary.id));
 
@@ -522,6 +602,7 @@ export async function topCatalog(): Promise<TopCatalog> {
       tagPickups,
     };
   });
+  return { ...playlistSections, popularChannels };
 }
 
 // ---- API Route の応答 ----

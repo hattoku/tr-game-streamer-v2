@@ -32,6 +32,10 @@ export interface PlaylistTotals {
   total: number;
   /** その動画数の合計 */
   totalVideoCount: number;
+  /** そのレビュー数の合計（チャンネル詳細 §8.2） */
+  totalReviewCount: number;
+  /** そのマイリスト登録数の合計（同上） */
+  totalMylistCount: number;
 }
 
 interface PlaylistListSectionProps {
@@ -62,7 +66,14 @@ export function PlaylistListSection({ title, filter, addHref, addLabel = '再生
   const { data, loading, error, retry } = useCatalogQuery(key, (signal) => fetchPlaylistPage({ gameId, channelId, sort, page }, signal));
 
   useEffect(() => {
-    if (data) onTotals?.({ total: data.total, totalVideoCount: data.totalVideoCount });
+    if (data) {
+      onTotals?.({
+        total: data.total,
+        totalVideoCount: data.totalVideoCount,
+        totalReviewCount: data.totalReviewCount ?? 0,
+        totalMylistCount: data.totalMylistCount ?? 0,
+      });
+    }
   }, [data, onTotals]);
 
   return (

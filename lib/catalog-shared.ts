@@ -46,8 +46,9 @@ export interface PlaylistSummary {
 export type PlaylistSort = 'score' | 'mylist' | 'newest';
 export const PLAYLIST_SORTS: readonly PlaylistSort[] = ['score', 'mylist', 'newest'];
 
-export type ChannelSort = 'playlistCount' | 'name' | 'videoCount';
-export const CHANNEL_SORTS: readonly ChannelSort[] = ['playlistCount', 'name', 'videoCount'];
+/** `popular` は人気順（ピン留め→人気の点数。共通 人気のチャンネル 集計 仕様書 §5）。既定 */
+export type ChannelSort = 'popular' | 'playlistCount' | 'name' | 'videoCount';
+export const CHANNEL_SORTS: readonly ChannelSort[] = ['popular', 'playlistCount', 'name', 'videoCount'];
 
 export type GameSort = 'playlistCount' | 'title' | 'videoCount';
 export const GAME_SORTS: readonly GameSort[] = ['playlistCount', 'title', 'videoCount'];
@@ -63,6 +64,10 @@ export interface CatalogPage<T> {
 export interface PlaylistSearchResult extends CatalogPage<PlaylistSummary> {
   /** 条件に合う再生リスト全体の動画数の合計（ゲーム・チャンネル詳細の「N 動画」） */
   totalVideoCount: number;
+  /** 同じくレビュー数の合計（チャンネル詳細の「N レビュー」、ページ チャンネル 詳細 仕様書 §8.2） */
+  totalReviewCount: number;
+  /** 同じくマイリスト登録数の合計（チャンネル詳細の「N マイリスト」） */
+  totalMylistCount: number;
 }
 
 /** チャンネルカードのピックアップ再生リスト1件分（ページ チャンネル 探す 仕様書 §3.3） */
@@ -81,6 +86,8 @@ export interface ChannelListItem {
   playlistCount: number;
   /** このチャンネルの掲載中の再生リストの動画数合計 */
   videoCount: number;
+  /** このチャンネルの掲載中の再生リストのレビュー数合計（ページ チャンネル 探す 仕様書 §9.3） */
+  reviewCount: number;
   /** スコアが高い順の上位3件（評価なしは末尾） */
   topPlaylists: ChannelPickupPlaylist[];
 }
@@ -98,6 +105,15 @@ export interface GameListItem {
   tags: ResolvedTag[];
 }
 
+/** TOP の「人気のチャンネル」のカード1枚分（ページ top 仕様書 §6A.4） */
+export interface PopularChannelItem {
+  id: string;
+  name: string;
+  iconUrl: string;
+  /** 掲載中の再生リスト数 */
+  playlistCount: number;
+}
+
 /** TOP の各セクションに出す再生リスト（ページ top 仕様書）。カードは `playlists` に1回ずつ入れ、各セクションは ID で引く */
 export interface TopCatalog {
   playlists: PlaylistSummary[];
@@ -111,6 +127,8 @@ export interface TopCatalog {
   newArrivals: string[];
   /** タグピックアップ（§8）。使用数の多いタグ上位6件のうち、掲載中の再生リストがあるもの */
   tagPickups: Array<{ tagId: string; tagName: string; ids: string[] }>;
+  /** 人気のチャンネル（§6A）。チャンネル一覧の人気順の先頭 TOP_CAROUSEL_LIMIT 件 */
+  popularChannels: PopularChannelItem[];
 }
 
 /**
