@@ -8,6 +8,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { ChannelListCard } from '@/components/channels/ChannelListCard';
 import { LoadError } from '@/components/playlists/PlaylistListSection';
 import { fetchChannelPage, useCatalogQuery, useDebouncedValue } from '@/lib/catalog';
@@ -137,6 +138,14 @@ export default function ChannelsPage() {
               )}
             </>
           )}
+
+          {/* 探しているチャンネルが無いときの入口（ページ チャンネルを申請する 仕様書 §3）。空状態を含め常に一覧の下に出す */}
+          <p className="text-md text-text-muted" data-testid="channel-apply-hint">
+            探しているチャンネルが見つからないときは、チャンネルを申請できます →{' '}
+            <Link href="/channels/apply" className="text-text-primary underline underline-offset-[3px] hover:text-text-secondary">
+              チャンネルを申請する
+            </Link>
+          </p>
         </div>
 
         <Card className="hidden min-w-0 md:block">

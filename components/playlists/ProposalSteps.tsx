@@ -9,21 +9,25 @@ import { CheckIcon, XIcon } from '@/components/ui/icons';
 import { cn } from '@/components/ui/cn';
 
 const STEPS = ['提案する', '運営が確認', 'さがすに公開'] as const;
+/** チャンネル申請のステップ表示（ページ チャンネルを申請する 仕様書 §4） */
+export const CHANNEL_APPLICATION_STEPS = ['申請する', '運営が確認', 'チャンネルに公開'] as const;
 
 export function ProposalSteps({
   current,
   rejected = false,
   hereLabel = false,
   className,
+  labels = STEPS,
 }: {
   current: 1 | 2 | 3;
   rejected?: boolean;
   hereLabel?: boolean;
   className?: string;
+  labels?: readonly [string, string, string];
 }) {
   return (
     <ol className={cn('flex items-start', className)} aria-label="提案から公開までの流れ">
-      {STEPS.map((label, i) => {
+      {labels.map((label, i) => {
         const step = i + 1;
         const isRejectedStep = rejected && step === 2;
         const done = !isRejectedStep && step < current;

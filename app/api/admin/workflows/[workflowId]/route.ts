@@ -6,10 +6,12 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { registerPlaylist, type PlaylistApiError } from '@/lib/playlist-registration';
 import { linkPlaylistToGame } from '@/lib/playlist-game-linking';
 import { GAME_PROPOSAL_TYPE, PLAYLIST_PROPOSAL_TYPE, proposalRejectReasonLabel } from '@/lib/proposal-shared';
+import { CHANNEL_APPLICATION_TYPE } from '@/lib/channel-application-shared';
+import { decideChannelApplication, getProposalChannelState } from '@/lib/channel-application-server';
 
 // 審査ワークフローの承認・却下・運営メモ更新API（管理_審査ワークフロー仕様書 §9, §11）。
 // 対象typeは`review_report`（通報、フェーズ6ステップ3）と、提案系の`playlist_register`・`game_title_register`
-// （フェーズ7ステップ7-4）。ゲームタイトル編集提案（`game_title_edit`）は投稿経路が無いため扱わない。
+// （フェーズ7ステップ7-4）と、チャンネル申請`channel_application`（段階6）。ゲームタイトル編集提案（`game_title_edit`）は投稿経路が無いため扱わない。
 // - 再生リスト登録提案の承認: /api/playlists/register と同じ登録処理（lib/playlist-registration.ts）を実行する。
 //   `gameId` を渡すと提案のゲームタイトルを差し替えて登録し、editHistory に記録する（§10.1 の最小版、2026-10-25 ユーザー決定）。
 //   未登録チャンネルの説明文は `channelDescription`（任意）。登録に失敗したら審査中のまま残す。
@@ -35,7 +37,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     return NextResponse.json({ error: 'not_found' }, { status: 404 });
   }
   const workflow = workflowSnap.data()!;
-  if (workflow.type !== 'review_report' && workflow.type !== PLAYLIST_PROPOSAL_TYPE && workflow.type !== GAME_PROPOSAL_TYPE) {
+  if (
+    workflow.type !== 'review_report' &&
+    workflow.type !== PLAYLIST_PROPOSAL_TYPE &&
+    workflow.type !== GAME_PROPOSAL_TYPE &&
+    workflow.type !== CHANNEL_APPLICATION_TYPE
+  ) {
     return NextResponse.json({ error: 'unsupported_type' }, { status: 400 });
   }
 
@@ -59,6 +66,21 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   if (workflow.status !== 'reviewing_lv1' && workflow.status !== 'reviewing_lv2') {
     return NextResponse.json({ error: 'already_processed' }, { status: 409 });
   }
+  // チャンネル申請（段階6、管理 審査ワークフロー仕様書 §15.2）。承認で掲載チャンネルに加え、定型の見送り理由で却下する
+  if (workflow.type === CHANNEL_APPLICATION_TYPE) {
+    const result = await decideChannelApplication({
+      workflowRef,
+      workflow,
+      workflowId,
+      action,
+      uid,
+      comment,
+      rejectReasonCode: body.rejectReasonCode,
+    });
+    if ('error' in result) return NextResponse.json({ error: result.error, message: result.message }, { status: result.status });
+    return NextResponse.json({ ok: true, imported: result.imported });
+  }
+
   // 再生リスト登録提案の却下は定型理由が必須（自由記述は任意）。それ以外の却下は自由記述が必須
   const rejectReasonLabel = proposalRejectReasonLabel(body.rejectReasonCode);
   if (action === 'reject' && (workflow.type === PLAYLIST_PROPOSAL_TYPE ? !rejectReasonLabel : !comment)) {
@@ -82,6 +104,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       const gameId = typeof body.gameId === 'string' && body.gameId ? body.gameId : originalGameId;
       if (!gameId) {
         return NextResponse.json({ error: 'game_required' }, { status: 400 });
+      }
+
+      // 承認時にも掲載チャンネルかを確かめる（審査ワークフロー仕様書 §15.3）。外れていたら承認せず審査中のまま残す
+      const proposalChannelId = proposal.channelId as string | undefined;
+      if (proposalChannelId && (await getProposalChannelState(proposalChannelId)) !== 'listed') {
+        return NextResponse.json({ error: 'channel_not_listed' }, { status: 409 });
       }
 
       // 同時承認で二重登録しないよう、承認処理中の印（approvingAt）をトランザクションで先に取る。

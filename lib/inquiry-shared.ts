@@ -2,13 +2,18 @@
 // 種別・ステータスの表示名と、フォームと POST /api/inquiries の両方で使う入力チェック。
 // データ構造は Firestore データモデル設計書 §3.17。
 
-export type InquiryCategory = 'bug' | 'account' | 'content' | 'feedback' | 'other';
+export type InquiryCategory = 'bug' | 'account' | 'content' | 'channel_listing' | 'feedback' | 'other';
 
 /** 種別と、選択時にセレクト直下へ出す補足テキスト（フォーム仕様書 §4）。並びはフォームの選択肢順 */
 export const INQUIRY_CATEGORIES: ReadonlyArray<{ value: InquiryCategory; label: string; hint: string }> = [
   { value: 'bug', label: '不具合・バグ報告', hint: 'サービスの動作に関する不具合・バグのご報告' },
   { value: 'account', label: 'アカウントについて', hint: 'ログイン・退会・アカウント情報に関するお問い合わせ' },
   { value: 'content', label: '掲載内容について', hint: '誤情報・権利侵害・不適切なコンテンツ等に関するご連絡' },
+  {
+    value: 'channel_listing',
+    label: 'チャンネルの掲載について',
+    hint: '実況者・事務所の方へ: 掲載を外してほしい・掲載を申請したいなど。チャンネル名またはチャンネルのURLを書き添えてください',
+  },
   { value: 'feedback', label: 'ご意見・ご要望', hint: 'サービスへのご意見・新機能のご要望' },
   { value: 'other', label: 'その他', hint: '上記に該当しないお問い合わせ' },
 ];

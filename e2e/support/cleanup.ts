@@ -37,9 +37,14 @@ async function cleanupCollectionData(): Promise<{ candidates: number; games: num
   const playlists = (await startsWithMark('playlists', 'title')).docs.filter((d) => d.id.startsWith('PLE2E'));
   // 掲載状態のテスト（e2e/listing-status.spec.ts）が作った、名前が E2E_MARK で始まり ID が UCE2E で始まる channels
   const channels = (await startsWithMark('channels', 'name')).docs.filter((d) => d.id.startsWith('UCE2E'));
+  // チャンネル申請のテスト（e2e/channel-application.spec.ts）が作った、ID が UCE2E のチャンネルの申請・掲載チャンネル
+  const exploration = (await db().collection('exploration_channels').get()).docs.filter((d) => String(d.data().youtubeChannelId ?? '').startsWith('UCE2E'));
+  const applications = (await db().collection('workflows').where('type', '==', 'channel_application').get()).docs.filter((d) =>
+    String(d.data().proposalData?.youtubeChannelId ?? '').startsWith('UCE2E'),
+  );
   // 自動掲載のテスト（e2e/listing-collection.spec.ts）が作った、名前が E2E_MARK で始まる掲載チャンネル
   const explorationChannels = await startsWithMark('exploration_channels', 'name');
-  const refs = [...candidates.docs, ...games, ...playlists, ...channels, ...explorationChannels.docs].map((d) => d.ref);
+  const refs = [...candidates.docs, ...games, ...playlists, ...channels, ...exploration, ...applications, ...explorationChannels.docs].map((d) => d.ref);
   for (let i = 0; i < refs.length; i += 400) {
     const batch = db().batch();
     refs.slice(i, i + 400).forEach((ref) => batch.delete(ref));
