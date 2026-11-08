@@ -344,3 +344,20 @@ test('§3 フッターに「実況者・事務所の方へ」があり、チャ�
   await expect(guestPage.getByRole('heading').first()).toBeVisible();
   await expect(guestPage.locator('main').getByRole('link', { name: /実況者・事務所/ })).toHaveCount(0);
 });
+
+test('再生リストを追加する §10.6 実況者・事務所の方への案内から、チャンネルの申請と実況者向けページへ進める', async ({ userPage, adminPage }) => {
+  await userPage.goto('/playlists/new');
+  const guide = userPage.getByTestId('creator-guide');
+  await expect(guide).toContainText('実況者・事務所の方へ');
+  await expect(guide).toContainText('再生リストの提案ではなく、チャンネルの申請をお願いします');
+  await expect(guide.getByRole('link', { name: '実況者・事務所の方へ' })).toHaveAttribute('href', '/creators');
+  expect(await hasHorizontalScroll(userPage)).toBe(false);
+  await guide.getByRole('link', { name: 'チャンネルを申請する' }).click();
+  await expect(userPage).toHaveURL(/\/channels\/apply$/);
+  await expect(userPage.getByRole('heading', { name: 'チャンネルを申請する' })).toBeVisible();
+
+  // 管理者向けの画面には出さない
+  await adminPage.goto('/playlists/new');
+  await expect(adminPage.getByRole('heading', { name: '再生リストを追加する' })).toBeVisible();
+  await expect(adminPage.getByTestId('creator-guide')).toHaveCount(0);
+});
