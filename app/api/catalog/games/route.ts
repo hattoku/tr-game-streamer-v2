@@ -7,7 +7,7 @@ import { GAME_SORTS, parseEnum, parseIdList, parseKeyword, parsePage } from '../
 // ?q=キーワード &genres=ジャンルID,…（どれか） &tags=タグID,…（すべて含む） &sort=playlistCount|title|videoCount &page=1
 export async function GET(request: NextRequest) {
   const sp = request.nextUrl.searchParams;
-  return catalogResponse(() =>
+  return catalogResponse(request, () =>
     searchGames({
       keyword: parseKeyword(sp.get('q')),
       genreIds: parseIdList(sp.get('genres')),

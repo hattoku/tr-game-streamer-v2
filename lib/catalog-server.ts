@@ -12,6 +12,7 @@
 // 再開は全件の読み取りとして課金するため、張り直しても読み取りは増えない）。
 import type { DocumentData, Query, QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import { adminDb } from './firebase-admin';
+import { checkRateLimit } from './rate-limit';
 import { LISTED } from './listing';
 import { isListedTag, resolveTags, type TagInfo } from './tags-shared';
 import {
@@ -525,8 +526,18 @@ export async function topCatalog(): Promise<TopCatalog> {
 
 // ---- API Route の応答 ----
 
-/** 一覧 API の応答を作る。索引が用意できないときは 503（画面は「読み込めませんでした」と再読み込みのボタンを出す） */
-export async function catalogResponse(build: () => Promise<unknown>): Promise<Response> {
+/**
+ * 一覧 API の応答を作る。回数制限（lib/rate-limit.ts）を超えたときは 429（Retry-After つき）、
+ * 索引が用意できないときは 503（画面は「読み込めませんでした」と再読み込みのボタンを出す）。
+ */
+export async function catalogResponse(request: Request, build: () => Promise<unknown>): Promise<Response> {
+  const retryAfter = checkRateLimit(request.headers);
+  if (retryAfter !== null) {
+    return Response.json(
+      { error: 'アクセスが集中しています。しばらくしてからもう一度お試しください' },
+      { status: 429, headers: { 'Retry-After': String(retryAfter), 'Cache-Control': 'private, no-store' } },
+    );
+  }
   try {
     return Response.json(await build(), { headers: { 'Cache-Control': 'private, no-store' } });
   } catch (error) {

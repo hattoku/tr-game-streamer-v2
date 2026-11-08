@@ -7,7 +7,7 @@ import { parseEnum, parseIdList, parseKeyword, parsePage, PLAYLIST_SORTS } from 
 // ?q=キーワード &tags=タグID,タグID（すべて含む） &sort=score|mylist|newest &page=1 &gameId= &channelId=
 export async function GET(request: NextRequest) {
   const sp = request.nextUrl.searchParams;
-  return catalogResponse(() =>
+  return catalogResponse(request, () =>
     searchPlaylists({
       keyword: parseKeyword(sp.get('q')),
       tagIds: parseIdList(sp.get('tags')),

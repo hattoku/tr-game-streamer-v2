@@ -296,3 +296,27 @@ test('ゲーム/チャンネル詳細: 一覧は20件ずつ、件数と総動画
     await cleanup(ids, [channelId], [gameId]);
   }
 });
+
+test('§3.5 一覧 API は連打すると 429（Retry-After つき）を返し、別の接続元は影響を受けない', async ({ request }, testInfo) => {
+  // 1分240回の上限を実際に超えるため、他のテストの接続元（このテストを動かしている端末）とは別の接続元に見せかけて送る。
+  // desktop だけで行う（mobile と同時に走ると、同じインスタンスの全体の上限に近づくため）
+  test.skip(testInfo.project.name !== 'desktop', 'desktop のみ');
+  test.setTimeout(120_000);
+  const ip = `203.0.113.${100 + Math.floor(Math.random() * 100)}`;
+  const other = `198.51.100.${100 + Math.floor(Math.random() * 100)}`;
+  let limited: { status: number; retryAfter: string | undefined } | null = null;
+  // インスタンスが増えると各インスタンスが別に数えるため、上限の倍ほどまで送って最初の 429 を探す
+  for (let sent = 0; sent < 500 && !limited; sent += 10) {
+    const results = await Promise.all(
+      Array.from({ length: 10 }, () => request.get('/api/catalog/channels?page=1', { headers: { 'x-forwarded-for': ip } })),
+    );
+    const hit = results.find((r) => r.status() === 429);
+    if (hit) limited = { status: hit.status(), retryAfter: hit.headers()['retry-after'] };
+  }
+  expect(limited, '500回送っても 429 にならなかった').not.toBeNull();
+  expect(Number(limited!.retryAfter)).toBeGreaterThanOrEqual(1);
+  expect(Number(limited!.retryAfter)).toBeLessThanOrEqual(60);
+
+  const ok = await request.get('/api/catalog/channels?page=1', { headers: { 'x-forwarded-for': other } });
+  expect(ok.status()).toBe(200);
+});

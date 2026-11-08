@@ -4,6 +4,6 @@ import { catalogResponse, topCatalog } from '../../../../lib/catalog-server';
 // リクエストの値を読まないため、ビルド時に静的に作られないよう毎回実行する指定をする
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
-  return catalogResponse(topCatalog);
+export async function GET(request: Request) {
+  return catalogResponse(request, topCatalog);
 }
