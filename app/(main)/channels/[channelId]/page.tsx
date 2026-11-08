@@ -10,6 +10,8 @@
  * - 説明文の編集（§3.3、管理者のみ）はインライン編集。仕様は「説明文がある場合のみ編集ボタン」だが、
  *   説明文なしで登録済みのチャンネルに後から付ける手段が無くなるため、未設定時も「説明文を追加する」を出す。
  * - channels ドキュメントは onSnapshot で購読し、編集保存後に即座に反映する（ゲームタイトル詳細と同じ方針）。
+ * - 「N レビュー」「N マイリスト」は掲載中の再生リストのレビュー数・マイリスト登録数の合計（§8.2、段階5）。
+ *   チャンネル自体の点数（スコアの平均）は出さない。
  */
 'use client';
 
@@ -24,7 +26,7 @@ import { Button, LinkButton } from '@/components/ui/Button';
 import { Checkbox, Field, Textarea } from '@/components/ui/Input';
 import { Skeleton, SkeletonText } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
-import { InventoryIcon, PencilIcon, PlayIcon, UserIcon } from '@/components/ui/icons';
+import { CommentIcon, InventoryIcon, PencilIcon, PlayIcon, UserIcon, UsersIcon } from '@/components/ui/icons';
 
 interface ChannelDetail {
   name: string;
@@ -119,6 +121,14 @@ export default function ChannelDetailPage() {
               <span className="inline-flex items-center gap-1">
                 <PlayIcon size={12} />
                 {videoCount.toLocaleString()} 動画
+              </span>
+              <span className="inline-flex items-center gap-1" data-testid="channel-review-total">
+                <CommentIcon size={13} />
+                {(totals?.totalReviewCount ?? 0).toLocaleString()} レビュー
+              </span>
+              <span className="inline-flex items-center gap-1" data-testid="channel-mylist-total">
+                <UsersIcon size={13} />
+                {(totals?.totalMylistCount ?? 0).toLocaleString()} マイリスト
               </span>
             </div>
             <LinkButton href={addHref} variant="secondary" size="sm" className="self-start">

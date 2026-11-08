@@ -18,10 +18,11 @@ export interface NavItem {
 }
 
 /** グローバルナビゲーション（PC、§2.4）。アクティブ判定は href のプレフィクス一致 */
+// リブランディング段階5（UI仕様書 v2.1）でチャンネルを先頭にした
 export const GLOBAL_NAV: NavItem[] = withoutCollections([
+  { label: 'チャンネルから探す', href: '/channels' },
   { label: '再生リストを探す', href: '/playlists' },
   { label: 'ゲームから探す', href: '/games' },
-  { label: 'チャンネルから探す', href: '/channels' },
   { label: 'まとめ', href: COLLECTIONS_HREF },
 ]);
 
@@ -33,9 +34,9 @@ export const USER_NAV: NavItem[] = [
 
 /** フッター「サービス」グループ（§3.3）。モバイルの「さがす」タブ列（§2.7）も同じラベルを使う */
 export const FOOTER_SERVICE_NAV: NavItem[] = withoutCollections([
+  { label: 'チャンネル名から探す', href: '/channels' },
   { label: '再生リストを探す', href: '/playlists' },
   { label: 'ゲームタイトルから探す', href: '/games' },
-  { label: 'チャンネル名から探す', href: '/channels' },
   { label: 'まとめを探す', href: COLLECTIONS_HREF },
 ]);
 
@@ -47,9 +48,9 @@ export interface SearchTab {
 }
 
 export const SEARCH_TABS: SearchTab[] = withoutCollections([
+  { href: '/channels', main: 'チャンネル名', sub: 'から探す' },
   { href: '/playlists', main: '再生リスト', sub: 'を探す' },
   { href: '/games', main: 'ゲームタイトル', sub: 'から探す' },
-  { href: '/channels', main: 'チャンネル名', sub: 'から探す' },
   { href: COLLECTIONS_HREF, main: 'まとめ', sub: 'を探す' },
 ]);
 
@@ -70,7 +71,8 @@ export const FOOTER_LEGAL_NAV: NavItem[] = [
   { label: 'プライバシーポリシー', href: '/privacy' },
 ];
 
-export const SERVICE_TAGLINE = 'ゲーム実況動画の再生リスト視聴記録＆新着通知サービス';
+/** TOPのキャッチコピーとフッターのサービス説明（ページ top 仕様書 §4.2 v2.2、UI仕様書 §3.2） */
+export const SERVICE_TAGLINE = '人気のゲーム実況者のシリーズを、最初から・続きから。';
 export const COPYRIGHT = '© 2026 発見&納得コミュニケーションズ';
 
 /**
@@ -102,7 +104,8 @@ export const BOTTOM_TABS: BottomTab[] = [
   { key: 'home', label: 'ホーム', href: '/', prefixes: [] },
   // マイリスト（2026-09-12 ユーザー決定で「タイムライン」を置き換え）。未ログイン時はログインページへ
   { key: 'mylist', label: 'マイリスト', href: '/mylist', guestHref: '/login', prefixes: ['/mylist'] },
-  { key: 'search', label: 'さがす', href: '/playlists', prefixes: ['/playlists', '/games', '/channels', ...(COLLECTIONS_ENABLED ? [COLLECTIONS_HREF] : [])] },
+  // 遷移先はチャンネル（UI仕様書 v2.0 §2.7、段階5で実装）
+  { key: 'search', label: 'さがす', href: '/channels', prefixes: ['/channels', '/playlists', '/games', ...(COLLECTIONS_ENABLED ? [COLLECTIONS_HREF] : [])] },
   // 未ログイン時はアカウント作成フローへ（§2.7）
   // マイページの遷移先はプロフィール／設定ページ実装後に見直す。当面は視聴履歴（準備中ページ）
   { key: 'mypage', label: 'マイページ', href: '/history', guestHref: SIGNUP_HREF, prefixes: ['/history', '/profile', '/settings'] },

@@ -1,7 +1,8 @@
 /**
  * TOPページ本実装（ページ top 仕様書。フェーズ6ステップ2）。
- * 未ログイン: ヒーロー（§4）→ 注目の再生リスト（§6）→ 新着のまとめ → タグピックアップ（§8）
- * ログイン済み: マイリスト（§5）→ 注目の再生リスト（§6）→ 新着の再生リスト（§7）→ 新着のまとめ → タグピックアップ（§8）
+ * 未ログイン: ヒーロー（§4）→ 人気のチャンネル（§6A）→ 注目の再生リスト（§6）→ 新着のまとめ → タグピックアップ（§8）
+ * ログイン済み: マイリスト（§5）→ 人気のチャンネル（§6A）→ 注目の再生リスト（§6）→ 新着の再生リスト（§7）→ 新着のまとめ → タグピックアップ（§8）
+ * 人気のチャンネル（リブランディング段階5）は再生リストのセクションと同じ応答（`fetchTopCatalog` の `popularChannels`）で受け取る。
  * 新着のまとめ（2026-10-12、まとめ機能仕様書 §7）は公開まとめを別途取得し、取得前・0件・失敗時は出さない（他セクションの表示は待たせない）。
  * まとめ機能の取り下げ（2026-11-01、TOP仕様書 v2.0 §7.5）で COLLECTIONS_ENABLED が false の間は取得も表示もしない。
  * 各セクションの再生リスト（注目・新着・タグピックアップ）はサーバー側で選んだ分だけ受け取る（`fetchTopCatalog`、
@@ -25,6 +26,7 @@ import { HeroSection } from '@/components/top/HeroSection';
 import { MylistSection } from '@/components/top/MylistSection';
 import { FeaturedSection } from '@/components/top/FeaturedSection';
 import { NewArrivalsSection } from '@/components/top/NewArrivalsSection';
+import { PopularChannelsSection } from '@/components/top/PopularChannelsSection';
 import { TagPickupSections } from '@/components/top/TagPickupSections';
 import { NewCollectionsSection } from '@/components/top/NewCollectionsSection';
 import { fetchPublicCollections, type CollectionData } from '@/lib/collections';
@@ -52,7 +54,7 @@ export default function HomePage() {
   useEffect(() => {
     // 失敗したときは再生リストのセクションを出さない（空として扱う。ヒーロー・マイリストは表示する）
     fetchTopCatalog()
-      .catch((): TopCatalog => ({ playlists: [], featured: { overall: [], byGenre: {} }, newArrivals: [], tagPickups: [] }))
+      .catch((): TopCatalog => ({ playlists: [], featured: { overall: [], byGenre: {} }, newArrivals: [], tagPickups: [], popularChannels: [] }))
       .then(setTop);
     getDocs(collection(db, 'genres'))
       .then((genresSnap) => genresSnap.docs.map((d) => ({ id: d.id, name: (d.data().name as string) ?? '' })))
@@ -93,6 +95,7 @@ export default function HomePage() {
       featuredByGenre: Object.fromEntries(Object.entries(top.featured.byGenre).map(([id, ids]) => [id, pick(ids)])),
       newArrivals: pick(top.newArrivals),
       tagPickups: top.tagPickups.map((t) => ({ tagId: t.tagId, tagName: t.tagName, playlists: pick(t.ids) })),
+      popularChannels: top.popularChannels ?? [],
       all: top.playlists,
     };
   }, [top]);
@@ -109,6 +112,7 @@ export default function HomePage() {
       {user && <MylistSection />}
       {sections && genres ? (
         <>
+          <PopularChannelsSection channels={sections.popularChannels} />
           {completedIds ? (
             <FeaturedSection
               overall={sections.featuredOverall}

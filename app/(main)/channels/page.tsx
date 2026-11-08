@@ -4,6 +4,7 @@
  * （リブランディング段階7、共通 一覧のサーバー側検索 仕様書。API は app/api/catalog/channels）。
  * 再生リスト数・動画数・ピックアップは、掲載中の再生リストからサーバーが集計した値。
  * キーワードは入力が止まってから300msで検索する（§4.2のデバウンス）。
+ * 既定のソートは人気順（§9.2、段階5。運営のピン留め→人気の点数。共通 人気のチャンネル 集計 仕様書 §5）。
  */
 'use client';
 
@@ -25,6 +26,7 @@ import { cn } from '@/components/ui/cn';
 
 type SortKey = ChannelSort;
 const SORT_OPTIONS: Array<{ value: SortKey; label: string }> = [
+  { value: 'popular', label: '人気順' },
   { value: 'playlistCount', label: '再生リスト登録数順' },
   { value: 'name', label: 'チャンネル名順' },
   { value: 'videoCount', label: '動画数順' },
@@ -32,7 +34,7 @@ const SORT_OPTIONS: Array<{ value: SortKey; label: string }> = [
 
 export default function ChannelsPage() {
   const [keyword, setKeyword] = useState('');
-  const [sort, setSort] = useState<SortKey>('playlistCount');
+  const [sort, setSort] = useState<SortKey>('popular');
   const [page, setPage] = useState(1);
 
   const debouncedKeyword = useDebouncedValue(keyword.trim());

@@ -1,13 +1,13 @@
 /**
  * チャンネルカード（ページ チャンネル 探す 仕様書 §3.2〜§3.4）。
- * 上段=チャンネル情報エリア（アイコン・チャンネル名・再生リスト数・動画数、クリックでチャンネル詳細へ）、
+ * 上段=チャンネル情報エリア（アイコン・チャンネル名・再生リスト数・動画数・レビューの合計件数（§9.3、段階5）、クリックでチャンネル詳細へ）、
  * 下段=ピックアップ再生リストエリア（スコア上位3件、行クリックで動画プレーヤーへ）。
  * 遷移先が異なるため <a> の入れ子を避け、カード全体ではなく情報エリアと各行を個別の Link にする。
  * 名前が `components/playlists/ChannelCard.tsx`（再生リスト詳細の配信者カード）と衝突するため ListCard としている。
  */
 import Link from 'next/link';
 import { Card } from '@/components/ui/Card';
-import { InventoryIcon, PlayIcon, StarIcon, UserIcon } from '@/components/ui/icons';
+import { CommentIcon, InventoryIcon, PlayIcon, StarIcon, UserIcon } from '@/components/ui/icons';
 import type { ChannelListItem } from '@/lib/catalog-shared';
 
 export type ChannelCardData = ChannelListItem;
@@ -32,7 +32,7 @@ export function ChannelListCard({ channel }: { channel: ChannelCardData }) {
         </div>
         <div className="flex min-w-0 flex-1 flex-col justify-center gap-2">
           <p className="truncate text-lg font-medium text-text-primary group-hover:text-text-secondary">{channel.name}</p>
-          <div className="flex items-center gap-3 text-md text-text-tertiary">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-md text-text-tertiary">
             <span className="inline-flex items-center gap-1">
               <InventoryIcon size={13} />
               {channel.playlistCount.toLocaleString()} 再生リスト
@@ -40,6 +40,10 @@ export function ChannelListCard({ channel }: { channel: ChannelCardData }) {
             <span className="inline-flex items-center gap-1">
               <PlayIcon size={11} />
               {channel.videoCount.toLocaleString()} 動画
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <CommentIcon size={13} />
+              {(channel.reviewCount ?? 0).toLocaleString()} レビュー
             </span>
           </div>
         </div>

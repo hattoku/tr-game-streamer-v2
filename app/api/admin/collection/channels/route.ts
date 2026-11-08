@@ -30,7 +30,7 @@ import {
 //   restore       { id }               確認待ちを未特定に戻す
 //   set_tags      { id, tagIds }       チャンネル単位タグ（運営者タグのみ）
 //   set_mode      { id, publishMode }  掲載方法（confirm／auto）
-//   set_order     { id, featuredOrder } 「人気のチャンネル」の表示順（null で外す）
+//   set_order     { id, featuredOrder } 「人気のチャンネル」・チャンネル一覧の人気順のピン留め（小さいほど先。null で外す。段階5）
 // チャンネルを登録済み（active）にしたときは、そのチャンネルをその場で1回巡回する（コンテンツ収集機能仕様書 §10.3）。
 const MAX_RESOLVE_PER_REQUEST = 40;
 const MAX_LINES_PER_REQUEST = 200;

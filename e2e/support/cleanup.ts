@@ -1,6 +1,7 @@
 // テストデータの後始末（Admin SDK）。テスト用会員（users.isTestUser == true）が持ち主で、本文が E2E_MARK で始まる
 // お問い合わせを、メッセージ（サブコレクション）・返信通知・添付画像（Storage）ごと削除する。手で作ったデータは対象にしない。
 // テスト用会員の画像添付の1日の上限カウンター（inquiry_upload_counters）も消す（実行を繰り返しても上限に当たらないように）。
+// テスト用会員の playlist_viewers（人気の集計が視聴から作る記録）も消す。
 // あわせて、再生リストタイトルが E2E_MARK で始まる
 // collection_candidates と、タイトルが E2E_MARK で始まり再生リストの無い games、新着取得のテストが作った
 // ID が PLE2E で始まる playlists を削除する。
@@ -79,8 +80,11 @@ export async function cleanupE2eData(): Promise<{ inquiries: number; notificatio
       inquiries += 1;
     }
     const counters = await firestore.collection('inquiry_upload_counters').where('userId', '==', user.id).get();
+    // 人気の集計（共通 人気のチャンネル 集計 仕様書 §2.3）がテスト用会員の視聴から作った「見始めた」記録。
+    // 残すと stg のチャンネルの人気の数字がテストの視聴で増える
+    const viewers = await firestore.collection('playlist_viewers').where('userId', '==', user.id).get();
     const batch = firestore.batch();
-    counters.docs.forEach((d) => batch.delete(d.ref));
+    [...counters.docs, ...viewers.docs].forEach((d) => batch.delete(d.ref));
     await batch.commit();
   }
   return { inquiries, notifications, ...(await cleanupCollectionData()) };
