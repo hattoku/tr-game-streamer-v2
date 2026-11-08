@@ -8,16 +8,9 @@
 import Link from 'next/link';
 import { Card } from '@/components/ui/Card';
 import { InventoryIcon, PlayIcon, StarIcon, UserIcon } from '@/components/ui/icons';
-import type { ChannelPickupPlaylist } from '@/lib/playlist-aggregates';
+import type { ChannelListItem } from '@/lib/catalog-shared';
 
-export interface ChannelCardData {
-  id: string;
-  name: string;
-  iconUrl: string;
-  playlistCount: number;
-  videoCount: number;
-  topPlaylists: ChannelPickupPlaylist[];
-}
+export type ChannelCardData = ChannelListItem;
 
 export function ChannelListCard({ channel }: { channel: ChannelCardData }) {
   // カード内にチャンネル詳細・各再生リストへの複数の遷移先を個別Linkで持つため、
