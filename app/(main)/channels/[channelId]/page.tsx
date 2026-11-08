@@ -13,13 +13,12 @@
  */
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { notFound, useParams } from 'next/navigation';
 import { collection, doc, getDocs, limit, onSnapshot, query, where } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
-import { fetchPlaylistsByChannel, type PlaylistSummary } from '@/components/playlists/PlaylistGrid';
-import { PlaylistListSection } from '@/components/playlists/PlaylistListSection';
+import { PlaylistListSection, type PlaylistTotals } from '@/components/playlists/PlaylistListSection';
 import { Card } from '@/components/ui/Card';
 import { Button, LinkButton } from '@/components/ui/Button';
 import { Checkbox, Field, Textarea } from '@/components/ui/Input';
@@ -42,7 +41,8 @@ export default function ChannelDetailPage() {
 
   const [channel, setChannel] = useState<ChannelDetail | null>(null);
   const [missing, setMissing] = useState(false);
-  const [playlists, setPlaylists] = useState<PlaylistSummary[] | null>(null);
+  // 掲載中の再生リスト数と動画数の合計（一覧 API が返す。段階7）
+  const [totals, setTotals] = useState<PlaylistTotals | null>(null);
 
   useEffect(() => {
     if (!channelId) return;
@@ -62,19 +62,20 @@ export default function ChannelDetailPage() {
     });
   }, [channelId]);
 
-  useEffect(() => {
-    if (!channelId) return;
-    fetchPlaylistsByChannel(channelId).then(async (list) => {
-      setPlaylists(list);
-      if (list.length > 0) return;
+  const handleTotals = useCallback(
+    (t: PlaylistTotals) => {
+      setTotals(t);
+      if (t.total > 0) return;
       // 掲載から外した・掲載を止めたチャンネル（再生リストがすべて channel_off）は開けない（ページ チャンネル 詳細 仕様書 §8.1）。
       // 確認待ちなどで掲載中が0件のチャンネルは、空状態で開ける
-      const off = await getDocs(
+      getDocs(
         query(collection(db, 'playlists'), where('isPublic', '==', true), where('listingStatus', '==', 'channel_off'), where('channelId', '==', channelId), limit(1)),
-      );
-      if (!off.empty) setMissing(true);
-    });
-  }, [channelId]);
+      ).then((off) => {
+        if (!off.empty) setMissing(true);
+      });
+    },
+    [channelId],
+  );
 
   if (missing) notFound();
 
@@ -89,7 +90,7 @@ export default function ChannelDetailPage() {
     );
   }
 
-  const videoCount = playlists?.reduce((sum, p) => sum + p.videoCount, 0) ?? 0;
+  const videoCount = totals?.totalVideoCount ?? 0;
   const addHref = `/playlists/new?channelId=${encodeURIComponent(channelId)}`;
 
   return (
@@ -113,7 +114,7 @@ export default function ChannelDetailPage() {
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-md text-text-tertiary">
               <span className="inline-flex items-center gap-1">
                 <InventoryIcon size={14} />
-                {(playlists?.length ?? channel.playlistCount).toLocaleString()} 再生リスト
+                {(totals?.total ?? channel.playlistCount).toLocaleString()} 再生リスト
               </span>
               <span className="inline-flex items-center gap-1">
                 <PlayIcon size={12} />
@@ -134,7 +135,7 @@ export default function ChannelDetailPage() {
         />
       </Card>
 
-      <PlaylistListSection title="このチャンネルの再生リスト" playlists={playlists} addHref={addHref} />
+      <PlaylistListSection title="このチャンネルの再生リスト" filter={{ channelId }} addHref={addHref} onTotals={handleTotals} />
     </div>
   );
 }
