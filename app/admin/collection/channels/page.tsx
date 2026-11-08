@@ -407,7 +407,7 @@ export default function AdminExplorationChannelsPage() {
                         className="w-28"
                       />
                     </div>
-                    <PopularityLine counts={c.youtubeChannelId ? popularity?.channels[c.youtubeChannelId] : undefined} loaded={popularity !== null} />
+                    <PopularityLine counts={c.youtubeChannelId ? popularity?.channels[c.youtubeChannelId] : undefined} loaded={popularity !== null} everRun={!!popularity?.lastRunAt} />
                   </div>
                 )}
 
@@ -589,14 +589,14 @@ export default function AdminExplorationChannelsPage() {
   );
 }
 
-/** 人気の点数と内訳（§9.2 v3.4）。まだ集計していないチャンネルは「人気 0点（未集計）」 */
-function PopularityLine({ counts, loaded }: { counts: PopularityOverview['channels'][string] | undefined; loaded: boolean }) {
+/** 人気の点数と内訳（§9.2 v3.4）。一度も集計していなければ「人気 0点（未集計）」 */
+function PopularityLine({ counts, loaded, everRun }: { counts: PopularityOverview['channels'][string] | undefined; loaded: boolean; everRun: boolean }) {
   if (!loaded) return <p>人気: -</p>;
   const c = counts ?? ZERO_POPULARITY;
   return (
     <p data-testid="channel-popularity">
       人気 {popularityScore(c).toLocaleString('ja-JP')}点（マイリスト {c.mylistUsers}人・レビュー {c.reviewUsers}人・視聴 {c.viewerUsers}人／直近{RECENT_DAYS}日{' '}
-      {c.recentMylistUsers}・{c.recentReviewUsers}・{c.recentViewerUsers}人）{counts ? '' : '（未集計）'}
+      {c.recentMylistUsers}・{c.recentReviewUsers}・{c.recentViewerUsers}人）{everRun ? '' : '（未集計）'}
     </p>
   );
 }

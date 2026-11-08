@@ -45,7 +45,13 @@ async function cleanupCollectionData(): Promise<{ candidates: number; games: num
   );
   // 自動掲載のテスト（e2e/listing-collection.spec.ts）が作った、名前が E2E_MARK で始まる掲載チャンネル
   const explorationChannels = await startsWithMark('exploration_channels', 'name');
-  const refs = [...candidates.docs, ...games, ...playlists, ...channels, ...exploration, ...applications, ...explorationChannels.docs].map((d) => d.ref);
+  // 人気の集計のテスト（e2e/popular-channels.spec.ts）が架空の利用者ID（e2e-pop- で始まる）で作った記録。途中で落ちたときの残り
+  const popularity = (
+    await Promise.all(
+      ['mylist', 'reviews', 'watch_history', 'playlist_viewers'].map((c) => db().collection(c).where('userId', '>=', 'e2e-pop-').where('userId', '<', 'e2e-pop-\uf8ff').get()),
+    )
+  ).flatMap((s) => s.docs);
+  const refs = [...candidates.docs, ...games, ...playlists, ...channels, ...exploration, ...applications, ...explorationChannels.docs, ...popularity].map((d) => d.ref);
   for (let i = 0; i < refs.length; i += 400) {
     const batch = db().batch();
     refs.slice(i, i + 400).forEach((ref) => batch.delete(ref));

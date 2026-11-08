@@ -31,7 +31,7 @@ function PopularChannelCard({ channel }: { channel: PopularChannelItem }) {
   return (
     <Link href={`/channels/${encodeURIComponent(channel.id)}`} className="group flex flex-col gap-2" data-testid="popular-channel-card">
       {/* yt3.ggpht.com の Referer 制限対策で no-referrer */}
-      <div className="aspect-square w-full overflow-hidden rounded-[12px] bg-bg-btn transition-transform duration-[120ms] group-hover:-translate-y-0.5">
+      <div className="aspect-square w-full overflow-hidden rounded-[12px] bg-bg-btn transition-transform duration-[120ms] group-hover:-translate-y-[3px]">
         {channel.iconUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={channel.iconUrl} alt="" referrerPolicy="no-referrer" className="size-full object-cover" loading="lazy" />

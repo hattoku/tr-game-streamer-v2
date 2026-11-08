@@ -551,7 +551,14 @@ export async function searchGames(params: GameSearchParams): Promise<CatalogPage
 
 /** TOP の各セクションの再生リスト（ページ top 仕様書 §6・§7・§8） */
 export async function topCatalog(): Promise<TopCatalog> {
-  const [listed, channels] = await Promise.all([listedPlaylists(), channelIndex()]);
+  // 人気のチャンネルの索引が用意できないときは、そのセクションだけ出さない（ページ top 仕様書 §6A.3）
+  const [listed, channels] = await Promise.all([
+    listedPlaylists(),
+    channelIndex().catch((error: unknown): ChannelIndex => {
+      console.error('[catalog] 人気のチャンネルを用意できませんでした', error);
+      return { popular: [], searchTextById: new Map() };
+    }),
+  ]);
   // 人気のチャンネル（§6A）。チャンネル一覧の人気順の先頭20件
   const popularChannels = channels.popular
     .slice(0, TOP_CAROUSEL_LIMIT)

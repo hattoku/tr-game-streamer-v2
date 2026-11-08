@@ -4,6 +4,7 @@
 // 再生リスト・チャンネル・マイリスト・レビュー・視聴履歴は Admin SDK で直接作り、終了時に自分で消す（名前は [E2E] で始まる）。
 // 集計は stg 全体に効くため、集計するテストは desktop だけで順番に実行する。
 import type { APIRequestContext, Page } from '@playwright/test';
+import { FieldValue } from 'firebase-admin/firestore';
 import { captureIdToken, expect, hasHorizontalScroll, test } from './support/fixtures';
 import { db as e2eDb } from './support/cleanup';
 import { randomId } from './support/collection';
@@ -61,9 +62,10 @@ class Seed {
     this.refs.push(['reviews', id]);
   }
 
-  async watch(userId: string, playlistId: string, videoId: string, watchedAt = new Date()) {
+  async watch(userId: string, playlistId: string, videoId: string) {
     const id = `${userId}_${videoId}`;
-    await e2eDb().collection('watch_history').doc(id).set({ userId, playlistId, youtubeVideoId: videoId, progressPercent: 10, watchedAt });
+    // サーバーの時刻にする（テストを動かすマシンの時計がずれていても、集計の「前回より後」に入るように）
+    await e2eDb().collection('watch_history').doc(id).set({ userId, playlistId, youtubeVideoId: videoId, progressPercent: 10, watchedAt: FieldValue.serverTimestamp() });
     this.refs.push(['watch_history', id]);
     // 集計が作る「見始めた」記録も消す
     this.refs.push(['playlist_viewers', `${userId}_${playlistId}`]);
@@ -224,7 +226,7 @@ test.describe('集計と並び（desktop だけ）', () => {
     // 登録済みのチャンネルがあれば、行にピン留めの入力と人気の点数が出る
     const rows = adminPage.getByTestId('channel-popularity');
     if ((await rows.count()) > 0) {
-      await expect(rows.first()).toContainText(/人気 \d+点/);
+      await expect(rows.first()).toContainText(/人気 [\d,]+点/);
       await expect(adminPage.getByLabel(/のピン留め$/).first()).toBeVisible();
     }
   });

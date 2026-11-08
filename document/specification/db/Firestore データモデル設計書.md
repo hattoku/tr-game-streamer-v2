@@ -1013,7 +1013,7 @@ AI運営者（審査AI）の設定。プラットフォーム共通で1体のみ
 
 | ドキュメントID | フィールド | 説明 |
 |---|---|---|
-| `channel_popularity` | `lastRunAt`（Timestamp） | 人気の集計を最後に終えた日時。次の集計はこれより5分前以降の `watch_history` だけを読む |
+| `channel_popularity` | `lastRunAt`（Timestamp） | 最後に終わった人気の集計を始めた日時（集計中の視聴を読み逃さないよう、始めた時刻を残す）。次の集計はこれより5分前以降の `watch_history` だけを読む |
 
 ---
 
