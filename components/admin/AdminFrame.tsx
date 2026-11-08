@@ -16,6 +16,7 @@ import { PageContainer } from '@/components/layout/PageContainer';
 import { cn } from '@/components/ui/cn';
 import { isActivePath } from '@/components/layout/nav';
 import { formatBadgeCount, usePendingWorkflowCount } from './usePendingWorkflowCount';
+import { usePendingListingCount } from './usePendingListingCount';
 
 const ADMIN_NAV = [
   { label: 'ダッシュボード', href: '/admin' },
@@ -25,6 +26,7 @@ const ADMIN_NAV = [
 ] as const;
 
 function AdminNav({ pathname, pendingCount, className }: { pathname: string; pendingCount: number; className?: string }) {
+  const pendingListing = usePendingListingCount(true);
   return (
     <nav aria-label="管理画面ナビゲーション" className={cn('flex h-full items-center gap-4 md:gap-6', className)}>
       {ADMIN_NAV.map((item) => {
@@ -47,6 +49,15 @@ function AdminNav({ pathname, pendingCount, className }: { pathname: string; pen
                 className="ml-[6px] inline-flex h-[18px] min-w-[20px] items-center justify-center rounded-[9px] bg-brand-primary px-[6px] text-sm font-semibold leading-none text-white"
               >
                 {formatBadgeCount(pendingCount)}
+              </span>
+            )}
+            {/* 自動掲載の確認待ちの件数（気づかないまま溜めないため。収集候補レビューUI仕様書 §8.2） */}
+            {item.href === '/admin/collection' && pendingListing > 0 && (
+              <span
+                aria-label={`確認待ち ${pendingListing} 件`}
+                className="ml-[6px] inline-flex h-[18px] min-w-[20px] items-center justify-center rounded-[9px] bg-brand-primary px-[6px] text-sm font-semibold leading-none text-white"
+              >
+                {formatBadgeCount(pendingListing)}
               </span>
             )}
             {active && <span aria-hidden className="absolute inset-x-0 bottom-0 h-[2px] bg-admin-accent" />}
