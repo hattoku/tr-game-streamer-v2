@@ -4,8 +4,9 @@
  * ログイン済み: マイリスト（§5）→ 注目の再生リスト（§6）→ 新着の再生リスト（§7）→ 新着のまとめ → タグピックアップ（§8）
  * 新着のまとめ（2026-10-12、まとめ機能仕様書 §7）は公開まとめを別途取得し、取得前・0件・失敗時は出さない（他セクションの表示は待たせない）。
  * まとめ機能の取り下げ（2026-11-01、TOP仕様書 v2.0 §7.5）で COLLECTIONS_ENABLED が false の間は取得も表示もしない。
- * 公開再生リスト全件（`fetchPublicPlaylists`）＋タグマスタ＋ジャンルマスタを1回だけ取得し、
- * 各セクション（`components/top/`）へ配列で渡して表示専用にする。マイリストセクションのみ
+ * 各セクションの再生リスト（注目・新着・タグピックアップ）はサーバー側で選んだ分だけ受け取る（`fetchTopCatalog`、
+ * リブランディング段階7・共通 一覧のサーバー側検索 仕様書 §3.4。各カルーセル最大20件）。ジャンルマスタと合わせて1回だけ取得し、
+ * 各セクション（`components/top/`）へ渡して表示専用にする。マイリストセクションのみ
  * ログイン後に別途取得する（`useMylistEntries`、`components/top/MylistSection.tsx`内部）。
  * マイリストの取得は公開再生リスト等の取得完了を待たず、認証確定時点で並行して開始する
  * （読み込み中の時間が長いほどタブ切替等で通信が止まる事象に巻き込まれやすいため）。
@@ -14,12 +15,12 @@
  */
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
-import { fetchPublicPlaylists, type PlaylistSummary } from '@/components/playlists/PlaylistGrid';
-import { fetchTagsMap, type TagInfo } from '@/lib/tags';
+import { fetchTopCatalog } from '@/lib/catalog';
+import type { PlaylistSummary, TopCatalog } from '@/lib/catalog-shared';
 import { HeroSection } from '@/components/top/HeroSection';
 import { MylistSection } from '@/components/top/MylistSection';
 import { FeaturedSection } from '@/components/top/FeaturedSection';
@@ -42,21 +43,21 @@ const NO_EXCLUDES = new Set<string>();
 
 export default function HomePage() {
   const { user, loading: authLoading } = useAuth();
-  const [playlists, setPlaylists] = useState<PlaylistSummary[] | null>(null);
-  const [tags, setTags] = useState<Map<string, TagInfo> | null>(null);
+  const [top, setTop] = useState<TopCatalog | null>(null);
   const [genres, setGenres] = useState<Genre[] | null>(null);
   const [collections, setCollections] = useState<CollectionData[]>([]);
   const [completed, setCompleted] = useState<{ uid: string; ids: Set<string> } | null>(null);
   const uid = user?.uid ?? null;
 
   useEffect(() => {
-    Promise.all([fetchPublicPlaylists(), fetchTagsMap(), getDocs(collection(db, 'genres'))]).then(
-      ([playlistList, tagsMap, genresSnap]) => {
-        setPlaylists(playlistList);
-        setTags(tagsMap);
-        setGenres(genresSnap.docs.map((d) => ({ id: d.id, name: (d.data().name as string) ?? '' })));
-      },
-    );
+    // 失敗したときは再生リストのセクションを出さない（空として扱う。ヒーロー・マイリストは表示する）
+    fetchTopCatalog()
+      .catch((): TopCatalog => ({ playlists: [], featured: { overall: [], byGenre: {} }, newArrivals: [], tagPickups: [] }))
+      .then(setTop);
+    getDocs(collection(db, 'genres'))
+      .then((genresSnap) => genresSnap.docs.map((d) => ({ id: d.id, name: (d.data().name as string) ?? '' })))
+      .catch(() => [])
+      .then(setGenres);
     if (COLLECTIONS_ENABLED) {
       fetchPublicCollections()
         .then(setCollections)
@@ -82,7 +83,20 @@ export default function HomePage() {
   // 未ログインは除外なし。ログイン済みは当該ユーザーの完走済みIDが揃うまで注目セクションを待たせる
   const completedIds = uid ? (completed?.uid === uid ? completed.ids : null) : NO_EXCLUDES;
 
-  const dataReady = playlists !== null && tags !== null && genres !== null;
+  // 各セクションは ID の並びで届くので、カードの中身（top.playlists）を引いて並べる
+  const sections = useMemo(() => {
+    if (!top) return null;
+    const byId = new Map<string, PlaylistSummary>(top.playlists.map((p) => [p.id, p]));
+    const pick = (ids: string[]) => ids.map((id) => byId.get(id)).filter((p): p is PlaylistSummary => !!p);
+    return {
+      featuredOverall: pick(top.featured.overall),
+      featuredByGenre: Object.fromEntries(Object.entries(top.featured.byGenre).map(([id, ids]) => [id, pick(ids)])),
+      newArrivals: pick(top.newArrivals),
+      tagPickups: top.tagPickups.map((t) => ({ tagId: t.tagId, tagName: t.tagName, playlists: pick(t.ids) })),
+      all: top.playlists,
+    };
+  }, [top]);
+  const dataReady = sections !== null && genres !== null;
   if (authLoading || (!user && !dataReady)) {
     return <TopSkeleton />;
   }
@@ -93,16 +107,21 @@ export default function HomePage() {
     <div className="flex flex-col gap-10">
       {!user && <HeroSection />}
       {user && <MylistSection />}
-      {dataReady ? (
+      {sections && genres ? (
         <>
           {completedIds ? (
-            <FeaturedSection playlists={playlists} genres={genres} excludePlaylistIds={completedIds} />
+            <FeaturedSection
+              overall={sections.featuredOverall}
+              byGenre={sections.featuredByGenre}
+              genres={genres}
+              excludePlaylistIds={completedIds}
+            />
           ) : (
             <SectionSkeleton />
           )}
-          {user && <NewArrivalsSection playlists={playlists} />}
-          {COLLECTIONS_ENABLED && <NewCollectionsSection collections={collections} playlists={playlists} />}
-          <TagPickupSections playlists={playlists} tags={tags} />
+          {user && <NewArrivalsSection playlists={sections.newArrivals} />}
+          {COLLECTIONS_ENABLED && <NewCollectionsSection collections={collections} playlists={sections.all} />}
+          <TagPickupSections pickups={sections.tagPickups} />
         </>
       ) : (
         <SectionSkeleton />

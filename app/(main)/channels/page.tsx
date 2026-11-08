@@ -1,19 +1,17 @@
 /**
  * 「チャンネル名から探す」（/channels）。ページ チャンネル 探す 仕様書 準拠。
- * `/games`と同じ簡易実装方針: `channels`全件＋公開`playlists`の集計（lib/playlist-aggregates.ts）を
- * クライアントで取得し、キーワード絞り込み・ソート・20件ページングもクライアント側で行う。
- *
- * 簡略化した点:
- * - キーワード検索の「デバウンス300ms」（§4.2）はクライアント内メモリ配列のフィルタのため実施しない（`/games`と同じ）。
- * - 再生リスト登録数は`channels.playlistCount`（登録APIが維持）、動画数・ピックアップは公開再生リストからの集計値。
+ * キーワード絞り込み・ソート・20件ページングはサーバー側で行い、1ページ分だけ受け取る
+ * （リブランディング段階7、共通 一覧のサーバー側検索 仕様書。API は app/api/catalog/channels）。
+ * 再生リスト数・動画数・ピックアップは、掲載中の再生リストからサーバーが集計した値。
+ * キーワードは入力が止まってから300msで検索する（§4.2のデバウンス）。
  */
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { collection, getDocs } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
-import { fetchChannelAggregates } from '@/lib/playlist-aggregates';
-import { ChannelListCard, type ChannelCardData } from '@/components/channels/ChannelListCard';
+import { useState } from 'react';
+import { ChannelListCard } from '@/components/channels/ChannelListCard';
+import { LoadError } from '@/components/playlists/PlaylistListSection';
+import { fetchChannelPage, useCatalogQuery, useDebouncedValue } from '@/lib/catalog';
+import type { ChannelSort } from '@/lib/catalog-shared';
 import { Card, SectionHeading } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -22,10 +20,9 @@ import { Pagination } from '@/components/ui/Pagination';
 import { Skeleton, SkeletonText } from '@/components/ui/Skeleton';
 import { SelectMenu } from '@/components/ui/DropdownMenu';
 import { SearchIcon, UserIcon, XIcon } from '@/components/ui/icons';
+import { cn } from '@/components/ui/cn';
 
-const PAGE_SIZE = 20;
-
-type SortKey = 'playlistCount' | 'name' | 'videoCount';
+type SortKey = ChannelSort;
 const SORT_OPTIONS: Array<{ value: SortKey; label: string }> = [
   { value: 'playlistCount', label: '再生リスト登録数順' },
   { value: 'name', label: 'チャンネル名順' },
@@ -33,58 +30,24 @@ const SORT_OPTIONS: Array<{ value: SortKey; label: string }> = [
 ];
 
 export default function ChannelsPage() {
-  const [channels, setChannels] = useState<ChannelCardData[] | null>(null);
   const [keyword, setKeyword] = useState('');
   const [sort, setSort] = useState<SortKey>('playlistCount');
   const [page, setPage] = useState(1);
 
-  useEffect(() => {
-    Promise.all([getDocs(collection(db, 'channels')), fetchChannelAggregates()]).then(([snap, aggregates]) => {
-      setChannels(
-        // 掲載中の再生リストが1件以上あるチャンネルだけ出す（ページ チャンネル 探す 仕様書 §9.1）
-        snap.docs.filter((d) => aggregates.has(d.id)).map((d) => {
-          const data = d.data();
-          const agg = aggregates.get(d.id);
-          return {
-            id: d.id,
-            name: (data.name as string) ?? '',
-            iconUrl: (data.iconUrl as string) ?? '',
-            playlistCount: agg?.playlistCount ?? 0,
-            videoCount: agg?.videoCount ?? 0,
-            topPlaylists: agg?.topPlaylists ?? [],
-          } satisfies ChannelCardData;
-        }),
-      );
-    });
-  }, []);
-
-  const filtered = useMemo(() => {
-    if (!channels) return [];
-    const kw = keyword.trim().toLowerCase();
-    return kw ? channels.filter((c) => c.name.toLowerCase().includes(kw)) : channels;
-  }, [channels, keyword]);
-
-  const sorted = useMemo(() => {
-    const list = [...filtered];
-    list.sort((a, b) => {
-      if (sort === 'name') return a.name.localeCompare(b.name, 'ja');
-      const diff = sort === 'videoCount' ? b.videoCount - a.videoCount : b.playlistCount - a.playlistCount;
-      // 同数はチャンネル名順（§5.2）
-      return diff !== 0 ? diff : a.name.localeCompare(b.name, 'ja');
-    });
-    return list;
-  }, [filtered, sort]);
+  const debouncedKeyword = useDebouncedValue(keyword.trim());
 
   // 検索条件・ソートが変わったらページを1に戻す（`/games`と同じ「描画中に直接setState」パターン）
-  const filterKey = `${keyword}|${sort}`;
+  const filterKey = `${debouncedKeyword}|${sort}`;
   const [prevFilterKey, setPrevFilterKey] = useState(filterKey);
   if (filterKey !== prevFilterKey) {
     setPrevFilterKey(filterKey);
     setPage(1);
   }
 
-  const pageCount = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
-  const pageItems = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const { data, loading, error, retry } = useCatalogQuery(`${filterKey}|${page}`, (signal) =>
+    fetchChannelPage({ keyword: debouncedKeyword, sort, page }, signal),
+  );
+  const pending = loading || debouncedKeyword !== keyword.trim();
   const hasKeyword = keyword.trim().length > 0;
 
   const keywordInput = (
@@ -123,44 +86,55 @@ export default function ChannelsPage() {
             トラック幅が押し広げられオーバーフローする（wiki/concepts/CSSグリッドのmin-width対策.md参照） */}
         <div className="flex min-w-0 flex-col gap-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <span className="text-md text-text-muted">{sorted.length}件</span>
+            <span className="text-md text-text-muted">{data ? `${data.total.toLocaleString()}件` : '\u00a0'}</span>
             <SelectMenu value={sort} onValueChange={setSort} options={SORT_OPTIONS} prefix="ソート:" aria-label="並び替え" />
           </div>
 
-          {channels === null ? (
-            <div className="flex flex-col gap-3" aria-busy="true">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <Card key={i} className="flex gap-3">
-                  <Skeleton className="size-[72px] shrink-0 rounded-[10px]" />
-                  <SkeletonText lines={2} className="flex-1" />
-                </Card>
-              ))}
-            </div>
-          ) : channels.length === 0 ? (
-            <EmptyState
-              icon={<UserIcon />}
-              title="まだチャンネルが登録されていません"
-              description="再生リストを登録すると、そのチャンネルがここに表示されます"
-            />
-          ) : sorted.length === 0 ? (
-            <EmptyState
-              icon={<SearchIcon />}
-              title="該当するチャンネルが見つかりませんでした"
-              description="検索条件を変えてお試しください"
-              action={
-                <Button variant="secondary" onClick={() => setKeyword('')}>
-                  検索条件をリセット
-                </Button>
-              }
-            />
-          ) : (
-            <>
-              <div className="flex flex-col gap-3">
-                {pageItems.map((c) => (
-                  <ChannelListCard key={c.id} channel={c} />
+          {data === null ? (
+            error ? (
+              <LoadError onRetry={retry} />
+            ) : (
+              <div className="flex flex-col gap-3" aria-busy="true">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <Card key={i} className="flex gap-3">
+                    <Skeleton className="size-[72px] shrink-0 rounded-[10px]" />
+                    <SkeletonText lines={2} className="flex-1" />
+                  </Card>
                 ))}
               </div>
-              <Pagination page={page} pageCount={pageCount} onPageChange={setPage} />
+            )
+          ) : (
+            <>
+              {error && <LoadError onRetry={retry} />}
+              {data.total === 0 && !pending ? (
+                !hasKeyword ? (
+                  <EmptyState
+                    icon={<UserIcon />}
+                    title="まだチャンネルが登録されていません"
+                    description="再生リストを登録すると、そのチャンネルがここに表示されます"
+                  />
+                ) : (
+                  <EmptyState
+                    icon={<SearchIcon />}
+                    title="該当するチャンネルが見つかりませんでした"
+                    description="検索条件を変えてお試しください"
+                    action={
+                      <Button variant="secondary" onClick={() => setKeyword('')}>
+                        検索条件をリセット
+                      </Button>
+                    }
+                  />
+                )
+              ) : (
+                <div aria-busy={pending} className={cn('flex flex-col gap-4 transition-opacity', pending && 'opacity-60')}>
+                  <div className="flex flex-col gap-3">
+                    {data.items.map((c) => (
+                      <ChannelListCard key={c.id} channel={c} />
+                    ))}
+                  </div>
+                  <Pagination page={data.page} pageCount={data.pageCount} onPageChange={setPage} />
+                </div>
+              )}
             </>
           )}
         </div>

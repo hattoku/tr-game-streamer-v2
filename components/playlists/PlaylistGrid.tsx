@@ -5,12 +5,9 @@
  *   絞り込み中のタグは太字で強調する。TOPページのカルーセル各セクション（components/top/）でも
  *   固定幅で1枚ずつ使う（フェーズ6ステップ2）。
  * - `PlaylistCardGrid`: `PlaylistCard`をグリッドで並べる（「再生リストを探す」・ゲーム/チャンネル詳細）。
- * - `fetchPlaylistsByGame`・`fetchPlaylistsByChannel`・`fetchPublicPlaylists`・`sortPlaylists`:
- *   ゲームタイトル詳細ページの「関連する再生リスト」節（components/games/GamePlaylistSection.tsx）・
- *   チャンネル詳細ページの「再生リスト一覧」節（app/(main)/channels/[channelId]/page.tsx）・「再生リストを探す」
- *   本実装（`app/(main)/playlists/page.tsx`）・TOPページ（`app/(main)/page.tsx`）向けに、データ取得と
- *   ページング・ソートを呼び出し側に委ねられるよう分離したもの
- *   （一覧セクションの共通UIは components/playlists/PlaylistListSection.tsx）。
+ * - 一覧のデータは、サーバー側で絞り込み・並べ替え・ページングした1ページ分を API から受け取る
+ *   （リブランディング段階7、共通 一覧のサーバー側検索 仕様書。呼び出しは lib/catalog.ts）。
+ * - `fetchPublicPlaylists`: 公開再生リスト全件のクライアント取得。取り下げ中のまとめ機能（COLLECTIONS_ENABLED）でだけ使う。
  * 見た目: 共通 デザイントークン仕様書 v2.0 §6.1（カード・ホバーの浮き上がり）・§6.5（サムネイル: 下部オーバーレイ・
  * 話数「N話」）。クリックは詳細ページへの遷移でその場では再生しないため、サムネイルにボタンは重ねず
  * カード全体の浮き上がり（§6.1）のみでホバーを示す（ゲームタイトルカードと同じ方針）。
@@ -27,30 +24,12 @@ import { Tag } from '@/components/ui/Tag';
 import { CommentIcon, InventoryIcon, StarIcon, UsersIcon } from '@/components/ui/icons';
 import { cn } from '@/components/ui/cn';
 import { LISTED } from '@/lib/listing';
-import { fetchTagsMap, resolveTags, type ResolvedTag, type TagInfo } from '@/lib/tags';
+import { fetchTagsMap, resolveTags, type TagInfo } from '@/lib/tags';
+import type { PlaylistSummary } from '@/lib/catalog-shared';
+
+export type { PlaylistSummary, PlaylistSort } from '@/lib/catalog-shared';
 
 const MAX_VISIBLE_TAGS = 3;
-
-export interface PlaylistSummary {
-  id: string;
-  title: string;
-  thumbnailUrl: string;
-  channelName: string;
-  channelIconUrl: string;
-  gameId: string | null;
-  gameName: string;
-  /** ゲーム未設定の再生リストが持つ未確定のゲーム名（検索の対象。v1.10）。無ければ空 */
-  gameHint: string;
-  /** 登録時にゲームタイトルの`genreId`から1件セットされるジャンルID（register/route.ts参照）。TOPページ注目セクションのジャンルタブ絞り込みで使用 */
-  gameGenreIds: string[];
-  videoCount: number;
-  score: number | null;
-  mylistCount: number;
-  reviewCount: number;
-  latestVideoPublishedAt: number | null;
-  registeredAt: number;
-  tags: ResolvedTag[];
-}
 
 const GRID_CLASS = 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4';
 
@@ -176,51 +155,11 @@ export function PlaylistCardGrid({
   );
 }
 
-export type PlaylistSort = 'score' | 'mylist' | 'newest';
-
-export function sortPlaylists(list: PlaylistSummary[], sort: PlaylistSort): PlaylistSummary[] {
-  const sorted = [...list];
-  if (sort === 'mylist') {
-    sorted.sort((a, b) => b.mylistCount - a.mylistCount);
-  } else if (sort === 'newest') {
-    sorted.sort((a, b) => (b.latestVideoPublishedAt ?? 0) - (a.latestVideoPublishedAt ?? 0));
-  } else {
-    // スコアが高い順（デフォルト）。評価なし（null）は末尾
-    sorted.sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
-  }
-  return sorted;
-}
-
 /**
- * 指定ゲームの公開再生リストを取得する（ゲームタイトル詳細ページ「関連する再生リスト」節）。
- * `isPublic`+`gameId`の等価条件のみのクエリのため新規のFirestore複合indexは不要
- * （並び替え・ページングは取得後にJS側で行う想定。呼び出し側: components/games/GamePlaylistSection.tsx）。
- */
-export async function fetchPlaylistsByGame(gameId: string): Promise<PlaylistSummary[]> {
-  const [snap, tagsMap] = await Promise.all([
-    getDocs(query(collection(db, 'playlists'), where('isPublic', '==', true), where('listingStatus', '==', LISTED), where('gameId', '==', gameId))),
-    fetchTagsMap(),
-  ]);
-  return snap.docs.map((d) => toSummary(d, tagsMap));
-}
-
-/**
- * 指定チャンネルの公開再生リストを取得する（チャンネル詳細ページ「再生リスト一覧」節、
- * ページ チャンネル 詳細 仕様書 第4章）。`fetchPlaylistsByGame`と同じく等価条件のみのため複合indexは不要。
- * 呼び出し側: app/(main)/channels/[channelId]/page.tsx
- */
-export async function fetchPlaylistsByChannel(channelId: string): Promise<PlaylistSummary[]> {
-  const [snap, tagsMap] = await Promise.all([
-    getDocs(query(collection(db, 'playlists'), where('isPublic', '==', true), where('listingStatus', '==', LISTED), where('channelId', '==', channelId))),
-    fetchTagsMap(),
-  ]);
-  return snap.docs.map((d) => toSummary(d, tagsMap));
-}
-
-/**
- * 公開再生リスト全件を取得する（「再生リストを探す」本実装 `app/(main)/playlists/page.tsx`、
- * TOPページ `app/(main)/page.tsx`）。カタログ規模が小さい前提で全件クライアント取得＋
- * クライアント側フィルタ・ソート・ページングとする（`/games`と同じ簡易実装方針）。
+ * 公開かつ掲載中の再生リスト全件をクライアントで取得する。取り下げ中のまとめ機能（`/collections`・
+ * まとめの再生リスト選択。COLLECTIONS_ENABLED が false の間は呼ばれない）でだけ使う。
+ * 検索面（探す・TOP・ゲーム・チャンネル）はサーバー側検索（lib/catalog.ts）を使うこと。まとめを戻すときは、
+ * 全件取得をやめてサーバー側検索に載せ替える（共通 一覧のサーバー側検索 仕様書 §6）。
  */
 export async function fetchPublicPlaylists(): Promise<PlaylistSummary[]> {
   const [snap, tagsMap] = await Promise.all([

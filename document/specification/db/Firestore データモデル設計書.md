@@ -1,6 +1,6 @@
 # プレミテ Firestore データモデル設計書
 
-**バージョン**: v2.5  
+**バージョン**: v2.7  
 **作成日**: 2026年3月30日（更新）  
 **対象**: 開発チーム  
 **関連ドキュメント**: プレミテ企画書 / プレミテ_技術スタック仕様書 / 各機能仕様書
@@ -1032,7 +1032,7 @@ ai_operators ──── (1) users
 | `playlists` | `isPublic` (asc) + `score` (desc) | 評価順取得 |
 | `playlists` | `isPublic` (asc) + `registeredAt` (desc) | 新着順取得 |
 | `playlists` | `isPublic` (asc) + `gameGenreIds` (array-contains) + `score` (desc) | ジャンル別評価順 |
-| `playlists` | `isPublic` (asc) + `listingStatus` (asc) ＋ 上の各並び（`score`・`registeredAt`・`gameGenreIds`）、＋`gameId`、＋`channelId` | 検索面の絞り込み（v2.0・段階3。サーバー側検索化（段階7）で見直す） |
+| `playlists` | `isPublic` (asc) + `listingStatus` (asc) ＋ 上の各並び（`score`・`registeredAt`・`gameGenreIds`）、＋`gameId`、＋`channelId` | 検索面の絞り込み（v2.0・段階3）。v2.7: 段階7で検索面の一覧はサーバー側検索（共通 一覧のサーバー側検索 仕様書）になり、`isPublic`＋`listingStatus` の等価条件の購読だけで全件を持つため、これらの複合インデックスは検索面では使わない（他の用途の確認が済むまで残す） |
 | `playlists` | `explorationChannelId` (asc) + `listingStatus` (asc) | チャンネルごとの掲載状態の確認・一括変更（v2.0・段階4） |
 | `reviews` | `playlistId` (asc) + `postedAt` (desc) | プレイリスト別レビュー |
 | `watch_history` | `userId` (asc) + `watchedAt` (desc) | ユーザー別視聴履歴 |
@@ -1120,4 +1120,5 @@ ai_operators ──── (1) users
 | v2.4 | 2026-11-01 | `workflows.proposalData`（`game_title_register`）に、ゲーム未設定の再生リストに付けたいゲームタイトルの提案の形（`playlistId`・`playlistTitle`）を追加 |
 | v2.3 | 2026-11-01 | `gameSetBy` に `user`、`playlist_game_changes.by` に `user` を追加、3.34 `game_link_counters` を追加（一般ユーザーのゲーム登録と1日の上限） |
 | v2.5 | 2026-11-04 | 段階4の実装。§3.2 `playlists` に `metaFetchedAt`・`playlistPublishedAt`・`youtubeDataRemovedAt` を追加し、巡回で作る再生リストの値と `listingReason` の値を注記。§3.21 `batch_logs` に巡回の結果の項目を追加。§3.32 `exploration_channels` の登録者数の保存期間を注記。§3.23 `collection_candidates` は巡回に取り込んだら消し、残りも30日で消す（コンテンツ収集機能仕様書 §10.11） |
+| v2.7 | 2026-11-08 | 段階7 一覧のサーバー側検索化。§5.1 検索面の複合インデックスは検索面では使わなくなった旨を注記。フィールドの追加・変更はなし（v2.6 は段階6の PR #24 が使う） |
 | v2.2 | 2026-11-01 | 段階3の実装。§3.2 `playlists` の掲載状態（`listingStatus` ほか）と `source`・`explorationChannelId` を実装。管理者の登録・承認は `listed`（`listingReason: admin`）で作り、既存データは移行スクリプトで `listed`（`listingReason: migration`）または `channel_off` にする。`games.playlistCount`・`channels.playlistCount`・`tags.usagePlaylistCount` は掲載中の再生リストだけを数える（コンテンツ収集機能仕様書 §10.9）。フィールドの追加・変更はなし |

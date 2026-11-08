@@ -1,24 +1,24 @@
 /**
  * 「ゲームタイトルから探す」（/games）。ページ ゲームタイトル 探す 仕様書 準拠。
- * カタログ規模が小さい前提で、全件クライアント取得＋クライアント側フィルタ・ソート・
- * ページングで実装する（`/playlists/new`のゲーム選択と同じ簡易実装方針。フェーズ3時点では
- * 全文検索インフラは持たない）。
+ * 絞り込み・並べ替え・ページングはサーバー側で行い、1ページ分（20件）だけ受け取る
+ * （リブランディング段階7、共通 一覧のサーバー側検索 仕様書。API は app/api/catalog/games）。
+ * 再生リスト数・動画数は掲載中の再生リストからサーバーが集計した値。キーワードは入力が止まってから300msで検索する。
  *
  * スコープ外・簡略化した点:
  * - タグ絞り込みのカテゴリ分け（§4.4「遊び方系・IP系などのカテゴリごとに上位5件」）は、
  *   `tags`スキーマにカテゴリを表す情報が無いため未実装。フラットな一覧として全件表示する。
- * - キーワード検索の「デバウンス300ms」はクライアント内メモリ配列のフィルタのため実施しない
- *   （デバウンスしてもしなくても体感差が無い規模のため）。
  */
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { fetchTagsMap, isListedTag, resolveTags, type TagInfo } from '@/lib/tags';
-import { fetchGameAggregates } from '@/lib/playlist-aggregates';
-import { GameCard, type GameCardData } from '@/components/games/GameCard';
+import { fetchTagsMap, isListedTag, type TagInfo } from '@/lib/tags';
+import { fetchGamePage, useCatalogQuery, useDebouncedValue } from '@/lib/catalog';
+import type { GameSort } from '@/lib/catalog-shared';
+import { GameCard } from '@/components/games/GameCard';
+import { LoadError } from '@/components/playlists/PlaylistListSection';
 import { Card, SectionHeading } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -27,10 +27,9 @@ import { Pagination } from '@/components/ui/Pagination';
 import { Skeleton, SkeletonText } from '@/components/ui/Skeleton';
 import { SelectMenu } from '@/components/ui/DropdownMenu';
 import { CheckIcon, ChevronDownIcon, ChevronUpIcon, InventoryIcon, SearchIcon, XIcon } from '@/components/ui/icons';
+import { cn } from '@/components/ui/cn';
 
-const PAGE_SIZE = 20;
-
-type SortKey = 'playlistCount' | 'title' | 'videoCount';
+type SortKey = GameSort;
 const SORT_OPTIONS: Array<{ value: SortKey; label: string }> = [
   { value: 'playlistCount', label: '再生リスト登録数順' },
   { value: 'title', label: 'タイトル名順' },
@@ -42,14 +41,9 @@ interface Genre {
   name: string;
 }
 
-interface GameListItem extends GameCardData {
-  genreId: string | null;
-}
-
 export default function GamesPage() {
   const searchParams = useSearchParams();
 
-  const [games, setGames] = useState<GameListItem[] | null>(null);
   const [genres, setGenres] = useState<Genre[]>([]);
   const [tags, setTags] = useState<TagInfo[]>([]);
   // 絞り込み条件チップ用。?tag= で一覧に出ないユーザータグが選ばれていても表示・解除できるよう全タグを持つ
@@ -69,12 +63,7 @@ export default function GamesPage() {
   const [panelOpen, setPanelOpen] = useState(false);
 
   useEffect(() => {
-    Promise.all([
-      getDocs(collection(db, 'games')),
-      getDocs(collection(db, 'genres')),
-      fetchTagsMap(),
-      fetchGameAggregates(),
-    ]).then(([gamesSnap, genresSnap, tagsMap, aggregates]) => {
+    Promise.all([getDocs(collection(db, 'genres')), fetchTagsMap()]).then(([genresSnap, tagsMap]) => {
       setGenres(
         genresSnap.docs
           .map((d) => ({ id: d.id, name: (d.data().name as string) ?? '' }))
@@ -84,65 +73,29 @@ export default function GamesPage() {
       setTags(
         [...tagsMap.values()].filter((t) => isListedTag(t, 'game')).sort((a, b) => a.name.localeCompare(b.name, 'ja')),
       );
-      setGames(
-        gamesSnap.docs.map((d) => {
-          const data = d.data();
-          const gameTagIds: string[] = data.gameTagIds ?? [];
-          const gameTagsFixed: string[] = data.gameTagsFixed ?? [];
-          return {
-            id: d.id,
-            title: data.title ?? '',
-            packageImageUrl: data.packageImageUrl ?? null,
-            genreId: data.genreId ?? null,
-            genreName: data.genreName ?? '',
-            playlistCount: aggregates.get(d.id)?.playlistCount ?? 0,
-            videoCount: aggregates.get(d.id)?.videoCount ?? 0,
-            tags: resolveTags(gameTagIds, gameTagsFixed, tagsMap),
-          } satisfies GameListItem;
-        }),
-      );
     });
   }, []);
 
-  const filtered = useMemo(() => {
-    if (!games) return [];
-    const kw = keyword.trim().toLowerCase();
-    return games.filter((g) => {
-      if (kw && !g.title.toLowerCase().includes(kw)) return false;
-      if (selectedGenreIds.size > 0 && !selectedGenreIds.has(g.genreId ?? '')) {
-        return false;
-      }
-      if (selectedTagIds.size > 0) {
-        const gameTagIdSet = new Set(g.tags.map((t) => t.id));
-        for (const tagId of selectedTagIds) {
-          if (!gameTagIdSet.has(tagId)) return false;
-        }
-      }
-      return true;
-    });
-  }, [games, keyword, selectedGenreIds, selectedTagIds]);
-
-  const sorted = useMemo(() => {
-    const list = [...filtered];
-    list.sort((a, b) => {
-      if (sort === 'title') return a.title.localeCompare(b.title, 'ja');
-      const diff = sort === 'videoCount' ? b.videoCount - a.videoCount : b.playlistCount - a.playlistCount;
-      return diff !== 0 ? diff : a.title.localeCompare(b.title, 'ja');
-    });
-    return list;
-  }, [filtered, sort]);
+  const debouncedKeyword = useDebouncedValue(keyword.trim());
+  const genreKey = [...selectedGenreIds].sort().join(',');
+  const tagKey = [...selectedTagIds].sort().join(',');
 
   // 検索条件・ソートが変わったらページを1に戻す。「propが変わったらstateを調整する」パターンは
   // 描画中に直接setStateする（React公式の推奨。effect内でのsetStateは1テンポ余分な再描画を招く）
-  const filterKey = `${keyword}|${[...selectedGenreIds].sort().join(',')}|${[...selectedTagIds].sort().join(',')}|${sort}`;
+  const filterKey = `${debouncedKeyword}|${genreKey}|${tagKey}|${sort}`;
   const [prevFilterKey, setPrevFilterKey] = useState(filterKey);
   if (filterKey !== prevFilterKey) {
     setPrevFilterKey(filterKey);
     setPage(1);
   }
 
-  const pageCount = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
-  const pageItems = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const { data, loading, error, retry } = useCatalogQuery(`${filterKey}|${page}`, (signal) =>
+    fetchGamePage(
+      { keyword: debouncedKeyword, genreIds: genreKey ? genreKey.split(',') : [], tagIds: tagKey ? tagKey.split(',') : [], sort, page },
+      signal,
+    ),
+  );
+  const pending = loading || debouncedKeyword !== keyword.trim();
 
   const activeFilterCount = (keyword.trim() ? 1 : 0) + selectedGenreIds.size + selectedTagIds.size;
   const visibleTags = showAllTags ? tags : tags.slice(0, 20);
@@ -270,40 +223,51 @@ export default function GamesPage() {
         <div className="flex flex-col gap-4">
           {activeFilterChips}
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <span className="text-md text-text-muted">{sorted.length}件</span>
+            <span className="text-md text-text-muted">{data ? `${data.total.toLocaleString()}件` : '\u00a0'}</span>
             <SelectMenu value={sort} onValueChange={setSort} options={SORT_OPTIONS} prefix="ソート:" aria-label="並び替え" />
           </div>
 
-          {games === null ? (
-            <div className="grid grid-cols-1 gap-3" aria-busy="true">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="flex gap-3">
-                  <Skeleton className="aspect-[3/4] w-[88px] shrink-0 rounded-[8px]" />
-                  <SkeletonText lines={3} className="flex-1" />
-                </div>
-              ))}
-            </div>
-          ) : games.length === 0 ? (
-            <EmptyState icon={<InventoryIcon />} title="まだゲームタイトルが登録されていません" />
-          ) : sorted.length === 0 ? (
-            <EmptyState
-              icon={<SearchIcon />}
-              title="該当するゲームタイトルが見つかりませんでした"
-              description="検索条件を変えてお試しください"
-              action={
-                <Button variant="secondary" onClick={resetFilters}>
-                  検索条件をリセット
-                </Button>
-              }
-            />
-          ) : (
-            <>
-              <div className="flex flex-col gap-3">
-                {pageItems.map((g) => (
-                  <GameCard key={g.id} game={g} highlightTagIds={selectedTagIds} />
+          {data === null ? (
+            error ? (
+              <LoadError onRetry={retry} />
+            ) : (
+              <div className="grid grid-cols-1 gap-3" aria-busy="true">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="flex gap-3">
+                    <Skeleton className="aspect-[3/4] w-[88px] shrink-0 rounded-[8px]" />
+                    <SkeletonText lines={3} className="flex-1" />
+                  </div>
                 ))}
               </div>
-              <Pagination page={page} pageCount={pageCount} onPageChange={setPage} />
+            )
+          ) : (
+            <>
+              {error && <LoadError onRetry={retry} />}
+              {data.total === 0 && !pending ? (
+                activeFilterCount === 0 ? (
+                  <EmptyState icon={<InventoryIcon />} title="まだゲームタイトルが登録されていません" />
+                ) : (
+                  <EmptyState
+                    icon={<SearchIcon />}
+                    title="該当するゲームタイトルが見つかりませんでした"
+                    description="検索条件を変えてお試しください"
+                    action={
+                      <Button variant="secondary" onClick={resetFilters}>
+                        検索条件をリセット
+                      </Button>
+                    }
+                  />
+                )
+              ) : (
+                <div aria-busy={pending} className={cn('flex flex-col gap-4 transition-opacity', pending && 'opacity-60')}>
+                  <div className="flex flex-col gap-3">
+                    {data.items.map((g) => (
+                      <GameCard key={g.id} game={g} highlightTagIds={selectedTagIds} />
+                    ))}
+                  </div>
+                  <Pagination page={data.page} pageCount={data.pageCount} onPageChange={setPage} />
+                </div>
+              )}
             </>
           )}
         </div>

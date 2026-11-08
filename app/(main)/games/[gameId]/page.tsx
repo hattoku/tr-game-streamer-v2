@@ -11,13 +11,13 @@
  */
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { notFound, useParams } from 'next/navigation';
 import { collection, doc, getDocs, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { fetchTagsMap, resolveTags, type ResolvedTag } from '@/lib/tags';
-import { fetchPlaylistsByGame } from '@/components/playlists/PlaylistGrid';
+import type { PlaylistTotals } from '@/components/playlists/PlaylistListSection';
 import { GamePlaylistSection } from '@/components/games/GamePlaylistSection';
 import { GameCreateModal, type GameFormInitial } from '@/components/games/GameCreateModal';
 import { TagEditModal } from '@/components/tags/TagEditModal';
@@ -50,7 +50,9 @@ export default function GameDetailPage() {
   const [game, setGame] = useState<GameDetail | null>(null);
   // themes マスタ（id→名称）。テーマ表示に使う。マスタは編集中に変わらない前提で初回1回だけ取得
   const [themeNameById, setThemeNameById] = useState<Map<string, string> | null>(null);
+  // 総動画数は「関連する再生リスト」の一覧 API が返す合計を使う（掲載中の再生リストだけ。段階7）
   const [videoCount, setVideoCount] = useState<number | null>(null);
+  const handleTotals = useCallback((t: PlaylistTotals) => setVideoCount(t.totalVideoCount), []);
   const [missing, setMissing] = useState(false);
   const [tags, setTags] = useState<ResolvedTag[]>([]);
   const [tagModalOpen, setTagModalOpen] = useState(false);
@@ -59,9 +61,8 @@ export default function GameDetailPage() {
   useEffect(() => {
     if (!gameId) return;
     (async () => {
-      const [themesSnap, playlists] = await Promise.all([getDocs(collection(db, 'themes')), fetchPlaylistsByGame(gameId)]);
+      const themesSnap = await getDocs(collection(db, 'themes'));
       setThemeNameById(new Map(themesSnap.docs.map((d) => [d.id, (d.data().name as string) ?? ''])));
-      setVideoCount(playlists.reduce((sum, p) => sum + p.videoCount, 0));
     })();
   }, [gameId]);
 
@@ -201,7 +202,7 @@ export default function GameDetailPage() {
         </div>
       </Card>
 
-      <GamePlaylistSection gameId={gameId} />
+      <GamePlaylistSection gameId={gameId} onTotals={handleTotals} />
 
       <TagEditModal open={tagModalOpen} onOpenChange={setTagModalOpen} targetType="game" targetId={gameId} tags={tags} />
       {isAdmin && <GameCreateModal open={editModalOpen} onOpenChange={setEditModalOpen} initial={editInitial} />}
