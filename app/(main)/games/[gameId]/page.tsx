@@ -27,6 +27,7 @@ import { Button, ExternalLinkButton } from '@/components/ui/Button';
 import { toRakutenAffiliateUrl } from '@/lib/rakuten-affiliate';
 import { Skeleton, SkeletonText } from '@/components/ui/Skeleton';
 import { InventoryIcon, PencilIcon, PlayIcon } from '@/components/ui/icons';
+import { packageImageSrc } from '@/lib/package-image';
 
 interface GameDetail {
   title: string;
@@ -132,7 +133,7 @@ export default function GameDetailPage() {
         {game.packageImageUrl ? (
           // absolute化: 通常フローの子だと画像自身の縦横比がaspectコンテナの高さに影響してしまうため
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={game.packageImageUrl} alt="" className="absolute inset-0 size-full object-cover" />
+          <img src={packageImageSrc(game.packageImageUrl, 'detail')} alt="" className="absolute inset-0 size-full object-cover" />
         ) : (
           <div className="flex size-full items-center justify-center text-text-muted">
             <InventoryIcon size={40} />
