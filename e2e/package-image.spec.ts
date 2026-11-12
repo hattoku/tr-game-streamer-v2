@@ -18,12 +18,12 @@ async function seedGame(title: string, packageImageUrl: string) {
   return ref.id;
 }
 
-test('ゲームタイトル詳細 §3.2: 楽天のパッケージ画像は大きいサイズ（_ex=1000x1000）で読み込み、横幅いっぱいでも引き伸ばさない', async ({ guestPage }) => {
+test('ゲームタイトル詳細 §3.2: 楽天のパッケージ画像は大きめのサイズ（_ex=600x600）で読み込み、表示枠より小さい画像を引き伸ばさない', async ({ guestPage }) => {
   const gameId = await seedGame(uniqueText('高画質のゲーム'), RAKUTEN_IMAGE);
   try {
     await guestPage.goto(`/games/${gameId}`);
     const img = guestPage.locator(`img[src*="thumbnail.image.rakuten.co.jp"]`).first();
-    await expect(img).toHaveAttribute('src', /[?&]_ex=1000x1000(&|$)/, { timeout: 30_000 });
+    await expect(img).toHaveAttribute('src', /[?&]_ex=600x600(&|$)/, { timeout: 30_000 });
     // 実際に届いた画像が、表示している枠の横幅（CSSピクセル×画面密度）以上あること
     await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.naturalWidth), { timeout: 15_000 }).toBeGreaterThan(0);
     const { naturalWidth, needed } = await img.evaluate((el: HTMLImageElement) => ({

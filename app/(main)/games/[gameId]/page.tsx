@@ -127,23 +127,21 @@ export default function GameDetailPage() {
     isAiGeneratedDescription: game.isAiGeneratedDescription,
   };
 
-  const packageArea = (
-    <div className="flex w-full flex-col gap-3 sm:w-[200px] sm:shrink-0">
-      <div className="relative aspect-[3/4] w-full overflow-hidden rounded-[10px] bg-bg-btn">
-        {game.packageImageUrl ? (
-          // absolute化: 通常フローの子だと画像自身の縦横比がaspectコンテナの高さに影響してしまうため
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={packageImageSrc(game.packageImageUrl, 'detail')} alt="" className="absolute inset-0 size-full object-cover" />
-        ) : (
-          <div className="flex size-full items-center justify-center text-text-muted">
-            <InventoryIcon size={40} />
-          </div>
-        )}
-      </div>
-      {game.rakutenUrl && (
-        <ExternalLinkButton href={toRakutenAffiliateUrl(game.rakutenUrl)} variant="rakuten" size="sm">
-          楽天ブックスで見る ↗
-        </ExternalLinkButton>
+  // パッケージ画像・楽天ブックスボタン・基本情報・タグ等を1つのグリッドに置き、画面幅で配置を切り替える
+  // （ページ ゲームタイトル 詳細 仕様書 §3.2・§6.1 v2.9）。
+  // - スマホ: 1行目は画像（幅112px）の右にジャンル・テーマ・件数・楽天ボタン、その下にタグ・説明文・編集ボタンを全幅で
+  // - PC（sm以上）: 左カラムに画像（幅200px）と楽天ボタン、右カラムに基本情報→タグ・説明文・編集ボタン
+  // 要素を2回描かずに済むよう、楽天ボタンと「タグ以下」をそれぞれ独立したグリッド要素にしている
+  const packageImage = (
+    <div className="relative col-start-1 row-span-2 row-start-1 aspect-[3/4] w-full self-start overflow-hidden rounded-[10px] bg-bg-btn">
+      {game.packageImageUrl ? (
+        // absolute化: 通常フローの子だと画像自身の縦横比がaspectコンテナの高さに影響してしまうため
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={packageImageSrc(game.packageImageUrl, 'detail')} alt="" className="absolute inset-0 size-full object-cover" />
+      ) : (
+        <div className="flex size-full items-center justify-center text-text-muted">
+          <InventoryIcon size={40} />
+        </div>
       )}
     </div>
   );
@@ -152,9 +150,9 @@ export default function GameDetailPage() {
     <div className="flex flex-col gap-6">
       <Card className="flex flex-col gap-4">
         <h1 className="text-2xl font-medium text-text-primary">{game.title}</h1>
-        <div className="border-t border-border-divider pt-4 sm:flex sm:gap-6">
-          {packageArea}
-          <div className="mt-4 flex flex-1 flex-col gap-2 sm:mt-0">
+        <div className="grid grid-cols-[112px_minmax(0,1fr)] gap-x-4 gap-y-3 border-t border-border-divider pt-4 sm:grid-cols-[200px_minmax(0,1fr)] sm:grid-rows-[auto_1fr_auto] sm:gap-x-6">
+          {packageImage}
+          <div className="col-start-2 row-start-1 flex flex-col gap-2">
             {game.genreName && (
               <p className="text-base text-text-secondary">
                 ジャンル：<span className="text-text-primary">{game.genreName}</span>
@@ -175,6 +173,15 @@ export default function GameDetailPage() {
                 {(videoCount ?? 0).toLocaleString()} 動画
               </span>
             </div>
+          </div>
+          {game.rakutenUrl && (
+            <div className="col-start-2 row-start-2 flex flex-col self-start sm:col-start-1 sm:row-start-3">
+              <ExternalLinkButton href={toRakutenAffiliateUrl(game.rakutenUrl)} variant="rakuten" size="sm">
+                楽天ブックスで見る ↗
+              </ExternalLinkButton>
+            </div>
+          )}
+          <div className="col-span-2 row-start-3 flex flex-col gap-2 sm:col-span-1 sm:col-start-2 sm:row-span-2 sm:row-start-2">
             <TagRow
               tags={tags}
               hrefForTag={(id) => `/games?tag=${encodeURIComponent(id)}`}
