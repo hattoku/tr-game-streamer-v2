@@ -58,7 +58,9 @@ async function main() {
   const channels = new Map();
   for (const d of playlistsSnap.docs) {
     const p = d.data();
-    const c = channels.get(p.channelId) ?? { name: p.channelName ?? '', total: 0, pending: 0 };
+    const c = channels.get(p.channelId) ?? { name: p.channelName ?? '', iconUrl: '', total: 0, pending: 0 };
+    // チャンネルのアイコンを掲載チャンネルに引き継ぐ（2026-11-12 まで null で作っていて、巡回で取り込む再生リストのアイコンも空になっていた）
+    if (!c.iconUrl && p.channelIconUrl) c.iconUrl = p.channelIconUrl;
     c.total += 1;
     if (!p.listingStatus) c.pending += 1;
     channels.set(p.channelId, c);
@@ -97,7 +99,7 @@ async function main() {
         note = `同名の未特定(${doc.data().status})を active に`;
         exploOps.push((b) =>
           b.update(doc.ref, {
-            status: 'active', youtubeChannelId: channelId, channelTitle: c.name, searchCandidates: [],
+            status: 'active', youtubeChannelId: channelId, channelTitle: c.name, channelIconUrl: c.iconUrl || null, searchCandidates: [],
             publishMode: 'confirm', authorizedVia: 'migration', authorizedAt: now, updatedAt: now,
           }),
         );
@@ -107,7 +109,7 @@ async function main() {
         note = '新しく掲載(migration)';
         exploOps.push((b) =>
           b.set(ref, {
-            name: c.name, status: 'active', youtubeChannelId: channelId, channelTitle: c.name, channelIconUrl: null, subscriberCount: null,
+            name: c.name, status: 'active', youtubeChannelId: channelId, channelTitle: c.name, channelIconUrl: c.iconUrl || null, subscriberCount: null,
             searchCandidates: [], tagIds: [], publishMode: 'confirm', authorizedVia: 'migration', authorizedAt: now,
             lastExploredAt: null, lastFoundCount: null, createdAt: now, createdBy: 'migration', updatedAt: now,
           }),

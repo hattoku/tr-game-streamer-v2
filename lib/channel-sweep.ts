@@ -11,7 +11,7 @@ import { judgeListing, parseListingRules, publishModeOf, type ListingRules, type
 import { matchGameForPlaylist } from './playlist-game-linking';
 import { defaultListingTagIds, listPlaylist } from './listing-server';
 import { estimateVideoFetchCost } from './playlist-videos';
-import { fetchChannelPlaylists, getQuotaConsumed, YouTubeApiError, type ChannelPlaylist, type PlaylistItemCount } from './youtube';
+import { fetchChannelPlaylists, fetchChannelSnippet, getQuotaConsumed, YouTubeApiError, type ChannelPlaylist, type PlaylistItemCount } from './youtube';
 
 const WRITE_CHUNK_SIZE = 400;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -125,11 +125,33 @@ function millis(value: unknown): number | null {
 }
 
 /** 1つの掲載チャンネル（active）を巡回する。YouTube のエラーは呼び出し元へ投げる */
+/**
+ * 掲載チャンネルのアイコン。段階3の移行で作った掲載チャンネルはアイコンが空（null）だったため、
+ * 空ならプレミテのチャンネルページ（channels.iconUrl）、それも無ければ YouTube（channels.list、1ユニット）から補う（2026-11-12）。
+ * 取れなかったら空のまま（巡回は止めない）。
+ */
+async function resolveChannelIconUrl(channel: DocumentData, channelPage: DocumentSnapshot): Promise<string> {
+  const current = (channel.channelIconUrl as string | null | undefined) ?? '';
+  if (current) return current;
+  const fromPage = (channelPage.data()?.iconUrl as string | undefined) ?? '';
+  if (fromPage) return fromPage;
+  try {
+    return (await fetchChannelSnippet(channel.youtubeChannelId as string))?.iconUrl ?? '';
+  } catch (e) {
+    if (isQuotaExceededError(e)) throw e;
+    return '';
+  }
+}
+
 export async function sweepChannel(channelDoc: DocumentSnapshot, ctx: SweepContext): Promise<ChannelSweepResult> {
-  const channel = channelDoc.data()!;
-  const youtubeChannelId = channel.youtubeChannelId as string;
-  const mode = publishModeOf(channel);
+  const stored = channelDoc.data()!;
+  const youtubeChannelId = stored.youtubeChannelId as string;
+  const mode = publishModeOf(stored);
   const fetched = await fetchChannelPlaylists(youtubeChannelId);
+  const channelPage = await adminDb.collection('channels').doc(youtubeChannelId).get();
+  const iconUrl = await resolveChannelIconUrl(stored, channelPage);
+  // 取り込む再生リストには補ったアイコンを入れる（newPlaylistDoc は channel.channelIconUrl を使う）
+  const channel = iconUrl && iconUrl !== stored.channelIconUrl ? { ...stored, channelIconUrl: iconUrl } : stored;
 
   const [existingSnap, candidatesSnap] = await Promise.all([
     adminDb.collection('playlists').where('channelId', '==', youtubeChannelId).get(),
@@ -174,6 +196,8 @@ export async function sweepChannel(channelDoc: DocumentSnapshot, ctx: SweepConte
     // 動画一覧を取っていない再生リストは、表示する本数を YouTube に合わせる
     if (data.youtubeItemCount == null && data.videoCount !== p.itemCount) update.videoCount = p.itemCount;
     if (!data.explorationChannelId) update.explorationChannelId = channelDoc.id;
+    // アイコンが空のまま取り込まれた再生リストを補う
+    if (iconUrl && !data.channelIconUrl) update.channelIconUrl = iconUrl;
 
     // 10本未満が最小本数に達した（自動で決めたものだけ。§10.4 例外(a)）
     if (data.listingStatus === 'too_short' && data.listingSetBy === 'auto' && p.itemCount >= ctx.rules.minVideoCount) {
@@ -207,6 +231,8 @@ export async function sweepChannel(channelDoc: DocumentSnapshot, ctx: SweepConte
     if (fetchedIds.has(id)) writes.push((b) => b.delete(adminDb.collection('collection_candidates').doc(id)));
   }
 
+  if (iconUrl && channelPage.exists && !channelPage.data()?.iconUrl) writes.push((b) => b.update(channelPage.ref, { iconUrl }));
+
   for (let i = 0; i < writes.length; i += WRITE_CHUNK_SIZE) {
     const batch = adminDb.batch();
     writes.slice(i, i + WRITE_CHUNK_SIZE).forEach((w) => w(batch));
@@ -222,6 +248,7 @@ export async function sweepChannel(channelDoc: DocumentSnapshot, ctx: SweepConte
     lastFoundCount: newCount,
     // 登録者数は統計値なので30日を超えて持たない（YouTube API 規約 III.E.4.b。確定のときの確認にだけ使う）
     subscriberCount: null,
+    ...(iconUrl && iconUrl !== stored.channelIconUrl ? { channelIconUrl: iconUrl } : {}),
     updatedAt: ctx.now,
   });
   return result;
