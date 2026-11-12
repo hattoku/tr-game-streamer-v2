@@ -1,5 +1,5 @@
 // 収集の変更（リブランディング段階4）: 全件保存・自動判定・掲載チャンネルごとの掲載方法・自動掲載の確認画面。
-// コンテンツ収集機能仕様書 v4.3 §10.2・§10.4〜§10.7・§10.11、収集候補レビューUI仕様書 v3.3 §8・§9。
+// コンテンツ収集機能仕様書 v4.3 §10.2・§10.4〜§10.7・§10.11、収集候補レビューUI仕様書 v3.5 §8・§9。
 // 再生リスト・チャンネル・ゲームは Admin SDK で直接作る（YouTube に無い ID。名前は [E2E] で始まり、終了時に自分で消す）。
 // 30日ルール・自動掲載・巡回を含む実行は e2e/refresh-new-videos.spec.ts（毎日の再取得）で確かめる。
 import { expect as pwExpect, test as pwTest } from '@playwright/test';
@@ -9,20 +9,20 @@ import { db as e2eDb } from './support/cleanup';
 import { randomId } from './support/collection';
 import { DEFAULT_LISTING_RULES, describeListingReason, judgeListing } from '../lib/listing-rules';
 
-async function seedChannel(params: { channelTitle: string; publishMode?: 'confirm' | 'auto'; status?: string }) {
+async function seedChannel(params: { channelTitle: string; publishMode?: 'confirm' | 'auto'; status?: string; channelIconUrl?: string }) {
   const ref = e2eDb().collection('exploration_channels').doc();
   const youtubeChannelId = randomId('UCE2E');
   await ref.set({
-    name: params.channelTitle, status: params.status ?? 'active', youtubeChannelId, channelTitle: params.channelTitle, channelIconUrl: '',
+    name: params.channelTitle, status: params.status ?? 'active', youtubeChannelId, channelTitle: params.channelTitle, channelIconUrl: params.channelIconUrl ?? '',
     subscriberCount: null, searchCandidates: [], tagIds: [], publishMode: params.publishMode ?? 'confirm', authorizedVia: 'admin',
     lastExploredAt: null, lastFoundCount: null, createdAt: new Date(), createdBy: 'e2e', updatedAt: new Date(),
   });
   return { id: ref.id, youtubeChannelId };
 }
 
-async function seedGame(title: string, playlistCount: number) {
+async function seedGame(title: string, playlistCount: number, packageImageUrl: string | null = null) {
   const ref = e2eDb().collection('games').doc();
-  await ref.set({ title, aliases: [], packageImageUrl: null, platforms: [], genreId: null, genreName: null, themeIds: [], gameTagIds: [], gameTagsFixed: [], playlistCount, createdAt: new Date(), updatedAt: new Date() });
+  await ref.set({ title, aliases: [], packageImageUrl, platforms: [], genreId: null, genreName: null, themeIds: [], gameTagIds: [], gameTagsFixed: [], playlistCount, createdAt: new Date(), updatedAt: new Date() });
   return ref.id;
 }
 
@@ -183,6 +183,46 @@ test('§8.4 判定の言葉を追加して保存できる（確認後は元に�
   } finally {
     if (original.exists) await ref.set(original.data()!);
     else await ref.delete();
+  }
+});
+
+test('§8.2・§8.3 チャンネル見出しにアイコンとプレミテのチャンネルページへのリンク、ゲームの欄にパッケージ画像が出る（v3.5）', async ({ adminPage }) => {
+  const channelTitle = uniqueText('チャンネル');
+  const iconUrl = 'https://yt3.ggpht.com/e2e-channel-icon=s88-c-k-c0x00ffffff-no-rj';
+  const channel = await seedChannel({ channelTitle, channelIconUrl: iconUrl });
+  // プレミテ内のチャンネルページ（掲載した再生リストがあると作られる channels ドキュメント）
+  await e2eDb().collection('channels').doc(channel.youtubeChannelId).set({ name: channelTitle, iconUrl, description: null, isAiGeneratedDescription: false, playlistCount: 1 });
+  const withImage = await seedGame(uniqueText('画像ありゲーム'), 0, 'https://thumbnail.image.rakuten.co.jp/@0_mall/book/cabinet/e2e/e2e.jpg?_ex=200x200');
+  const noImage = await seedGame(uniqueText('画像なしゲーム'), 0);
+  const a = await seedPlaylist({ channel, channelTitle, listingStatus: 'unconfirmed', gameId: withImage, title: uniqueText('画像ありの再生リスト') });
+  const b = await seedPlaylist({ channel, channelTitle, listingStatus: 'unconfirmed', gameId: noImage, title: uniqueText('画像なしの再生リスト') });
+  // チャンネルページがまだ無いチャンネルにはリンクを出さない
+  const otherTitle = uniqueText('ページなしチャンネル');
+  const other = await seedChannel({ channelTitle: otherTitle });
+  const c = await seedPlaylist({ channel: other, channelTitle: otherTitle, listingStatus: 'unconfirmed' });
+  try {
+    await adminPage.goto(`/admin/collection?channel=${channel.id}`);
+    const group = adminPage.locator('section').filter({ hasText: channelTitle });
+    await expect(group.locator(`img[src="${iconUrl}"]`)).toHaveCount(1);
+    const link = group.getByRole('link', { name: `${channelTitle}のチャンネルページを開く（プレミテ・新しいタブ）` });
+    await expect(link).toHaveAttribute('href', `/channels/${channel.youtubeChannelId}`);
+    await expect(link).toHaveAttribute('target', '_blank');
+    expect(await hasHorizontalScroll(adminPage)).toBe(false);
+
+    // パッケージ画像は一覧カード用の解像度（_ex=400x400）に差し替えて出す。画像の無いゲームは名前だけ
+    const rowA = group.getByRole('listitem').filter({ hasText: a.title });
+    await expect(rowA.locator('img[src*="thumbnail.image.rakuten.co.jp"]')).toHaveAttribute('src', /_ex=400x400/);
+    const rowB = group.getByRole('listitem').filter({ hasText: b.title });
+    await expect(rowB).toContainText('E2Eゲーム');
+    await expect(rowB.locator('img[src*="thumbnail.image.rakuten.co.jp"]')).toHaveCount(0);
+
+    await adminPage.goto(`/admin/collection?channel=${other.id}`);
+    const otherGroup = adminPage.locator('section').filter({ hasText: otherTitle });
+    await expect(otherGroup.getByRole('checkbox', { name: `${c.title}を選択` })).toBeVisible();
+    await expect(otherGroup.getByRole('link', { name: /チャンネルページを開く/ })).toHaveCount(0);
+  } finally {
+    await cleanup({ channels: [channel.id, other.id], playlists: [a.id, b.id, c.id], games: [withImage, noImage] });
+    await e2eDb().collection('channels').doc(channel.youtubeChannelId).delete();
   }
 });
 

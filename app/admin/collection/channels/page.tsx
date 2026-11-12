@@ -24,6 +24,7 @@ import { SkeletonText } from '@/components/ui/Skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { Tag } from '@/components/ui/Tag';
 import { CollectionNav } from '@/components/admin/collection/CollectionNav';
+import { ChannelAvatar } from '@/components/admin/collection/ChannelAvatar';
 import { useToast } from '@/components/ui/Toast';
 import { ChevronLeftIcon, ExternalLinkIcon, UsersIcon } from '@/components/ui/icons';
 import { fetchTagsMap, type TagInfo } from '@/lib/tags';
@@ -61,15 +62,6 @@ const AUTHORIZED_VIA_LABEL: Record<string, string> = {
   viewer_recommendation: '視聴者の推薦',
   migration: '移行',
 };
-
-function ChannelAvatar({ src, alt }: { src: string | null; alt: string }) {
-  return src ? (
-    // eslint-disable-next-line @next/next/no-img-element -- YouTube のアイコンURL（外部・可変）をそのまま表示する
-    <img src={src} alt={alt} referrerPolicy="no-referrer" className="size-10 shrink-0 rounded-full object-cover" loading="lazy" />
-  ) : (
-    <span className="size-10 shrink-0 rounded-full bg-bg-hover" />
-  );
-}
 
 export default function AdminExplorationChannelsPage() {
   const { toast } = useToast();

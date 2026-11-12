@@ -27,7 +27,9 @@ import { cn } from '@/components/ui/cn';
 import { GameSelectModal, type GameOption } from '@/components/playlists/GameSelectModal';
 import { GameCreateModal } from '@/components/games/GameCreateModal';
 import { CollectionNav } from '@/components/admin/collection/CollectionNav';
+import { ChannelAvatar } from '@/components/admin/collection/ChannelAvatar';
 import { fetchTagsMap, type TagInfo } from '@/lib/tags';
+import { packageImageSrc } from '@/lib/package-image';
 import { matchTitleTagNames } from '@/lib/exploration-rules';
 import { DEFAULT_LISTING_RULES, describeListingReason, MAX_RULE_WORD_LENGTH, type ListingRules } from '@/lib/listing-rules';
 import { COLLECTION_DAILY_QUOTA_LIMIT } from '@/lib/collection-quota-shared';
@@ -83,6 +85,8 @@ export default function AdminListingConfirmPage() {
   const [playlists, setPlaylists] = useState<ListingPlaylist[] | null>(null);
   const [counts, setCounts] = useState<Record<ListingTab, number | null>>({ unconfirmed: null, listed: null, non_game: null, excluded: null, too_short: null, channel_off: null });
   const [games, setGames] = useState<GameOption[]>([]);
+  // プレミテ内のチャンネルページ（channels/{youtubeChannelId}）があるチャンネル。掲載した再生リストが1件も無いとまだ無い
+  const [channelPageIds, setChannelPageIds] = useState<Set<string>>(new Set());
   const [tagsMap, setTagsMap] = useState<Map<string, TagInfo>>(new Map());
   const [channels, setChannels] = useState<Map<string, ExplorationChannel>>(new Map());
   const [lastBatch, setLastBatch] = useState<CollectionBatchLog | null>(null);
@@ -116,8 +120,14 @@ export default function AdminListingConfirmPage() {
   }
 
   async function loadMeta() {
-    const [channelList, batch, used] = await Promise.all([fetchExplorationChannels(), fetchLastCollectionBatch(), fetchCollectionQuotaUsedToday()]);
+    const [channelList, batch, used, channelPagesSnap] = await Promise.all([
+      fetchExplorationChannels(),
+      fetchLastCollectionBatch(),
+      fetchCollectionQuotaUsedToday(),
+      getDocs(collection(db, 'channels')),
+    ]);
     setChannels(new Map(channelList.map((c) => [c.id, c])));
+    setChannelPageIds(new Set(channelPagesSnap.docs.map((d) => d.id)));
     setLastBatch(batch);
     setQuotaUsed(used);
   }
@@ -155,6 +165,8 @@ export default function AdminListingConfirmPage() {
     await Promise.all([loadPlaylists(tab, channelFilter), loadCounts(), loadMeta()]);
   }
 
+  // ゲームの欄に出すパッケージ画像（§8.3）。ゲーム一覧は画面を開くときに画像のURLごと読み込み済み
+  const packageImageByGameId = useMemo(() => new Map(games.map((g) => [g.id, g.packageImageUrl ?? null])), [games]);
   const operatorTagIdByName = useMemo(() => new Map([...tagsMap.values()].filter((t) => t.origin === 'operator').map((t) => [t.name, t.id])), [tagsMap]);
 
   /** 掲載するときに付けるタグ（チャンネル単位タグ＋タイトル由来のタグ。外したものを除く） */
@@ -343,6 +355,7 @@ export default function AdminListingConfirmPage() {
           {groups.map((group) => {
             const channel = channels.get(group.key);
             const isCollapsed = collapsed.has(group.key);
+            const channelPageId = channel?.youtubeChannelId && channelPageIds.has(channel.youtubeChannelId) ? channel.youtubeChannelId : null;
             const allOn = group.items.every((p) => selected.has(p.id));
             return (
               <section key={group.key} aria-label={group.title} className="overflow-hidden rounded-[12px] border border-admin-border">
@@ -361,6 +374,7 @@ export default function AdminListingConfirmPage() {
                     className="flex min-w-0 items-center gap-3 text-left text-lg font-medium text-text-primary"
                   >
                     <ChevronRightIcon size={14} className={cn('shrink-0 transition-transform', !isCollapsed && 'rotate-90')} />
+                    <ChannelAvatar src={channel?.channelIconUrl} alt="" className="size-8" />
                     <span className="min-w-0">
                       {group.title}
                       <span className="ml-1 text-md font-normal text-text-tertiary">
@@ -368,12 +382,26 @@ export default function AdminListingConfirmPage() {
                       </span>
                     </span>
                   </button>
-                  {actions.length > 0 && (
-                    <label className="inline-flex items-center gap-2 text-md text-text-tertiary">
-                      <input type="checkbox" className="size-4" checked={allOn} disabled={busy} onChange={() => toggleGroup(group.items)} />
-                      全選択
-                    </label>
-                  )}
+                  <div className="flex flex-wrap items-center gap-4">
+                    {channelPageId && (
+                      <Link
+                        href={`/channels/${encodeURIComponent(channelPageId)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label={`${group.title}のチャンネルページを開く（プレミテ・新しいタブ）`}
+                        className="inline-flex items-center gap-1 text-md text-text-tertiary underline underline-offset-[3px] hover:text-text-primary"
+                      >
+                        チャンネルページ
+                        <ExternalLinkIcon size={12} />
+                      </Link>
+                    )}
+                    {actions.length > 0 && (
+                      <label className="inline-flex items-center gap-2 text-md text-text-tertiary">
+                        <input type="checkbox" className="size-4" checked={allOn} disabled={busy} onChange={() => toggleGroup(group.items)} />
+                        全選択
+                      </label>
+                    )}
+                  </div>
                 </div>
                 {!isCollapsed && (
                   <ul className="flex flex-col gap-2 bg-bg-base/40 p-3">
@@ -437,10 +465,17 @@ export default function AdminListingConfirmPage() {
                               </div>
                             </div>
                             <div className="flex min-w-0 flex-col gap-3 rounded-[8px] border border-surface-border bg-bg-base/40 p-3">
-                              <p className="flex flex-wrap items-center gap-2 text-md">
+                              <div className="flex flex-wrap items-center gap-2 text-md">
                                 <span className="text-text-tertiary">ゲーム:</span>
+                                {p.gameId && packageImageByGameId.get(p.gameId) && (
+                                  // absolute化: 画像自身の縦横比が aspect コンテナの高さに影響しないように（GameInfoCard と同じ）
+                                  <span className="relative aspect-[3/4] w-10 shrink-0 overflow-hidden rounded-[6px] bg-bg-btn">
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img src={packageImageSrc(packageImageByGameId.get(p.gameId)!, 'card')} alt="" className="absolute inset-0 size-full object-cover" loading="lazy" />
+                                  </span>
+                                )}
                                 {p.gameId ? <StatusBadge>{p.gameName}</StatusBadge> : <StatusBadge>ゲーム未設定</StatusBadge>}
-                              </p>
+                              </div>
                               {!p.gameId && p.gameHint && <p className="text-sm text-text-tertiary">ヒント: {p.gameHint}</p>}
                               <p className="text-sm text-text-tertiary">ゲームは決めなくても掲載できます。</p>
                               <div className="flex flex-wrap gap-2">

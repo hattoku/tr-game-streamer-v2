@@ -1,8 +1,8 @@
 # AI運営者_コンテンツ収集機能仕様書
 
-**バージョン**: v4.3
+**バージョン**: v4.4
 **作成日**: 2026年3月16日
-**更新日**: 2026年11月4日
+**更新日**: 2026年11月12日
 **関連ドキュメント**: プレミテ_AI運営者_企画書 / AI運営者_YouTube API調査レポート / AI運営者_コンテンツ品質基準検討書 / プレミテ_YouTube定期取得仕様書 / プレミテ_技術スタック仕様書 / 管理 AI運営者向け収集候補レビューUI仕様書 / Firestore データモデル設計書
 
 ---
@@ -460,7 +460,7 @@ YouTube API Services Developer Policies（III.E.4）は、ユーザーの認可�
 
 | フィールド | 値 |
 |---|---|
-| `title`・`thumbnailUrl`・`channelId`・`channelName`・`channelIconUrl` | `playlists.list` の値（チャンネル名・アイコンは掲載チャンネルの確定時の値） |
+| `title`・`thumbnailUrl`・`channelId`・`channelName`・`channelIconUrl` | `playlists.list` の値（チャンネル名・アイコンは掲載チャンネルの確定時の値。アイコンの補い方は下記） |
 | `videoCount` | YouTube の動画数（`contentDetails.itemCount`）。動画一覧を取るまでは巡回のたびに更新する |
 | `youtubeItemCount`・`latestVideoPublishedAt`・`lastFetchedAt`・`fullRefetchedAt` | null（**`youtubeItemCount` が null ＝ まだ動画一覧を取っていない**） |
 | `registeredAt`・`registeredBy` | 取り込んだ日時・`"system"` |
@@ -472,6 +472,7 @@ YouTube API Services Developer Policies（III.E.4）は、ユーザーの認可�
 
 - 収集候補で人が却下したもの（`collection_candidates.status: rejected` で `reviewedBy` が `auto` 以外）は、`excluded`（`listingSetBy: admin`、`listingReason: candidate_rejected`）で作る。それ以外の収集候補は他と同じく判定する。取り込んだら、その収集候補のドキュメントは消す（§10.8）。
 - 既にある再生リスト（ユーザーの提案などで別の経路から入ったもの）は作り直さず、タイトル・サムネイル・`metaFetchedAt`（動画一覧が未取得なら `videoCount` も）を更新し、`explorationChannelId` が無ければ付ける。
+- **チャンネルのアイコンを補う（v4.4）**: 掲載チャンネルのアイコン（`channelIconUrl`）が空なら、巡回のときにプレミテのチャンネルページ（`channels.iconUrl`）から、それも無ければ YouTube の `channels.list`（1ユニット、収集の枠）から取って掲載チャンネルに保存する。取り込む再生リストにはそのアイコンを入れ、アイコンが空のまま入っていた既存の再生リストとチャンネルページも埋める。段階3の移行（§10.9）で作った掲載チャンネルはアイコンが空で、巡回で取り込んだ再生リストのアイコンも空になっていたため（2026-11-12）。移行スクリプトも、チャンネルのアイコンを引き継ぐように直した。
 
 #### 掲載状態の理由（`listingReason`）
 
@@ -523,3 +524,4 @@ YouTube API Services Developer Policies（III.E.4）は、ユーザーの認可�
 | v4.1 | 2026-11-01 | main の v4.0 に、PR #14 の v3.2〜v3.5（動画数の更新・サーバー側の楽天先読み・ゲーム未設定・除外語の追加と自動却下の保存）を統合 |
 | v4.2 | 2026-11-01 | 段階3の実装（§10.9）。移行スクリプト、移行で書く値、本番の適用順、検索面の絞り込みの実装、ゲーム付け外しの件数の扱いを追記。仕様の変更はなし |
 | v4.3 | 2026-11-04 | 段階4の実装（§10.11）。第2章・第3章の収集候補の承認を第10章に置き換えた。処理の置き場所（毎日の巡回は新着動画の再取得が兼ねる）、巡回で作る再生リストの値、掲載状態の理由（`auto_pending` ほか）、自動で掲載は動画一覧を取ってから `listed` にすること、掲載する・外す処理、30日ルールの実装（監視の対象の広げ方・25日での全件取り直し・消し込み・収集候補と登録者数の扱い）を定めた。非ゲーム語に「くだらない」を移した |
+| v4.4 | 2026-11-12 | §10.11: 巡回で掲載チャンネルのアイコンが空なら補い、アイコンが空の再生リスト・チャンネルページも埋めるようにした（段階3の移行で作った掲載チャンネルのアイコンが空だった不具合） |
