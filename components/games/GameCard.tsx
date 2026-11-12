@@ -9,6 +9,7 @@ import { Tag } from '@/components/ui/Tag';
 import { InventoryIcon, PlayIcon } from '@/components/ui/icons';
 import { cn } from '@/components/ui/cn';
 import type { ResolvedTag } from '@/lib/tags';
+import { packageImageSrc } from '@/lib/package-image';
 
 const MAX_VISIBLE_TAGS = 3;
 
@@ -33,7 +34,7 @@ export function GameCard({ game, highlightTagIds }: { game: GameCardData; highli
           {game.packageImageUrl ? (
             // absolute化: 通常フローの子だと画像自身の縦横比がaspectコンテナの高さに影響してしまうため
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={game.packageImageUrl} alt="" className="absolute inset-0 size-full object-cover" loading="lazy" />
+            <img src={packageImageSrc(game.packageImageUrl, 'card')} alt="" className="absolute inset-0 size-full object-cover" loading="lazy" />
           ) : (
             <div className="flex size-full items-center justify-center text-text-muted">
               <InventoryIcon size={28} />

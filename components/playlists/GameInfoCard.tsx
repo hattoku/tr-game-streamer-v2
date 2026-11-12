@@ -14,6 +14,7 @@ import { ChevronRightIcon, InventoryIcon } from '@/components/ui/icons';
 import { TagRow } from '@/components/tags/TagRow';
 import { toRakutenAffiliateUrl } from '@/lib/rakuten-affiliate';
 import type { ResolvedTag } from '@/lib/tags';
+import { packageImageSrc } from '@/lib/package-image';
 
 interface GameInfoCardProps {
   gameId: string;
@@ -35,7 +36,7 @@ export function GameInfoCard({ gameId, title, packageImageUrl, rakutenUrl, genre
     <div className="relative aspect-[3/4] w-24 overflow-hidden rounded-[10px] bg-bg-btn">
       {packageImageUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={packageImageUrl} alt="" className="absolute inset-0 size-full object-cover" />
+        <img src={packageImageSrc(packageImageUrl, 'card')} alt="" className="absolute inset-0 size-full object-cover" />
       ) : (
         <div className="flex size-full items-center justify-center text-text-muted">
           <InventoryIcon size={28} />
