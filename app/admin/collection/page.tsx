@@ -28,6 +28,7 @@ import { GameSelectModal, type GameOption } from '@/components/playlists/GameSel
 import { GameCreateModal } from '@/components/games/GameCreateModal';
 import { CollectionNav } from '@/components/admin/collection/CollectionNav';
 import { ChannelAvatar } from '@/components/admin/collection/ChannelAvatar';
+import { LinkedGameModal } from '@/components/admin/collection/LinkedGameModal';
 import { fetchTagsMap, type TagInfo } from '@/lib/tags';
 import { packageImageSrc } from '@/lib/package-image';
 import { matchTitleTagNames } from '@/lib/exploration-rules';
@@ -102,6 +103,7 @@ export default function AdminListingConfirmPage() {
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [gameSelectFor, setGameSelectFor] = useState<ListingPlaylist | null>(null);
   const [gameCreateFor, setGameCreateFor] = useState<ListingPlaylist | null>(null);
+  const [gameDetailId, setGameDetailId] = useState<string | null>(null);
   const [rulesOpen, setRulesOpen] = useState(false);
 
   // タブやチャンネルを素早く切り替えたとき、前の読み込み結果で上書きしない
@@ -342,6 +344,8 @@ export default function AdminListingConfirmPage() {
 
       <div className="flex flex-wrap items-center gap-3">
         <SelectMenu value={channelFilter} onValueChange={(v) => reset(tab, v)} options={channelOptions} prefix="チャンネル" aria-label="チャンネルで絞り込み" align="start" />
+        {/* 各カードに出していたが全件同じでくどいため、一覧の上に1回だけ出す（v3.6） */}
+        <p className="text-sm text-text-tertiary">ゲームは決めなくても掲載できます。</p>
       </div>
 
       {playlists === null ? (
@@ -467,17 +471,28 @@ export default function AdminListingConfirmPage() {
                             <div className="flex min-w-0 flex-col gap-3 rounded-[8px] border border-surface-border bg-bg-base/40 p-3">
                               <div className="flex flex-wrap items-center gap-2 text-md">
                                 <span className="text-text-tertiary">ゲーム:</span>
-                                {p.gameId && packageImageByGameId.get(p.gameId) && (
-                                  // absolute化: 画像自身の縦横比が aspect コンテナの高さに影響しないように（GameInfoCard と同じ）
-                                  <span className="relative aspect-[3/4] w-10 shrink-0 overflow-hidden rounded-[6px] bg-bg-btn">
-                                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                                    <img src={packageImageSrc(packageImageByGameId.get(p.gameId)!, 'card')} alt="" className="absolute inset-0 size-full object-cover" loading="lazy" />
-                                  </span>
+                                {p.gameId ? (
+                                  // 画像・ゲーム名を押すと、付いているゲームの中身（楽天ブックスの商品など）を確かめられる（v3.6）
+                                  <button
+                                    type="button"
+                                    onClick={() => setGameDetailId(p.gameId)}
+                                    aria-label={`${p.title}に付いているゲーム「${p.gameName}」の詳細を見る`}
+                                    className="inline-flex items-center gap-2 rounded-[6px] hover:opacity-80"
+                                  >
+                                    {packageImageByGameId.get(p.gameId) && (
+                                      // absolute化: 画像自身の縦横比が aspect コンテナの高さに影響しないように（GameInfoCard と同じ）
+                                      <span className="relative aspect-[3/4] w-10 shrink-0 overflow-hidden rounded-[6px] bg-bg-btn">
+                                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                                        <img src={packageImageSrc(packageImageByGameId.get(p.gameId)!, 'card')} alt="" className="absolute inset-0 size-full object-cover" loading="lazy" />
+                                      </span>
+                                    )}
+                                    <StatusBadge className="underline underline-offset-[3px]">{p.gameName}</StatusBadge>
+                                  </button>
+                                ) : (
+                                  <StatusBadge>ゲーム未設定</StatusBadge>
                                 )}
-                                {p.gameId ? <StatusBadge>{p.gameName}</StatusBadge> : <StatusBadge>ゲーム未設定</StatusBadge>}
                               </div>
                               {!p.gameId && p.gameHint && <p className="text-sm text-text-tertiary">ヒント: {p.gameHint}</p>}
-                              <p className="text-sm text-text-tertiary">ゲームは決めなくても掲載できます。</p>
                               <div className="flex flex-wrap gap-2">
                                 <button type="button" className={ADMIN_ACTION_CLASS} disabled={busy} onClick={() => setGameSelectFor(p)} aria-label={`${p.title}のゲームを選ぶ`}>
                                   ゲームを選ぶ
@@ -542,6 +557,7 @@ export default function AdminListingConfirmPage() {
           setGameCreateFor(null);
         }}
       />
+      <LinkedGameModal gameId={gameDetailId} onOpenChange={(open) => !open && setGameDetailId(null)} />
       <RulesModal open={rulesOpen} onOpenChange={setRulesOpen} onRejudged={reloadAll} />
     </div>
   );

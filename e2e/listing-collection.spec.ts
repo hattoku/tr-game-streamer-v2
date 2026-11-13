@@ -1,5 +1,5 @@
 // 収集の変更（リブランディング段階4）: 全件保存・自動判定・掲載チャンネルごとの掲載方法・自動掲載の確認画面。
-// コンテンツ収集機能仕様書 v4.3 §10.2・§10.4〜§10.7・§10.11、収集候補レビューUI仕様書 v3.5 §8・§9。
+// コンテンツ収集機能仕様書 v4.3 §10.2・§10.4〜§10.7・§10.11、収集候補レビューUI仕様書 v3.6 §8・§9。
 // 再生リスト・チャンネル・ゲームは Admin SDK で直接作る（YouTube に無い ID。名前は [E2E] で始まり、終了時に自分で消す）。
 // 30日ルール・自動掲載・巡回を含む実行は e2e/refresh-new-videos.spec.ts（毎日の再取得）で確かめる。
 import { expect as pwExpect, test as pwTest } from '@playwright/test';
@@ -223,6 +223,48 @@ test('§8.2・§8.3 チャンネル見出しにアイコンとプレミテのチ
   } finally {
     await cleanup({ channels: [channel.id, other.id], playlists: [a.id, b.id, c.id], games: [withImage, noImage] });
     await e2eDb().collection('channels').doc(channel.youtubeChannelId).delete();
+  }
+});
+
+test('§8.3 ゲームの画像・名前を押すと、付いているゲームの詳細と楽天ブックスで選ばれている商品のページが見られる。「ゲームは決めなくても掲載できます」は1回だけ出す（v3.6）', async ({ adminPage }) => {
+  const channelTitle = uniqueText('チャンネル');
+  const channel = await seedChannel({ channelTitle });
+  const rakutenUrl = 'https://books.rakuten.co.jp/rb/e2e-item/';
+  const withRakuten = await seedGame(uniqueText('楽天ありゲーム'), 0, 'https://thumbnail.image.rakuten.co.jp/@0_mall/book/cabinet/e2e/e2e.jpg?_ex=200x200');
+  await e2eDb().collection('games').doc(withRakuten).update({ rakutenUrl, platforms: ['Nintendo Switch'], genreName: 'アクション' });
+  const nameOnly = await seedGame(uniqueText('名前だけゲーム'), 0);
+  const a = await seedPlaylist({ channel, channelTitle, listingStatus: 'unconfirmed', gameId: withRakuten, title: uniqueText('楽天ありの再生リスト') });
+  const b = await seedPlaylist({ channel, channelTitle, listingStatus: 'unconfirmed', gameId: nameOnly, title: uniqueText('名前だけの再生リスト') });
+  const c = await seedPlaylist({ channel, channelTitle, listingStatus: 'unconfirmed', title: uniqueText('ゲームなしの再生リスト') });
+  try {
+    await adminPage.goto(`/admin/collection?channel=${channel.id}`);
+    const group = adminPage.locator('section').filter({ hasText: channelTitle });
+    await expect(group.getByRole('checkbox', { name: `${c.title}を選択` })).toBeVisible();
+    // 案内は一覧の上に1回だけ（各行には出さない）
+    await expect(adminPage.getByText('ゲームは決めなくても掲載できます。')).toHaveCount(1);
+    await expect(group.getByText('ゲームは決めなくても掲載できます。')).toHaveCount(0);
+    // ゲームの無い行には詳細ボタンが無い
+    await expect(group.getByRole('button', { name: new RegExp(`${c.title}に付いているゲーム`) })).toHaveCount(0);
+
+    await group.getByRole('button', { name: new RegExp(`${a.title}に付いているゲーム.*の詳細を見る`) }).click();
+    const dialog = adminPage.getByRole('dialog', { name: '付いているゲーム' });
+    await expect(dialog).toContainText('楽天ありゲーム');
+    await expect(dialog).toContainText('Nintendo Switch');
+    await expect(dialog).toContainText('アクション');
+    const item = dialog.getByRole('link', { name: '選ばれている商品のページを開く' });
+    await expect(item).toHaveAttribute('href', rakutenUrl);
+    await expect(item).toHaveAttribute('target', '_blank');
+    await expect(dialog.getByRole('link', { name: /ゲームタイトル詳細を開く/ })).toHaveAttribute('href', `/games/${withRakuten}`);
+    await adminPage.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+
+    // 楽天の商品が無いゲーム
+    await group.getByRole('button', { name: new RegExp(`${b.title}に付いているゲーム.*の詳細を見る`) }).click();
+    await expect(dialog).toContainText('名前だけゲーム');
+    await expect(dialog).toContainText('商品は選ばれていません');
+    await expect(dialog.getByRole('link', { name: '選ばれている商品のページを開く' })).toHaveCount(0);
+  } finally {
+    await cleanup({ channels: [channel.id], playlists: [a.id, b.id, c.id], games: [withRakuten, nameOnly] });
   }
 });
 
