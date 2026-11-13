@@ -40,7 +40,8 @@ async function seedPlaylist(channelName: string): Promise<string> {
 }
 
 async function seedVideo(playlistId: string, position: number, title: string, publishedAt: Date, addedToPlaylistAt = publishedAt) {
-  const youtubeVideoId = `e2e${position}${Math.random().toString(36).slice(2, 8)}`;
+  // YouTube の動画IDの形（11文字）にする。形が違うとプレーヤーが「Invalid video id」で落ち、エラー画面になる
+  const youtubeVideoId = `E2E${position}${Math.random().toString(36).slice(2)}xxxxxxxx`.slice(0, 11);
   const id = `${playlistId}_${youtubeVideoId}`;
   await e2eDb().collection('videos').doc(id).set({
     youtubeVideoId, playlistId, position, title, thumbnailUrl: '', durationSeconds: 600, publishedAt, addedToPlaylistAt, playStartCount: 0,
