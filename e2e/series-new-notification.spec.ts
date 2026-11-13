@@ -39,11 +39,11 @@ async function seedPlaylist(channelName: string): Promise<string> {
   return id;
 }
 
-async function seedVideo(playlistId: string, position: number, title: string, publishedAt: Date) {
+async function seedVideo(playlistId: string, position: number, title: string, publishedAt: Date, addedToPlaylistAt = publishedAt) {
   const youtubeVideoId = `e2e${position}${Math.random().toString(36).slice(2, 8)}`;
   const id = `${playlistId}_${youtubeVideoId}`;
   await e2eDb().collection('videos').doc(id).set({
-    youtubeVideoId, playlistId, position, title, thumbnailUrl: '', durationSeconds: 600, publishedAt, playStartCount: 0,
+    youtubeVideoId, playlistId, position, title, thumbnailUrl: '', durationSeconds: 600, publishedAt, addedToPlaylistAt, playStartCount: 0,
   });
   created.push(`videos/${id}`);
 }
@@ -99,13 +99,15 @@ test('§2.1 実装状況 配信者の情報を持たない以前の通知は、�
   await expect(card.getByTestId('notification-new-videos')).toHaveCount(0);
 });
 
-test('動画プレーヤー仕様書「各動画に表示する情報」動画リストに投稿日が出て、投稿から7日以内の動画だけ NEW が付く', async ({ guestPage }) => {
+test('動画プレーヤー仕様書「各動画に表示する情報」動画リストに投稿日が出て、投稿（または再生リストへの追加）から7日以内の動画だけ NEW が付く', async ({ guestPage }) => {
   const playlistId = await seedPlaylist('[E2E] 配信者C');
   const now = Date.now();
   const old = new Date(now - 40 * DAY_MS);
   const recent = new Date(now - 2 * DAY_MS);
   await seedVideo(playlistId, 0, '[E2E] 古い話', old);
   await seedVideo(playlistId, 1, '[E2E] 新しい話', recent);
+  // 昔の動画をあとから再生リストに足した（新着通知は届く）ときも NEW
+  await seedVideo(playlistId, 2, '[E2E] あとから足した話', old, recent);
 
   await guestPage.goto(`/playlists/${playlistId}`);
   const oldRow = guestPage.getByRole('listitem').filter({ hasText: '[E2E] 古い話' });
@@ -118,6 +120,9 @@ test('動画プレーヤー仕様書「各動画に表示する情報」動画�
   await expect(newRow.getByTestId('video-published-date')).toHaveText(md(recent));
   await expect(newRow.getByText('NEW')).toBeVisible();
   await expect(oldRow.getByText('NEW')).toHaveCount(0);
+  const addedRow = guestPage.getByRole('listitem').filter({ hasText: '[E2E] あとから足した話' });
+  await expect(addedRow.getByTestId('video-published-date')).toHaveText(md(old));
+  await expect(addedRow.getByText('NEW')).toBeVisible();
   expect(await hasHorizontalScroll(guestPage)).toBe(false);
 });
 
