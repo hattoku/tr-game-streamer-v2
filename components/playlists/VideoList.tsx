@@ -9,7 +9,8 @@
  *   フッターの「広げる」で従来の高さに広げ、「縮める」で約3話分に戻せる（状態は保存しない）。
  *   設定「先の話のサムネイルを隠す」がONの場合、hiddenThumbnailIds の話はサムネイルの代わりに
  *   話数のプレースホルダーを表示する（どの話を隠すかの判定は呼び出し側）
- * - 尺の横に投稿日（「11/12」、今年でなければ「2025/11/12」）。投稿から7日以内の動画には「NEW」バッジ
+ * - 尺の横に投稿日（「11/12」、今年でなければ「2025/11/12」）。投稿から7日以内の動画には「NEW」バッジ。
+ *   昔の動画をあとから再生リストに足したとき（新着通知は届く）も分かるよう、再生リストに追加されてから7日以内も NEW にする
  *   （動画プレーヤー仕様書「各動画に表示する情報」v1.19。新着通知から来たときにどれが新しいか分かるように）
  * - リスト最下部（スクロール領域外）に参照元URL「YouTubeの再生リストを見る」リンク
  */
@@ -32,13 +33,19 @@ export interface VideoItem {
   durationSeconds: number | null;
   /** YouTube での公開日時（ミリ秒。古いデータで無いときは null） */
   publishedAt?: number | null;
+  /** 再生リストに追加された日時（ミリ秒。古いデータで無いときは null） */
+  addedToPlaylistAt?: number | null;
 }
 
 /** 投稿から何日以内を「NEW」とするか */
 export const NEW_VIDEO_DAYS = 7;
 
-export function isNewVideo(publishedAt: number | null | undefined, now = Date.now()): boolean {
-  return publishedAt != null && now - publishedAt >= 0 && now - publishedAt < NEW_VIDEO_DAYS * 24 * 60 * 60 * 1000;
+function withinNewDays(at: number | null | undefined, now: number): boolean {
+  return at != null && now - at >= 0 && now - at < NEW_VIDEO_DAYS * 24 * 60 * 60 * 1000;
+}
+
+export function isNewVideo(video: Pick<VideoItem, 'publishedAt' | 'addedToPlaylistAt'>, now = Date.now()): boolean {
+  return withinNewDays(video.publishedAt, now) || withinNewDays(video.addedToPlaylistAt, now);
 }
 
 /** 投稿日の表示。今年なら「11/12」、それ以外は「2025/11/12」 */
@@ -185,7 +192,7 @@ export function VideoList({
                           {formatPublishedDate(video.publishedAt)}
                         </time>
                       )}
-                      {isNewVideo(video.publishedAt) && <NewBadge className="px-[6px] py-[2px] text-xs" />}
+                      {isNewVideo(video) && <NewBadge size="sm" />}
                     </span>
                   </span>
                 </button>

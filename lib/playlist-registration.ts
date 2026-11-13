@@ -140,6 +140,7 @@ export async function registerPlaylist(params: {
         thumbnailUrl: item.thumbnailUrl,
         durationSeconds: durations.get(item.youtubeVideoId) ?? null,
         publishedAt: new Date(item.publishedAt),
+        addedToPlaylistAt: new Date(item.addedAt),
         playStartCount: 0,
       });
     }

@@ -49,8 +49,9 @@ interface NotificationItem {
   /** シリーズ新着: 新しく増えた動画のタイトル（再生リストの並び順。古い通知では空）と本数 */
   newVideoTitles: string[];
   newVideoCount: number;
+  /** 表示用「#6 〇〇〇〇 ほか1本」（増えた動画が分からない古い通知は null） */
+  newVideosText: string | null;
 }
-
 
 const TYPE_LABEL: Record<NotificationType, string> = {
   series_new_episode: 'シリーズ新着',
@@ -114,7 +115,7 @@ export default function NotificationsPage() {
         channelIconUrl: d.data().channelIconUrl ?? '',
         newVideoTitles: Array.isArray(d.data().newVideoTitles) ? d.data().newVideoTitles : [],
         newVideoCount: typeof d.data().newVideoCount === 'number' ? d.data().newVideoCount : 0,
-      })),
+      })).map((n) => ({ ...n, newVideosText: formatNewVideos(n.newVideoTitles, n.newVideoCount) })),
     );
   }
 
@@ -301,9 +302,9 @@ export default function NotificationsPage() {
                           </time>
                         </span>
                         <span className={cn('text-base leading-relaxed', n.isRead ? 'text-text-secondary' : 'text-text-primary')}>{n.message}</span>
-                        {n.type === 'series_new_episode' && formatNewVideos(n.newVideoTitles, n.newVideoCount) && (
+                        {n.type === 'series_new_episode' && n.newVideosText && (
                           <span className="line-clamp-2 text-md leading-snug text-text-tertiary" data-testid="notification-new-videos">
-                            {formatNewVideos(n.newVideoTitles, n.newVideoCount)}
+                            {n.newVideosText}
                           </span>
                         )}
                       </span>

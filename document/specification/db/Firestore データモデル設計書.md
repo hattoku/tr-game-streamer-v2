@@ -251,7 +251,8 @@ Firestoreはテーブル結合（JOIN）ができないため、一覧表示や�
 | `title` | string | ✅ | 動画タイトル |
 | `thumbnailUrl` | string | ✅ | サムネイルURL |
 | `durationSeconds` | number? | — | 動画の長さ（秒）。取得できない場合はnull |
-| `publishedAt` | Timestamp | ✅ | YouTube上の公開日時 |
+| `publishedAt` | Timestamp | ✅ | YouTube上の公開日時（`playlistItems` の `contentDetails.videoPublishedAt`。削除済み・非公開などで取れないときは再生リストに追加された日時。v2.9 より前に保存した動画は再生リストに追加された日時が入っていて、次の取り直しで直る） |
+| `addedToPlaylistAt` | Timestamp? | — | 再生リストに追加された日時（`snippet.publishedAt`。v2.9） |
 | `playStartCount` | number | ✅ | 再生開始回数（週間ランキングの集計元） |
 
 ---
@@ -1153,5 +1154,5 @@ ai_operators ──── (1) users
 | v2.5 | 2026-11-04 | 段階4の実装。§3.2 `playlists` に `metaFetchedAt`・`playlistPublishedAt`・`youtubeDataRemovedAt` を追加し、巡回で作る再生リストの値と `listingReason` の値を注記。§3.21 `batch_logs` に巡回の結果の項目を追加。§3.32 `exploration_channels` の登録者数の保存期間を注記。§3.23 `collection_candidates` は巡回に取り込んだら消し、残りも30日で消す（コンテンツ収集機能仕様書 §10.11） |
 | v2.7 | 2026-11-08 | 段階7 一覧のサーバー側検索化。§5.1 検索面の複合インデックスは検索面では使わなくなった旨を注記。フィールドの追加・変更はなし（v2.6 は段階6の PR #24 が使う） |
 | v2.2 | 2026-11-01 | 段階3の実装。§3.2 `playlists` の掲載状態（`listingStatus` ほか）と `source`・`explorationChannelId` を実装。管理者の登録・承認は `listed`（`listingReason: admin`）で作り、既存データは移行スクリプトで `listed`（`listingReason: migration`）または `channel_off` にする。`games.playlistCount`・`channels.playlistCount`・`tags.usagePlaylistCount` は掲載中の再生リストだけを数える（コンテンツ収集機能仕様書 §10.9）。フィールドの追加・変更はなし |
-| v2.9 | 2026-11-13 | §3.30 `notifications` に `channelName`・`channelIconUrl`・`newVideoTitles`・`newVideoCount` を追加（ユーザー通知機能仕様書 v1.4） |
+| v2.9 | 2026-11-13 | §3.30 `notifications` に `channelName`・`channelIconUrl`・`newVideoTitles`・`newVideoCount` を追加（ユーザー通知機能仕様書 v1.4）。`videos.publishedAt` を動画の投稿日時に直し（これまでは再生リストに追加された日時だった）、`videos.addedToPlaylistAt` を追加 |
 | v2.8 | 2026-11-08 | 段階5 人気のチャンネル。§3.4 `channels.popularity`、§3.32 `featuredOrder` をピン留めの順に、§3.21 `batch_logs` に `channel_popularity`、§3.35 `playlist_viewers`・§3.36 `batch_state` を追加。§7.1 退会時の削除に `playlist_viewers` を追加（共通 人気のチャンネル 集計 仕様書） |

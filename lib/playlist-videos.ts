@@ -42,6 +42,7 @@ export async function fetchAndStoreAllVideos(playlistId: string): Promise<Stored
         thumbnailUrl: item.thumbnailUrl,
         durationSeconds: durations.get(item.youtubeVideoId) ?? null,
         publishedAt: new Date(item.publishedAt),
+        addedToPlaylistAt: new Date(item.addedAt),
       };
       if (existing.has(ref.id)) {
         batch.update(ref, fields);
