@@ -244,9 +244,9 @@ test('§8.3 ゲームの画像・名前を押すと、付いているゲーム�
     await expect(adminPage.getByText('ゲームは決めなくても掲載できます。')).toHaveCount(1);
     await expect(group.getByText('ゲームは決めなくても掲載できます。')).toHaveCount(0);
     // ゲームの無い行には詳細ボタンが無い
-    await expect(group.getByRole('button', { name: new RegExp(`${c.title}に付いているゲーム`) })).toHaveCount(0);
+    await expect(group.getByRole('button', { name: `${c.title}に付いているゲーム`, exact: false })).toHaveCount(0);
 
-    await group.getByRole('button', { name: new RegExp(`${a.title}に付いているゲーム.*の詳細を見る`) }).click();
+    await group.getByRole('button', { name: `${a.title}に付いているゲーム「E2Eゲーム」の詳細を見る` }).click();
     const dialog = adminPage.getByRole('dialog', { name: '付いているゲーム' });
     await expect(dialog).toContainText('楽天ありゲーム');
     await expect(dialog).toContainText('Nintendo Switch');
@@ -259,7 +259,7 @@ test('§8.3 ゲームの画像・名前を押すと、付いているゲーム�
     await expect(dialog).toBeHidden();
 
     // 楽天の商品が無いゲーム
-    await group.getByRole('button', { name: new RegExp(`${b.title}に付いているゲーム.*の詳細を見る`) }).click();
+    await group.getByRole('button', { name: `${b.title}に付いているゲーム「E2Eゲーム」の詳細を見る` }).click();
     await expect(dialog).toContainText('名前だけゲーム');
     await expect(dialog).toContainText('商品は選ばれていません');
     await expect(dialog.getByRole('link', { name: '選ばれている商品のページを開く' })).toHaveCount(0);
