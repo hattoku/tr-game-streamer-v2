@@ -15,14 +15,14 @@ import { Tag } from '@/components/ui/Tag';
 import { useToast } from '@/components/ui/Toast';
 import { BellIcon, ChevronLeftIcon, ChevronRightIcon } from '@/components/ui/icons';
 import { cn } from '@/components/ui/cn';
-import { formatNewVideos } from '@/lib/notification-format';
+import { formatNewVideos, isFeedNotification } from '@/lib/notification-format';
 
 // 通知一覧ページ。document/specification/page/ページ ユーザー通知機能仕様書.md §5 準拠。
 // フェーズ2.5ステップ6でデザイン適用（wiki/sources/2026-09-11-phase2.5-design-plan.md §4）。
 // - 見出し＋「すべて既読にする」（§5.2, §5.6）
-// - フィルタタブは実装済み種別のみ: すべて／未読／再生リスト新着（§5.3。お知らせは依拠する機能が未実装のためタブを出さない。
-//   審査結果・お問い合わせ返信は届いたことがあるときだけ出す）
-// - 審査結果（再生リスト登録提案、§2.1 実装状況 2026-10-25）: 承認は公開された再生リスト、見送りは提案履歴へ遷移
+// - フィルタタブは実装済み種別のみ: すべて／未読／再生リスト新着（§5.3。お知らせは依拠する機能が未実装のためタブを出さない）
+// - お問い合わせ返信・審査結果はここに出さない（v1.6）。ヘッダーのユーザーアイコンの件数と、メニューの
+//   「お問い合わせ履歴」「提案履歴」の未読数で知らせる（§4.3。components/layout/UserDropdown.tsx）
 // - カード: 未読ドット・種別ラベル・本文・日時（相対表示、title に絶対時刻）。クリックで個別既読＋遷移（§5.4）
 // - ページネーション 20件（§5.5）。クライアント側で分割（通知は本人分のみで件数が小さい）
 // - 空状態2種（§5.7）。未ログインは /login へ（§5.1）
@@ -32,7 +32,8 @@ import { formatNewVideos } from '@/lib/notification-format';
 //   動画のサムネイルはネタバレになりうるので出さない。配信者の情報を持たない古い通知は、再生リストから補う
 // 見送り: 通知ドロップダウン（§4.2）、FCM プッシュ（§6）、90日保持バッチ（§8）
 
-type NotificationType = 'series_new_episode' | 'notice' | 'review_result' | 'inquiry_reply';
+// お問い合わせ返信・審査結果は読み込み時に除く（v1.6）
+type NotificationType = 'series_new_episode' | 'notice';
 type Filter = 'all' | 'unread' | NotificationType;
 
 interface NotificationItem {
@@ -41,7 +42,6 @@ interface NotificationItem {
   message: string;
   isRead: boolean;
   playlistId: string | null;
-  inquiryId: string | null;
   createdAt: number;
   /** 再生リスト新着: 配信者名・アイコン（古い通知では空。再生リストから補う） */
   channelName: string;
@@ -56,8 +56,6 @@ interface NotificationItem {
 const TYPE_LABEL: Record<NotificationType, string> = {
   series_new_episode: '再生リスト新着',
   notice: 'お知らせ',
-  review_result: '審査結果',
-  inquiry_reply: 'お問い合わせ返信',
 };
 
 const PAGE_SIZE = 20;
@@ -103,13 +101,12 @@ export default function NotificationsPage() {
   async function load(uid: string) {
     const snapshot = await getDocs(query(collection(db, 'notifications'), where('userId', '==', uid), orderBy('createdAt', 'desc')));
     setItems(
-      snapshot.docs.map((d) => ({
+      snapshot.docs.filter((d) => isFeedNotification(d.data().type)).map((d) => ({
         id: d.id,
         type: (d.data().type as NotificationType) ?? 'series_new_episode',
         message: d.data().message ?? '',
         isRead: d.data().isRead ?? false,
         playlistId: d.data().playlistId ?? null,
-        inquiryId: d.data().inquiryId ?? null,
         createdAt: d.data().createdAt?.toMillis?.() ?? 0,
         channelName: d.data().channelName ?? '',
         channelIconUrl: d.data().channelIconUrl ?? '',
@@ -172,8 +169,6 @@ export default function NotificationsPage() {
       all: list.length,
       unread: list.filter((n) => !n.isRead).length,
       series_new_episode: list.filter((n) => n.type === 'series_new_episode').length,
-      inquiry_reply: list.filter((n) => n.type === 'inquiry_reply').length,
-      review_result: list.filter((n) => n.type === 'review_result').length,
     };
   }, [items]);
 
@@ -204,10 +199,6 @@ export default function NotificationsPage() {
     }
     // 遷移先（§2.1）: 再生リスト新着は該当再生リストの動画プレーヤーページ
     if (n.type === 'series_new_episode' && n.playlistId) router.push(`/playlists/${n.playlistId}`);
-    // お問い合わせ返信は該当スレッド（フェーズ7ステップ7-3-2）
-    if (n.type === 'inquiry_reply' && n.inquiryId) router.push(`/contact/history/${n.inquiryId}`);
-    // 審査結果は、承認なら公開された再生リスト、見送りなら提案履歴（ページ ユーザー通知機能仕様書 §2.1 実装状況）
-    if (n.type === 'review_result') router.push(n.playlistId ? `/playlists/${n.playlistId}` : '/playlists/proposals');
   }
 
   async function handleMarkAllRead() {
@@ -245,7 +236,7 @@ export default function NotificationsPage() {
       </div>
 
       {items.length === 0 ? (
-        <EmptyState icon={<BellIcon />} title="通知はまだありません" description="マイリストに登録した再生リストの新着動画や、提案の審査結果・お問い合わせへの返信をここでお知らせします" />
+        <EmptyState icon={<BellIcon />} title="通知はまだありません" description="マイリストに登録した再生リストに新しい動画が追加されると、ここでお知らせします" />
       ) : (
         <>
           <Tabs value={filter} onValueChange={(v) => changeFilter(v as Filter)}>
@@ -259,17 +250,6 @@ export default function NotificationsPage() {
               <TabsTrigger value="series_new_episode" count={counts.series_new_episode}>
                 再生リスト新着
               </TabsTrigger>
-              {/* 届いたことがある種別だけタブを出す（お知らせの通知は未実装） */}
-              {counts.review_result > 0 && (
-                <TabsTrigger value="review_result" count={counts.review_result}>
-                  審査結果
-                </TabsTrigger>
-              )}
-              {counts.inquiry_reply > 0 && (
-                <TabsTrigger value="inquiry_reply" count={counts.inquiry_reply}>
-                  お問い合わせ返信
-                </TabsTrigger>
-              )}
             </TabsList>
           </Tabs>
 

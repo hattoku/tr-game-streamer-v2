@@ -4,6 +4,8 @@
  * ユーザー名・メール（表示専用）／プロフィール／設定／ログアウト を表示する。
  * ログアウト後は TOP へ遷移する。
  * 管理者には審査中のワークフロー件数をアイコン右上と「管理画面」項目に出す（§2.10）。
+ * お問い合わせ返信・審査結果の未読も同じアイコン右上の件数に足し、「お問い合わせ履歴」「提案履歴」項目に未読数を出す
+ * （通知一覧・ベルからは外した。ページ ユーザー通知機能仕様書 §4.3、v1.6）。
  */
 'use client';
 
@@ -23,6 +25,7 @@ import { ChevronDownIcon } from '@/components/ui/icons';
 import { cn } from '@/components/ui/cn';
 import { USER_NAV } from './nav';
 import { formatBadgeCount, usePendingWorkflowCount } from '@/components/admin/usePendingWorkflowCount';
+import { useUnreadNotificationCounts } from './useUnreadNotificationCounts';
 import { COLLECTIONS_ENABLED } from '@/lib/feature-flags';
 
 export function UserAvatar({
@@ -65,7 +68,15 @@ export function UserDropdown() {
   const router = useRouter();
   const isAdmin = !!user && (role === 'owner' || role === 'operator');
   const pendingCount = usePendingWorkflowCount(isAdmin);
+  const unread = useUnreadNotificationCounts();
   if (!user) return null;
+
+  const badgeCount = pendingCount + unread.inquiry + unread.review;
+  const triggerLabel = [
+    unread.inquiry > 0 ? `お問い合わせの未読の返信 ${unread.inquiry} 件` : null,
+    unread.review > 0 ? `未読の審査結果 ${unread.review} 件` : null,
+    pendingCount > 0 ? `未処理の審査 ${pendingCount} 件` : null,
+  ].filter(Boolean);
 
   const name = displayName ?? user.email?.split('@')[0] ?? 'ユーザー';
 
@@ -78,7 +89,7 @@ export function UserDropdown() {
     <DropdownMenu>
       {/* ピル（トークン仕様書 v2.0 §14「ユーザーエリア」）: アイコン＋名前＋▾ */}
       <DropdownMenuTrigger
-        aria-label={pendingCount > 0 ? `ユーザーメニュー（未処理の審査 ${pendingCount} 件）` : 'ユーザーメニュー'}
+        aria-label={triggerLabel.length > 0 ? `ユーザーメニュー（${triggerLabel.join('・')}）` : 'ユーザーメニュー'}
         className={cn(
           'relative inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/4 py-1 pl-1 pr-[10px] text-text-tertiary',
           'transition-[color,border-color,background-color] duration-[120ms] hover:border-border-control hover:text-text-primary',
@@ -89,12 +100,13 @@ export function UserDropdown() {
         {/* 表示名は 1024px 以上でのみ。768〜1023px はヘッダーに収まらないためアイコン＋▾ だけにする（UI仕様書 §2.9） */}
         <span className="hidden max-w-[6em] truncate text-base text-text-primary lg:inline">{name}</span>
         <ChevronDownIcon size={12} />
-        {pendingCount > 0 && (
+        {badgeCount > 0 && (
           <span
             aria-hidden
+            data-testid="user-menu-badge"
             className="absolute -right-1 -top-1 inline-flex h-4 min-w-4 items-center justify-center rounded-[8px] bg-brand-primary px-1 text-xs font-semibold leading-none text-white shadow-[0_0_0_2px_var(--color-bg-base)]"
           >
-            {formatBadgeCount(pendingCount)}
+            {formatBadgeCount(badgeCount)}
           </span>
         )}
       </DropdownMenuTrigger>
@@ -121,9 +133,13 @@ export function UserDropdown() {
           </>
         )}
         {/* 提案履歴（ページ 再生リストを追加する 仕様書 §9.4） */}
-        <DropdownMenuItem onSelect={() => router.push('/playlists/proposals')}>提案履歴</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => router.push('/playlists/proposals')}>
+          <MenuItemWithUnread label="提案履歴" count={unread.review} />
+        </DropdownMenuItem>
         {/* お問い合わせ履歴（ページ お問い合わせ履歴 仕様書 §2。設定ページ経由だけでは分かりにくいため追加） */}
-        <DropdownMenuItem onSelect={() => router.push('/contact/history')}>お問い合わせ履歴</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => router.push('/contact/history')}>
+          <MenuItemWithUnread label="お問い合わせ履歴" count={unread.inquiry} />
+        </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => router.push('/settings')}>設定</DropdownMenuItem>
         {isAdmin && (
           <>
@@ -141,5 +157,21 @@ export function UserDropdown() {
         <DropdownMenuItem onSelect={handleSignOut}>ログアウト</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+/** メニュー項目の右に未読数を出す（審査結果・お問い合わせ返信。ページ ユーザー通知機能仕様書 §4.3） */
+function MenuItemWithUnread({ label, count }: { label: string; count: number }) {
+  return (
+    <span className="flex w-full items-center justify-between gap-2">
+      {label}
+      {count > 0 && (
+        <span className="inline-flex items-center gap-[6px] text-md text-text-secondary">
+          {/* 未読インジケーター（UnreadDot と同じ見た目。直後の「未読」の文字と重ねて読み上げないよう aria-hidden） */}
+          <span aria-hidden className="inline-block size-[7px] rounded-full bg-brand-primary" />
+          未読 {formatBadgeCount(count)}
+        </span>
+      )}
+    </span>
   );
 }
