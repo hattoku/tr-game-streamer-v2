@@ -76,6 +76,7 @@ tr-game-streamer-v2 の**コーディング支援用**Wiki（実装の変更履�
 - [[2026-11-14-unavailable-videos]] — 削除済み・非公開の動画を取り込まず、消えた動画のドキュメントを消す（PR #29）
 - [[2026-11-14-new-video-notification-and-videolist]] — 再生リスト新着の通知に配信者と動画タイトル、動画リストの投稿日（年つき）・NEW・再生時間・見出し（PR #31〜#34）
 - [[2026-11-14-channel-card-stats]] — 再生リスト詳細の配信者欄に再生リスト数・動画数・マイリスト数（一覧 API の合計を使い YouTube API は使わない、PR #35）
+- [[2026-11-14-notification-unread-dot]] — 通知カードの未読ドットを左端の列から日時の左へ（既読時の左の空白をなくす）
 
 ## Entities
 - [[proxy]] — proxy.ts（旧middleware.ts、Next.js 16のproxy規約対応）。まとめ取り下げ後は `/collections*` を 404 に書き換える

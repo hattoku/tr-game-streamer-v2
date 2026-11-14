@@ -23,7 +23,7 @@ import { formatNewVideos } from '@/lib/notification-format';
 // - フィルタタブは実装済み種別のみ: すべて／未読／再生リスト新着（§5.3。お知らせは依拠する機能が未実装のためタブを出さない。
 //   審査結果・お問い合わせ返信は届いたことがあるときだけ出す）
 // - 審査結果（再生リスト登録提案、§2.1 実装状況 2026-10-25）: 承認は公開された再生リスト、見送りは提案履歴へ遷移
-// - カード: 未読ドット・種別ラベル・本文・日時（相対表示、title に絶対時刻）。クリックで個別既読＋遷移（§5.4）
+// - カード: 種別ラベル・本文・日時（相対表示、title に絶対時刻）。未読ドットは日時の左に出す（左端に列を取らない、§5.4 v1.6）。クリックで個別既読＋遷移（§5.4）
 // - ページネーション 20件（§5.5）。クライアント側で分割（通知は本人分のみで件数が小さい）
 // - 空状態2種（§5.7）。未ログインは /login へ（§5.1）
 // - 管理者向け「新着動画を再取得」はフェーズ6ステップ3で管理画面ダッシュボード（/admin）へ移設した
@@ -285,7 +285,6 @@ export default function NotificationsPage() {
                       onClick={() => handleOpen(n)}
                       className="flex w-full items-start gap-3 px-4 py-3 text-left md:px-[18px] md:py-[14px]"
                     >
-                      <span className="flex w-[7px] shrink-0 justify-center pt-[7px]">{!n.isRead && <UnreadDot />}</span>
                       {n.type === 'series_new_episode' && n.channelName && <ChannelIcon url={n.channelIconUrl} />}
                       <span className="flex min-w-0 flex-1 flex-col gap-1">
                         <span className="flex items-center justify-between gap-3">
@@ -297,9 +296,13 @@ export default function NotificationsPage() {
                               </span>
                             )}
                           </span>
-                          <time dateTime={n.createdAt ? new Date(n.createdAt).toISOString() : undefined} title={formatAbsolute(n.createdAt)} className="shrink-0 text-sm text-text-muted">
-                            {formatRelative(n.createdAt)}
-                          </time>
+                          {/* 未読ドットは日時の左に置く。左端に専用の列を取ると、既読のときに謎の空白になり中身も右に寄るため */}
+                          <span className="flex shrink-0 items-center gap-2">
+                            {!n.isRead && <UnreadDot />}
+                            <time dateTime={n.createdAt ? new Date(n.createdAt).toISOString() : undefined} title={formatAbsolute(n.createdAt)} className="text-sm text-text-muted">
+                              {formatRelative(n.createdAt)}
+                            </time>
+                          </span>
                         </span>
                         <span className={cn('text-base leading-relaxed', n.isRead ? 'text-text-secondary' : 'text-text-primary')}>{n.message}</span>
                         {n.type === 'series_new_episode' && n.newVideosText && (
