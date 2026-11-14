@@ -1,7 +1,7 @@
 /**
  * 再生リスト詳細の動画リスト（動画プレーヤー仕様書「動画リスト」「右カラム進捗バー表示」、
  * デザイントークン仕様書 §6.3, §6.4）。
- * - 各動画: サムネイル＋進捗バー／タイトル／尺。現在再生中は背景ハイライト＋▶アイコン＋「再生中」バッジ（§5.3）
+ * - 各動画: サムネイル（右下に再生時間を重ねる）＋進捗バー／タイトル／投稿日。現在再生中は背景ハイライト＋▶アイコン＋「再生中」バッジ（§5.3）
  * - 話数「N話」表示（更新中の再生リストがあるため「全N話」とはしない。動画プレーヤー仕様書 v1.5）と
  *   逆順トグル（動画プレーヤー仕様書「逆順トグル」）
  * - 初期スクロール: 最後に視聴した動画がリスト上端に来るよう、リスト内でスクロール
@@ -9,7 +9,9 @@
  *   フッターの「広げる」で従来の高さに広げ、「縮める」で約3話分に戻せる（状態は保存しない）。
  *   設定「先の話のサムネイルを隠す」がONの場合、hiddenThumbnailIds の話はサムネイルの代わりに
  *   話数のプレースホルダーを表示する（どの話を隠すかの判定は呼び出し側）
- * - 尺の横に投稿日（「11/12」、今年でなければ「2025/11/12」）。投稿から7日以内の動画には「NEW」バッジ。
+ * - 再生時間はサムネイルの右下に重ねる（タイトル下に投稿日と並べると、その時刻に投稿されたように見えるため。v1.20）。
+ *   尺が取れない動画は出さない
+ * - タイトル下に投稿日（「11/12」、今年でなければ「2025/11/12」）。投稿から7日以内の動画には「NEW」バッジ。
  *   昔の動画をあとから再生リストに足したとき（新着通知は届く）も分かるよう、再生リストに追加されてから7日以内も NEW にする
  *   （動画プレーヤー仕様書「各動画に表示する情報」v1.19。新着通知から来たときにどれが新しいか分かるように）
  * - リスト最下部（スクロール領域外）に参照元URL「YouTubeの再生リストを見る」リンク
@@ -17,7 +19,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { NewBadge, PlayingBadge } from '@/components/ui/Badge';
+import { CountLabel, NewBadge, PlayingBadge } from '@/components/ui/Badge';
 import { Button, ExternalLinkButton } from '@/components/ui/Button';
 import { Card, CardTitle } from '@/components/ui/Card';
 import { Checkbox } from '@/components/ui/Input';
@@ -171,6 +173,11 @@ export function VideoList({
                           <img src={video.thumbnailUrl} alt="" className="absolute inset-0 size-full object-cover" loading="lazy" />
                         )
                       )}
+                      {video.durationSeconds != null && (
+                        <CountLabel className="absolute bottom-1 right-1 px-[4px] py-0 text-xs" data-testid="video-duration">
+                          {formatDuration(video.durationSeconds)}
+                        </CountLabel>
+                      )}
                       {isCurrent && (
                         <>
                           <span className="absolute inset-0 flex items-center justify-center bg-black/40 text-white">
@@ -185,8 +192,7 @@ export function VideoList({
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className={cn('line-clamp-2 text-md leading-snug', isCurrent ? 'text-text-primary' : 'text-text-secondary')}>{video.title}</span>
-                    <span className="mt-1 flex items-center gap-2 text-sm text-text-faint">
-                      <span>{formatDuration(video.durationSeconds)}</span>
+                    <span className="mt-1 flex items-center gap-2 text-sm text-text-faint empty:hidden">
                       {formatPublishedDate(video.publishedAt) && (
                         <time dateTime={new Date(video.publishedAt!).toISOString()} data-testid="video-published-date">
                           {formatPublishedDate(video.publishedAt)}

@@ -134,6 +134,27 @@ test('動画プレーヤー仕様書「各動画に表示する情報」動画�
   expect(await hasHorizontalScroll(guestPage)).toBe(false);
 });
 
+test('動画プレーヤー仕様書「各動画に表示する情報」動画の尺はサムネイルの右下に重ね、タイトル下には投稿日だけを出す', async ({ guestPage }) => {
+  const playlistId = await seedPlaylist('[E2E] 配信者D');
+  await seedVideo(playlistId, 0, '[E2E] 尺のある話', new Date(Date.now() - 40 * DAY_MS));
+
+  await guestPage.goto(`/playlists/${playlistId}`);
+  const row = guestPage.getByRole('listitem').filter({ hasText: '[E2E] 尺のある話' });
+  const duration = row.getByTestId('video-duration');
+  // seedVideo の尺は 600 秒
+  await expect(duration).toHaveText('10:00');
+  // サムネイル枠（aspect-video）の右下に収まっている
+  const thumb = row.locator('.aspect-video');
+  const [d, t] = await Promise.all([duration.boundingBox(), thumb.boundingBox()]);
+  expect(d && t).toBeTruthy();
+  expect(d!.x + d!.width).toBeLessThanOrEqual(t!.x + t!.width + 0.5);
+  expect(d!.y + d!.height).toBeLessThanOrEqual(t!.y + t!.height + 0.5);
+  expect(d!.x).toBeGreaterThan(t!.x + t!.width / 2);
+  expect(d!.y).toBeGreaterThan(t!.y + t!.height / 2);
+  // タイトル下の行には尺を出さない
+  await expect(row.getByText('10:00')).toHaveCount(1);
+});
+
 /** マイリスト登録が無く（実在の会員に通知を作らない）、動画が2本以上ある公開再生リスト（refresh-new-videos.spec.ts と同じ選び方） */
 async function pickRealPlaylist(): Promise<QueryDocumentSnapshot> {
   const snap = await e2eDb().collection('playlists').where('isPublic', '==', true).get();

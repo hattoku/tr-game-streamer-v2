@@ -45,9 +45,9 @@ export function StatusBadge({ icon, className, children }: { icon?: ReactNode; c
 }
 
 /** サムネイル右下の話数・尺などの半透明ラベル（§6.5） */
-export function CountLabel({ className, children }: { className?: string; children: ReactNode }) {
+export function CountLabel({ className, children, ...rest }: { className?: string; children: ReactNode; 'data-testid'?: string }) {
   return (
-    <span className={cn('inline-flex items-center rounded-[4px] bg-black/72 px-[7px] py-[2px] text-sm leading-[1.5] text-text-primary', className)}>
+    <span {...rest} className={cn('inline-flex items-center rounded-[4px] bg-black/72 px-[7px] py-[2px] text-sm leading-[1.5] text-text-primary', className)}>
       {children}
     </span>
   );
