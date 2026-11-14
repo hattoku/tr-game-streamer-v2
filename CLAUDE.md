@@ -11,3 +11,10 @@
 画面・API・データの挙動を変える実装では、完了報告の前に stg へデプロイして E2E テスト（Playwright、`e2e/`）を実行し、
 結果（何件中何件成功、失敗したものと理由）を完了報告に添えること。新しい機能には、実装に使った仕様書の項目ごとに
 テストを追加する。手順とテストの書き方は `.agent/rules/development_flow.md` §4。
+
+# Wiki への記録
+
+コード・スクリプト・設定を変える PR では、**その PR の中で** `wiki/` に記録すること（`wiki/sources/` にページ、`wiki/index.md`・`wiki/log.md` に1行ずつ）。
+マージ後に回さない。書き方は `wiki/CLAUDE.md`、いつ・何を書くかは `.agent/rules/development_flow.md` §5。
+完了報告では、仕様書・E2E と並べて wiki に記録したページを書き添える。
+

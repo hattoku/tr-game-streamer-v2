@@ -48,11 +48,39 @@ tr-game-streamer-v2 の**コーディング支援用**Wiki（実装の変更履�
 - [[2026-10-14-phase7-step7-3-1-inquiries]] — フェーズ7 ステップ7-3-1（お問い合わせフォーム `/contact`＋管理画面 `/admin/inquiries` 一覧・詳細）。7-3 を2分割、メール通知は見送り。データモデル §3.17 改訂（status 4状態・body/relatedUrls）、書き込みは API のみ。7-3-2 前に operatorMemo の秘匿方法を決める申し送りあり
 - [[2026-10-15-related-game-heading]] — 再生リスト詳細の「ゲーム」見出しを「関連ゲーム」に変更（楽天ブックスの画像が配信機種と一致しないことがあるため）。仕様書3本の呼称も統一（`de8cf09`）
 - [[2026-10-22-node24-docker-image]] — 本番イメージの Node.js を 20（EOL）から 24.22.1 に更新（2026-10-21 セキュリティリリース対応、Dockerfile 3ステージ、`b1dac1c`）
+- [[2026-10-24-phase7-step7-3-2-inquiry-history]] — フェーズ7 ステップ7-3-2（`/contact/history`・ユーザー側スレッド）。`operatorMemo` を渡さないため本人専用 API で返し、rules で本人の直接読み取りを閉じた
+- [[2026-10-25-phase7-step7-4-proposals]] — フェーズ7 ステップ7-4（一般ユーザーの再生リスト提案と審査）と 10-26 の作り込み。登録処理を `lib/playlist-registration.ts` に切り出し
+- [[2026-10-25-e2e-foundation]] — stg に対する Playwright E2E の仕組み（PR #2）。テストモード常時有効、`[E2E]` データの後始末、環境変数の `#` の罠
+- [[2026-10-25-pwa-static-cache]] — PWA の起動待ち。最小インスタンスは費用優先で0のまま、`/_next/static/**` だけ immutable に戻す（PR #4）
+- [[2026-10-25-top-featured-exclude-completed]] — TOP 注目から完走済みを除く（PR #5）
+- [[2026-10-25-admin-header-purple]] — 管理画面ヘッダーをパープル配色に、`color-admin-*` トークン（PR #7）
+- [[2026-10-26-phase7-step7-5-content-collection]] — フェーズ7 ステップ7-5（有名チャンネル起点の自動探索、まとめて承認、タグ一覧）
+- [[2026-10-26-proposal-review-two-step]] — 審査画面を「ゲームタイトルを決める→承認」の2段に、`approveBlockedReason`（PR #9）
+- [[2026-10-28-collection-bulk-approve-new-games]] — 推定なしの候補もまとめて承認（`newGameTitle`）、候補を動画10本以上に（PR #10）
+- [[2026-10-28-inquiry-image-attachments]] — お問い合わせへの画像添付。sharp での描き直し、Storage 全拒否＋API 閲覧、180日で削除（PR #11）
+- [[2026-10-28-cloud-stg-deploy]] — クラウドから stg へのデプロイスクリプトと、Storage ルールを Rules API で反映する回避（PR #6・#13）
+- [[2026-10-28-player-sleep-recovery]] — スリープ復帰で再生位置が 0 になる問題、プレーヤーの作り直しと作り直し後の表示（PR #12・#22）
+- [[2026-11-01-collection-rakuten-pick-and-game-unset]] — ページ送りが終わらない不具合、楽天の商品の事前選択、ゲーム未設定の登録（段階A・B）（PR #14）
+- [[2026-11-01-new-videos-diff-refresh]] — 新着動画の取得を `youtubeItemCount` の差分に（約7,700→860ユニット/日の試算）（PR #15）
+- [[2026-11-01-rebranding-docs]] — リブランディング段階1の仕様書書き換えと「掲載チャンネル」への言い換え。DB 名は `authorized*` のまま（PR #16・#19）
+- [[2026-11-01-rebranding-stage2-collections-withdrawn]] — まとめ機能の取り下げ（`COLLECTIONS_ENABLED`、proxy で 404）（PR #17）
+- [[2026-11-01-rebranding-stage3-listing-status]] — `listingStatus` と移行スクリプト。本番は移行→デプロイの順（PR #18）
+- [[2026-11-04-game-unset-user-link-and-proposal]] — ゲーム未設定の再生リストにユーザーがゲームを登録（審査なし）・新しいゲームタイトルを提案（審査あり）（PR #20・#21）
+- [[2026-11-08-rebranding-stage4-sweep]] — 巡回で全件保存し掲載状態を自動判定、掲載方法、30日ルール（PR #23）
+- [[2026-11-08-rebranding-stage6-applications]] — チャンネル申請・提案の分岐・`/creators`（PR #24）
+- [[2026-11-08-rebranding-stage7-server-search]] — 一覧をサーバー側検索に（メモリ索引＋onSnapshot、`/api/catalog/*`、回数制限）（PR #25）
+- [[2026-11-08-rebranding-stage5-popular-channels]] — 人気のチャンネルと人気順、`playlist_viewers`、毎日の集計（PR #26）
+- [[2026-11-11-production-deploy]] — 本番デプロイ（main `1525320`、移行→デプロイ、ジョブ3つ、`CRON_SECRET` のローテーション、本番 backfill）
+- [[2026-11-12-package-image-resolution]] — 楽天画像の `_ex` を表示時に差し替え、スマホのゲーム詳細レイアウト（PR #27）
+- [[2026-11-12-collection-review-images-icons]] — 自動掲載の確認にゲーム画像・チャンネルアイコン・付いているゲームのモーダル、巡回で空のアイコンを補う（PR #28・#30）
+- [[2026-11-14-unavailable-videos]] — 削除済み・非公開の動画を取り込まず、消えた動画のドキュメントを消す（PR #29）
+- [[2026-11-14-new-video-notification-and-videolist]] — 再生リスト新着の通知に配信者と動画タイトル、動画リストの投稿日（年つき）・NEW・再生時間・見出し（PR #31〜#34）
 - [[2026-11-14-channel-card-stats]] — 再生リスト詳細の配信者欄に再生リスト数・動画数・マイリスト数（一覧 API の合計を使い YouTube API は使わない、PR #35）
 
 ## Entities
-- [[proxy]] — proxy.ts（旧middleware.ts、Next.js 16のproxy規約対応）
+- [[proxy]] — proxy.ts（旧middleware.ts、Next.js 16のproxy規約対応）。まとめ取り下げ後は `/collections*` を 404 に書き換える
 - [[stg-gate]] — lib/stg-gate.ts（Cookieゲートのトークン導出ロジック）
+- [[catalog-server]] — lib/catalog-server.ts（一覧のサーバー側検索。メモリ索引＋onSnapshot）
 
 ## Concepts
 - [[firestoreセキュリティルール方針]] — ロール判定・コレクション別ポリシー
@@ -64,6 +92,12 @@ tr-game-streamer-v2 の**コーディング支援用**Wiki（実装の変更履�
 - [[CSSグリッドのmin-width対策]] — `fr`単位でもグリッドアイテムのmin-width初期値はauto。直下の子要素にmin-w-0が無いと内容の最小幅でトラックがオーバーフローする
 - [[auto modeの本番操作制限]] — 本番プロジェクトへのgcloud/deploy操作はauto modeの許可分類器の対象になりうるが、何がブロックされるかは一定ではない（2026-09-23追記: ユーザー依頼のdeploy.ps1 prodは通り、gcloud describeでのシークレット値読み取りはブロックされた）
 - [[Firebase Hostingのcookie制限]] — Firebase Hostingは`__session`以外の名前のCookieをCloud Runへのリクエストから除去する。直接のCloud Run URLでは動くがカスタムドメイン経由だけ認証が通らない、という形で発覚
+- [[YouTube Data APIのハマりどころ]] — ページ送りが終わらない、削除済み・非公開の動画も返る、`snippet.publishedAt` は追加日時、クォータの目安
+- [[YouTubeデータの30日ルール]] — API 規約 III.E.4。25日で取り直し・30日で削除、ユーザーの記録がある再生リストは残す
+- [[掲載状態と検索面]] — `listingStatus` の値と、検索面は「公開かつ listed」だけ。移行→デプロイの順、ロールバックしない
+- [[楽天画像URLのサイズ指定]] — `_ex=200x200` を表示時に差し替える。保存データは書き換えない
+- [[クラウドからのstgデプロイ]] — `deploy-stg-cloud.sh` の前提・権限・回避策。本番はクラウドから行わない
+- [[stgとE2Eの同時実行]] — stg は1つ。デプロイと E2E の後始末がぶつかる、再取得を動かす spec は1ファイルずつ
 
 ## Analyses
 （まだページなし）
