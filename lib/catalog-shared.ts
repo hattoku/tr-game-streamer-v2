@@ -90,6 +90,11 @@ export interface ChannelListItem {
   reviewCount: number;
   /** スコアが高い順の上位3件（評価なしは末尾） */
   topPlaylists: ChannelPickupPlaylist[];
+  /**
+   * ピックアップの次にスコアが高い再生リストのサムネイル（最大3枚、サムネイルの無いものは飛ばす）。
+   * カードの「ほか N 本の再生リスト」に重ねて見せ、まだたくさんあることを伝える（ページ チャンネル 探す 仕様書 §9.6）
+   */
+  moreThumbnailUrls: string[];
 }
 
 export interface GameListItem {
