@@ -45,7 +45,7 @@ test('お問い合わせの送信から再オープンまで', async ({ userPage
   });
 
   await test.step('一般ユーザーに通知と未読インジケーターが付き、スレッドを開くと既読になる', async () => {
-    // 返信通知は通知一覧ではなく、ユーザーメニューの「お問い合わせ履歴　未読 N」で知らせる（ユーザー通知機能仕様書 v1.6 §4.3）
+    // 返信通知は通知一覧ではなく、ユーザーメニューの「お問い合わせ履歴　未読 N」で知らせる（ユーザー通知機能仕様書 v1.7 §4.3）
     await userPage.goto('/contact/history');
     await userPage.getByRole('button', { name: /ユーザーメニュー（.*お問い合わせの未読の返信 \d+ 件/ }).click();
     await expect(userPage.getByRole('menuitem', { name: /お問い合わせ履歴.*未読 \d+/ })).toBeVisible();

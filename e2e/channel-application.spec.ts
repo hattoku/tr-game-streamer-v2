@@ -169,7 +169,7 @@ test('§4 チャンネルの確認、必須項目、送信、完了画面、提�
       await dialog.getByRole('button', { name: '却下する' }).click();
       await expect(adminPage.getByText('見送り理由: その他（掲載の基準に合わない）')).toBeVisible();
 
-      // 審査結果の通知は通知一覧ではなく、提案履歴の「新しい審査結果」に出る（ユーザー通知機能仕様書 v1.6 §4.3）
+      // 審査結果の通知は通知一覧ではなく、提案履歴の「新しい審査結果」に出る（ユーザー通知機能仕様書 v1.7 §4.3）
       await userPage.goto('/playlists/proposals');
       await expect(userPage.getByTestId('unseen-review-results')).toContainText(`チャンネル「${channel.name}」の申請は見送りになりました（その他（掲載の基準に合わない））`);
       await expect(userPage.getByTestId('channel-application-card').filter({ hasText: channel.name }).first()).toContainText('見送り理由: その他（掲載の基準に合わない）');
@@ -239,7 +239,7 @@ test('審査 §15.2 承認すると掲載チャンネルに加わり（確認し
       .poll(async () => (await e2eDb().collection('exploration_channels').where('youtubeChannelId', '==', fakeChannelId).get()).docs[0]?.data(), { timeout: 30_000 })
       .toMatchObject({ status: 'active', publishMode: 'confirm', authorizedVia: 'creator_application' });
 
-    // 審査結果の通知は通知一覧ではなく、提案履歴の「新しい審査結果」に出る（ユーザー通知機能仕様書 v1.6 §4.3）
+    // 審査結果の通知は通知一覧ではなく、提案履歴の「新しい審査結果」に出る（ユーザー通知機能仕様書 v1.7 §4.3）
     await userPage.goto('/playlists/proposals');
     await expect(userPage.getByTestId('unseen-review-results')).toContainText(`チャンネル「${title}」の申請が承認されました`);
     await expect(userPage.getByTestId('channel-application-card').filter({ hasText: title })).toContainText('承認');

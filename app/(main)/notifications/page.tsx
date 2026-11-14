@@ -21,9 +21,9 @@ import { formatNewVideos, isFeedNotification } from '@/lib/notification-format';
 // フェーズ2.5ステップ6でデザイン適用（wiki/sources/2026-09-11-phase2.5-design-plan.md §4）。
 // - 見出し＋「すべて既読にする」（§5.2, §5.6）
 // - フィルタタブは実装済み種別のみ: すべて／未読／再生リスト新着（§5.3。お知らせは依拠する機能が未実装のためタブを出さない）
-// - お問い合わせ返信・審査結果はここに出さない（v1.6）。ヘッダーのユーザーアイコンの件数と、メニューの
+// - お問い合わせ返信・審査結果はここに出さない。ヘッダーのユーザーアイコンの件数と、メニューの
 //   「お問い合わせ履歴」「提案履歴」の未読数で知らせる（§4.3。components/layout/UserDropdown.tsx）
-// - カード: 未読ドット・種別ラベル・本文・日時（相対表示、title に絶対時刻）。クリックで個別既読＋遷移（§5.4）
+// - カード: 種別ラベル・本文・日時（相対表示、title に絶対時刻）。未読ドットは日時の左に出す（左端に列を取らない、§5.4）。クリックで個別既読＋遷移（§5.4）
 // - ページネーション 20件（§5.5）。クライアント側で分割（通知は本人分のみで件数が小さい）
 // - 空状態2種（§5.7）。未ログインは /login へ（§5.1）
 // - 管理者向け「新着動画を再取得」はフェーズ6ステップ3で管理画面ダッシュボード（/admin）へ移設した
@@ -32,7 +32,7 @@ import { formatNewVideos, isFeedNotification } from '@/lib/notification-format';
 //   動画のサムネイルはネタバレになりうるので出さない。配信者の情報を持たない古い通知は、再生リストから補う
 // 見送り: 通知ドロップダウン（§4.2）、FCM プッシュ（§6）、90日保持バッチ（§8）
 
-// お問い合わせ返信・審査結果は読み込み時に除く（v1.6）
+// お問い合わせ返信・審査結果は読み込み時に除く（v1.7）
 type NotificationType = 'series_new_episode' | 'notice';
 type Filter = 'all' | 'unread' | NotificationType;
 
@@ -265,7 +265,6 @@ export default function NotificationsPage() {
                       onClick={() => handleOpen(n)}
                       className="flex w-full items-start gap-3 px-4 py-3 text-left md:px-[18px] md:py-[14px]"
                     >
-                      <span className="flex w-[7px] shrink-0 justify-center pt-[7px]">{!n.isRead && <UnreadDot />}</span>
                       {n.type === 'series_new_episode' && n.channelName && <ChannelIcon url={n.channelIconUrl} />}
                       <span className="flex min-w-0 flex-1 flex-col gap-1">
                         <span className="flex items-center justify-between gap-3">
@@ -277,9 +276,13 @@ export default function NotificationsPage() {
                               </span>
                             )}
                           </span>
-                          <time dateTime={n.createdAt ? new Date(n.createdAt).toISOString() : undefined} title={formatAbsolute(n.createdAt)} className="shrink-0 text-sm text-text-muted">
-                            {formatRelative(n.createdAt)}
-                          </time>
+                          {/* 未読ドットは日時の左に置く。左端に専用の列を取ると、既読のときに謎の空白になり中身も右に寄るため */}
+                          <span className="flex shrink-0 items-center gap-2">
+                            {!n.isRead && <UnreadDot />}
+                            <time dateTime={n.createdAt ? new Date(n.createdAt).toISOString() : undefined} title={formatAbsolute(n.createdAt)} className="text-sm text-text-muted">
+                              {formatRelative(n.createdAt)}
+                            </time>
+                          </span>
                         </span>
                         <span className={cn('text-base leading-relaxed', n.isRead ? 'text-text-secondary' : 'text-text-primary')}>{n.message}</span>
                         {n.type === 'series_new_episode' && n.newVideosText && (
