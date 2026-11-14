@@ -16,6 +16,7 @@ Notion「ユーザビリティ改善」の子タスク「マイページボタ�
 - `activeBottomTab` を「最初に一致したタブ」から「**一番長く一致したプレフィクス**のタブ」に変更。`/playlists/proposals` が「さがす」の `/playlists` に先に一致してしまうため
 - `components/ui/icons.tsx`: SettingsIcon・SendIcon・ShieldIcon・LogoutIcon を追加
 - 行は `trailing`（矢印の手前の補足）を受け取れる。未読件数を出すときはここに置く
+- `components/layout/BottomTabBar.tsx`: ログイン状態の読み込み中はログイン済みの遷移先にする（読み込み前に押すとアカウント作成へ飛んでいた。stg の E2E で発覚）
 - E2E: `e2e/mypage.spec.ts`（項目一覧・管理者だけの管理画面・プロフィールへの遷移・タブの遷移先とアクティブ表示・未ログインのタブ）、`e2e/smoke.spec.ts` に `/mypage` を追加
 
 ## ユーザー決定（2026-11-14）

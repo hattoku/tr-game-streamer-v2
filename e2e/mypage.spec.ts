@@ -50,6 +50,8 @@ test.describe('ボトムタブ（§4）', () => {
   test('ログイン中は「マイページ」タブで /mypage が開き、タブがアクティブになる', async ({ userPage }) => {
     await userPage.goto('/');
     const nav = userPage.getByRole('navigation', { name: 'メインナビゲーション' });
+    // 読み込み中でもログイン済みの遷移先になっている（ログイン状態の読み込み前に押してもアカウント作成へ飛ばない）
+    await expect(nav.getByRole('link', { name: 'マイページ' })).toHaveAttribute('href', '/mypage');
     await nav.getByRole('link', { name: 'マイページ' }).click();
     await expect(userPage).toHaveURL(/\/mypage$/);
     await expect(nav.getByRole('link', { name: 'マイページ' })).toHaveAttribute('aria-current', 'page');
