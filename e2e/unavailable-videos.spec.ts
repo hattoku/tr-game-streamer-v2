@@ -56,17 +56,6 @@ test('§7.2 再生リストから消えた動画は取り直しで消え、削�
   const playlist = await pickRealPlaylist();
   const before = playlist.data();
   const fakeRef = e2eDb().collection('videos').doc(`${playlist.id}_${FAKE_VIDEO_ID}`);
-  await fakeRef.set({
-    youtubeVideoId: FAKE_VIDEO_ID,
-    playlistId: playlist.id,
-    position: 1,
-    title: 'Deleted video',
-    thumbnailUrl: '',
-    durationSeconds: null,
-    publishedAt: new Date(),
-    playStartCount: 0,
-  });
-
   const privateRef = e2eDb().collection('playlists').doc(PLAYLIST_WITH_PRIVATE_VIDEO);
   const privateDoc = await privateRef.get();
   const privateTarget = privateDoc.exists && privateDoc.data()!.listingStatus !== 'channel_off' && privateDoc.data()!.youtubeItemCount != null;
@@ -76,22 +65,35 @@ test('§7.2 再生リストから消えた動画は取り直しで消え、削�
   const mylistExisted = (await mylistRef.get()).exists;
   let removedPublic: { ref: DocumentReference; data: FirebaseFirestore.DocumentData; title: string } | null = null;
   const startedAt = new Date();
-  if (privateTarget) {
-    if (!mylistExisted) {
-      await mylistRef.set({ userId: uid, playlistId: PLAYLIST_WITH_PRIVATE_VIDEO, watchStatus: 'want_to_watch', isReverseOrder: false, createdAt: startedAt, updatedAt: startedAt });
-    }
-    // 最終話（公開の動画）を消す。取り直しで「新しく増えた動画」として戻り、通知はこの1本だけになるはず
-    const last = await e2eDb().collection('videos').where('playlistId', '==', PLAYLIST_WITH_PRIVATE_VIDEO).orderBy('position', 'desc').limit(1).get();
-    const doc = last.docs[0];
-    removedPublic = { ref: doc.ref, data: doc.data(), title: doc.data().title };
-    await doc.ref.delete();
-  }
-
-  // 前回の動画数の記録をずらす（YouTube 側の数と違う＝変わった扱いにして取り直させる）
-  await playlist.ref.update({ youtubeItemCount: -1 });
-  if (privateTarget) await privateRef.update({ youtubeItemCount: -1 });
-
+  // 準備の途中で失敗しても finally で元に戻るよう、書き込みはすべて try の中で行う
   try {
+    await fakeRef.set({
+      youtubeVideoId: FAKE_VIDEO_ID,
+      playlistId: playlist.id,
+      position: 1,
+      title: 'Deleted video',
+      thumbnailUrl: '',
+      durationSeconds: null,
+      publishedAt: new Date(),
+      playStartCount: 0,
+    });
+
+    if (privateTarget) {
+      if (!mylistExisted) {
+        await mylistRef.set({ userId: uid, playlistId: PLAYLIST_WITH_PRIVATE_VIDEO, watchStatus: 'want_to_watch', isReverseOrder: false, createdAt: startedAt, updatedAt: startedAt });
+      }
+      // 最終話（公開の動画）を消す。取り直しで「新しく増えた動画」として戻り、通知はこの1本だけになるはず
+      // （playlistId＋position 降順の複合索引が無いので、全件取って手元で選ぶ）
+      const all = await e2eDb().collection('videos').where('playlistId', '==', PLAYLIST_WITH_PRIVATE_VIDEO).get();
+      const doc = all.docs.reduce((a, b) => (b.data().position > a.data().position ? b : a));
+      removedPublic = { ref: doc.ref, data: doc.data(), title: doc.data().title };
+      await doc.ref.delete();
+    }
+
+    // 前回の動画数の記録をずらす（YouTube 側の数と違う＝変わった扱いにして取り直させる）
+    await playlist.ref.update({ youtubeItemCount: -1 });
+    if (privateTarget) await privateRef.update({ youtubeItemCount: -1 });
+
     await runRefresh(adminPage);
 
     // 消えた動画のドキュメントが消え、話数が詰まっている
