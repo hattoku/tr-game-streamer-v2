@@ -1,5 +1,9 @@
 # 操作ログ
 
+## [2026-11-15] ingest | wiki への記録をマージの直前に変える
+作業中・レビュー待ちの PR には wiki を入れず、「マージ」と言われたときに最終的な内容で書いて PR に足してからマージする（ユーザー決定）。順番は wiki → マージ → Notion。ルート CLAUDE.md・development_flow.md §2・§5・wiki/CLAUDE.md・spec-conformance-reviewer を書き換え。
+→ [[2026-11-15-wiki-record-at-merge]]
+
 ## [2026-11-14] ingest | お問い合わせ返信と審査結果を通知一覧から分ける（PR #39）
 通知一覧・ベルは再生リスト新着専用にし、お問い合わせ返信・審査結果はユーザーアイコンの件数バッジとメニューの「未読 N」で知らせる。提案履歴に「新しい審査結果」と未読の印。通知一覧のタブはスマホでも1行に収まる3つに。
 → [[2026-11-14-notification-split-inquiry-review]]
