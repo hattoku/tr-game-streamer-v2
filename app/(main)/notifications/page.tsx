@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { collection, doc, getDocs, orderBy, query, updateDoc, where, writeBatch } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, orderBy, query, updateDoc, where, writeBatch } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/Button';
@@ -15,11 +15,12 @@ import { Tag } from '@/components/ui/Tag';
 import { useToast } from '@/components/ui/Toast';
 import { BellIcon, ChevronLeftIcon, ChevronRightIcon } from '@/components/ui/icons';
 import { cn } from '@/components/ui/cn';
+import { formatNewVideos } from '@/lib/notification-format';
 
 // 通知一覧ページ。document/specification/page/ページ ユーザー通知機能仕様書.md §5 準拠。
 // フェーズ2.5ステップ6でデザイン適用（wiki/sources/2026-09-11-phase2.5-design-plan.md §4）。
 // - 見出し＋「すべて既読にする」（§5.2, §5.6）
-// - フィルタタブは実装済み種別のみ: すべて／未読／シリーズ新着（§5.3。お知らせは依拠する機能が未実装のためタブを出さない。
+// - フィルタタブは実装済み種別のみ: すべて／未読／再生リスト新着（§5.3。お知らせは依拠する機能が未実装のためタブを出さない。
 //   審査結果・お問い合わせ返信は届いたことがあるときだけ出す）
 // - 審査結果（再生リスト登録提案、§2.1 実装状況 2026-10-25）: 承認は公開された再生リスト、見送りは提案履歴へ遷移
 // - カード: 未読ドット・種別ラベル・本文・日時（相対表示、title に絶対時刻）。クリックで個別既読＋遷移（§5.4）
@@ -27,6 +28,8 @@ import { cn } from '@/components/ui/cn';
 // - 空状態2種（§5.7）。未ログインは /login へ（§5.1）
 // - 管理者向け「新着動画を再取得」はフェーズ6ステップ3で管理画面ダッシュボード（/admin）へ移設した
 //   （app/api/admin/refresh-new-videos/route.ts。旧・ページ下部の「管理者用（暫定）」カードは撤去）
+// - 再生リスト新着: 配信者アイコン・配信者名と、新しく増えた動画のタイトル（先頭1本＋「ほかN本」）を出す（§2.1・§5.4、v1.4）。
+//   動画のサムネイルはネタバレになりうるので出さない。配信者の情報を持たない古い通知は、再生リストから補う
 // 見送り: 通知ドロップダウン（§4.2）、FCM プッシュ（§6）、90日保持バッチ（§8）
 
 type NotificationType = 'series_new_episode' | 'notice' | 'review_result' | 'inquiry_reply';
@@ -40,10 +43,18 @@ interface NotificationItem {
   playlistId: string | null;
   inquiryId: string | null;
   createdAt: number;
+  /** 再生リスト新着: 配信者名・アイコン（古い通知では空。再生リストから補う） */
+  channelName: string;
+  channelIconUrl: string;
+  /** 再生リスト新着: 新しく増えた動画のタイトル（再生リストの並び順。古い通知では空）と本数 */
+  newVideoTitles: string[];
+  newVideoCount: number;
+  /** 表示用「#6 〇〇〇〇 ほか1本」（増えた動画が分からない古い通知は null） */
+  newVideosText: string | null;
 }
 
 const TYPE_LABEL: Record<NotificationType, string> = {
-  series_new_episode: 'シリーズ新着',
+  series_new_episode: '再生リスト新着',
   notice: 'お知らせ',
   review_result: '審査結果',
   inquiry_reply: 'お問い合わせ返信',
@@ -82,6 +93,8 @@ export default function NotificationsPage() {
   const [filter, setFilter] = useState<Filter>('all');
   const [page, setPage] = useState(1);
   const [marking, setMarking] = useState(false);
+  // 配信者の情報を補いに行った再生リスト（読めなかったものを何度も読みに行かないように）
+  const channelLookedUpRef = useRef(new Set<string>());
 
   useEffect(() => {
     if (!loading && !user) router.replace('/login');
@@ -98,9 +111,44 @@ export default function NotificationsPage() {
         playlistId: d.data().playlistId ?? null,
         inquiryId: d.data().inquiryId ?? null,
         createdAt: d.data().createdAt?.toMillis?.() ?? 0,
-      })),
+        channelName: d.data().channelName ?? '',
+        channelIconUrl: d.data().channelIconUrl ?? '',
+        newVideoTitles: Array.isArray(d.data().newVideoTitles) ? d.data().newVideoTitles : [],
+        newVideoCount: typeof d.data().newVideoCount === 'number' ? d.data().newVideoCount : 0,
+      })).map((n) => ({ ...n, newVideosText: formatNewVideos(n.newVideoTitles, n.newVideoCount) })),
     );
   }
+
+  // 配信者の情報を持たない古い再生リスト新着通知は、再生リストのドキュメントから配信者名・アイコンを補う。
+  // 非公開になった再生リストは読めないので、補えないまま（配信者の行を出さない）
+  useEffect(() => {
+    if (!items) return;
+    const missing = [...new Set(items.filter((n) => n.type === 'series_new_episode' && n.playlistId && !n.channelName).map((n) => n.playlistId as string))].filter(
+      (id) => !channelLookedUpRef.current.has(id),
+    );
+    if (missing.length === 0) return;
+    missing.forEach((id) => channelLookedUpRef.current.add(id));
+    let cancelled = false;
+    (async () => {
+      const found = new Map<string, { channelName: string; channelIconUrl: string }>();
+      await Promise.all(
+        missing.map(async (id) => {
+          try {
+            const snap = await getDoc(doc(db, 'playlists', id));
+            const name = snap.data()?.channelName;
+            if (typeof name === 'string' && name) found.set(id, { channelName: name, channelIconUrl: snap.data()?.channelIconUrl ?? '' });
+          } catch {
+            // 読めない再生リストは補わない
+          }
+        }),
+      );
+      if (cancelled || found.size === 0) return;
+      setItems((prev) => prev?.map((n) => (n.playlistId && !n.channelName && found.has(n.playlistId) ? { ...n, ...found.get(n.playlistId)! } : n)) ?? prev);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [items]);
 
   useEffect(() => {
     if (!user) return;
@@ -154,7 +202,7 @@ export default function NotificationsPage() {
         toast({ type: 'error', message: '既読にできませんでした' });
       }
     }
-    // 遷移先（§2.1）: シリーズ新着は該当再生リストの動画プレーヤーページ
+    // 遷移先（§2.1）: 再生リスト新着は該当再生リストの動画プレーヤーページ
     if (n.type === 'series_new_episode' && n.playlistId) router.push(`/playlists/${n.playlistId}`);
     // お問い合わせ返信は該当スレッド（フェーズ7ステップ7-3-2）
     if (n.type === 'inquiry_reply' && n.inquiryId) router.push(`/contact/history/${n.inquiryId}`);
@@ -209,7 +257,7 @@ export default function NotificationsPage() {
                 未読
               </TabsTrigger>
               <TabsTrigger value="series_new_episode" count={counts.series_new_episode}>
-                シリーズ新着
+                再生リスト新着
               </TabsTrigger>
               {/* 届いたことがある種別だけタブを出す（お知らせの通知は未実装） */}
               {counts.review_result > 0 && (
@@ -238,14 +286,27 @@ export default function NotificationsPage() {
                       className="flex w-full items-start gap-3 px-4 py-3 text-left md:px-[18px] md:py-[14px]"
                     >
                       <span className="flex w-[7px] shrink-0 justify-center pt-[7px]">{!n.isRead && <UnreadDot />}</span>
+                      {n.type === 'series_new_episode' && n.channelName && <ChannelIcon url={n.channelIconUrl} />}
                       <span className="flex min-w-0 flex-1 flex-col gap-1">
                         <span className="flex items-center justify-between gap-3">
-                          <Tag emphasis={!n.isRead}>{TYPE_LABEL[n.type] ?? '通知'}</Tag>
+                          <span className="flex min-w-0 items-center gap-2">
+                            <Tag emphasis={!n.isRead} className="shrink-0 whitespace-nowrap">{TYPE_LABEL[n.type] ?? '通知'}</Tag>
+                            {n.type === 'series_new_episode' && n.channelName && (
+                              <span className="min-w-0 truncate text-md text-text-tertiary" data-testid="notification-channel">
+                                {n.channelName}
+                              </span>
+                            )}
+                          </span>
                           <time dateTime={n.createdAt ? new Date(n.createdAt).toISOString() : undefined} title={formatAbsolute(n.createdAt)} className="shrink-0 text-sm text-text-muted">
                             {formatRelative(n.createdAt)}
                           </time>
                         </span>
                         <span className={cn('text-base leading-relaxed', n.isRead ? 'text-text-secondary' : 'text-text-primary')}>{n.message}</span>
+                        {n.type === 'series_new_episode' && n.newVideosText && (
+                          <span className="line-clamp-2 text-md leading-snug text-text-tertiary" data-testid="notification-new-videos">
+                            {n.newVideosText}
+                          </span>
+                        )}
                       </span>
                     </button>
                   </Card>
@@ -272,6 +333,17 @@ export default function NotificationsPage() {
         </>
       )}
     </div>
+  );
+}
+
+/** 配信者のアイコン（丸）。URLが空なら同じ大きさの丸だけ出して、行の位置をそろえる */
+function ChannelIcon({ url }: { url: string }) {
+  return url ? (
+    // referrerPolicy: yt3.ggpht.com の Referer 制限対策（PlaylistSummary 参照）
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={url} alt="" referrerPolicy="no-referrer" className="mt-[2px] size-9 shrink-0 rounded-full" loading="lazy" />
+  ) : (
+    <span aria-hidden className="mt-[2px] size-9 shrink-0 rounded-full bg-bg-btn" />
   );
 }
 

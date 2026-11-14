@@ -16,6 +16,8 @@ export interface StoredVideos {
   newCount: number;
   /** 再生リストから消えたので消した動画の数 */
   removedCount: number;
+  /** 今回はじめて保存した動画（再生リストの並び順） */
+  newItems: PlaylistItemSnippet[];
   /** 一番新しい動画の公開日時（動画が無ければ null） */
   latestPublishedAt: Date | null;
 }
@@ -31,7 +33,7 @@ export async function fetchAndStoreAllVideos(playlistId: string): Promise<Stored
   const existingSnap = await adminDb.collection('videos').where('playlistId', '==', playlistId).select().get();
   const existing = new Set(existingSnap.docs.map((d) => d.id));
 
-  let newCount = 0;
+  const newItems: PlaylistItemSnippet[] = [];
   for (let start = 0; start < items.length; start += WRITE_CHUNK_SIZE) {
     const batch = adminDb.batch();
     for (const item of items.slice(start, start + WRITE_CHUNK_SIZE)) {
@@ -44,12 +46,13 @@ export async function fetchAndStoreAllVideos(playlistId: string): Promise<Stored
         thumbnailUrl: item.thumbnailUrl,
         durationSeconds: durations.get(item.youtubeVideoId) ?? null,
         publishedAt: new Date(item.publishedAt),
+        addedToPlaylistAt: new Date(item.addedAt),
       };
       if (existing.has(ref.id)) {
         batch.update(ref, fields);
       } else {
         batch.set(ref, { ...fields, playStartCount: 0 });
-        newCount++;
+        newItems.push(item);
       }
     }
     await batch.commit();
@@ -64,5 +67,6 @@ export async function fetchAndStoreAllVideos(playlistId: string): Promise<Stored
   }
 
   const latest = items.length > 0 ? items.reduce((l, i) => (i.publishedAt > l ? i.publishedAt : l), items[0].publishedAt) : null;
-  return { items, newCount, removedCount: removed.length, latestPublishedAt: latest ? new Date(latest) : null };
+  newItems.sort((a, b) => a.position - b.position);
+  return { items, newCount: newItems.length, newItems, removedCount: removed.length, latestPublishedAt: latest ? new Date(latest) : null };
 }

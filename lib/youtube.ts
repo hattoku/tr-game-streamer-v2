@@ -110,7 +110,10 @@ export interface PlaylistItemSnippet {
   title: string;
   thumbnailUrl: string;
   position: number;
+  /** 動画の投稿日時（contentDetails.videoPublishedAt。削除済み・非公開などで無いときは再生リストに追加された日時） */
   publishedAt: string;
+  /** 再生リストに追加された日時（snippet.publishedAt） */
+  addedAt: string;
 }
 
 /** 再生リストURLからYouTube再生リストID（`list`クエリパラメータ）を抽出する。見つからなければnull。 */
@@ -238,10 +241,13 @@ export async function fetchPlaylistItems(playlistId: string): Promise<PlaylistIt
           resourceId: { videoId: string };
         };
         status?: { privacyStatus?: string };
+        contentDetails?: { videoPublishedAt?: string };
       }>;
       nextPageToken?: string;
     }>('playlistItems', {
-      part: 'snippet,status',
+      // snippet.publishedAt は再生リストに追加された日時なので、動画の投稿日時は contentDetails から取る（ユニット数は変わらない）。
+      // status は削除・非公開の動画を除くため
+      part: 'snippet,contentDetails,status',
       playlistId,
       maxResults: '50',
       ...(pageToken ? { pageToken } : {}),
@@ -254,7 +260,8 @@ export async function fetchPlaylistItems(playlistId: string): Promise<PlaylistIt
         title: item.snippet.title,
         thumbnailUrl: bestThumbnailUrl(item.snippet.thumbnails),
         position: item.snippet.position,
-        publishedAt: item.snippet.publishedAt,
+        publishedAt: item.contentDetails?.videoPublishedAt ?? item.snippet.publishedAt,
+        addedAt: item.snippet.publishedAt,
       });
     }
     pageToken = nextPageTokenOrStop(pageToken, data.nextPageToken, data.items.length, ++pageCount);
