@@ -120,10 +120,8 @@ test('動画プレーヤー仕様書「各動画に表示する情報」動画�
   await guestPage.goto(`/playlists/${playlistId}`);
   const oldRow = guestPage.getByRole('listitem').filter({ hasText: '[E2E] 古い話' });
   const newRow = guestPage.getByRole('listitem').filter({ hasText: '[E2E] 新しい話' });
-  const md = (d: Date) => {
-    const y = d.getFullYear() === new Date(now).getFullYear() ? '' : `${d.getFullYear()}/`;
-    return `${y}${d.getMonth() + 1}/${d.getDate()}`;
-  };
+  // 投稿日は常に年つき（動画プレーヤー仕様書 v1.20）
+  const md = (d: Date) => `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
   await expect(oldRow.getByTestId('video-published-date')).toHaveText(md(old));
   await expect(newRow.getByTestId('video-published-date')).toHaveText(md(recent));
   await expect(newRow.getByText('NEW')).toBeVisible();
