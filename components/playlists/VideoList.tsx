@@ -9,9 +9,9 @@
  *   フッターの「広げる」で従来の高さに広げ、「縮める」で約3話分に戻せる（状態は保存しない）。
  *   設定「先の話のサムネイルを隠す」がONの場合、hiddenThumbnailIds の話はサムネイルの代わりに
  *   話数のプレースホルダーを表示する（どの話を隠すかの判定は呼び出し側）
- * - 再生時間はサムネイルの右下に重ねる（タイトル下に投稿日と並べると、その時刻に投稿されたように見えるため。v1.20）。
+ * - 再生時間はサムネイルの右下に重ねる（タイトル下に投稿日と並べると、その時刻に投稿されたように見えるため。v1.21）。
  *   尺が取れない動画は出さない
- * - タイトル下に投稿日（「11/12」、今年でなければ「2025/11/12」）。投稿から7日以内の動画には「NEW」バッジ。
+ * - タイトル下に投稿日（常に年つきの「2026/11/12」）。投稿から7日以内の動画には「NEW」バッジ。
  *   昔の動画をあとから再生リストに足したとき（新着通知は届く）も分かるよう、再生リストに追加されてから7日以内も NEW にする
  *   （動画プレーヤー仕様書「各動画に表示する情報」v1.19。新着通知から来たときにどれが新しいか分かるように）
  * - リスト最下部（スクロール領域外）に参照元URL「YouTubeの再生リストを見る」リンク
@@ -50,12 +50,11 @@ export function isNewVideo(video: Pick<VideoItem, 'publishedAt' | 'addedToPlayli
   return withinNewDays(video.publishedAt, now) || withinNewDays(video.addedToPlaylistAt, now);
 }
 
-/** 投稿日の表示。今年なら「11/12」、それ以外は「2025/11/12」 */
-export function formatPublishedDate(publishedAt: number | null | undefined, now = Date.now()): string | null {
+/** 投稿日の表示。常に年つきの「2026/11/12」（昔の動画があとから再生リストに足されることがあるため） */
+export function formatPublishedDate(publishedAt: number | null | undefined): string | null {
   if (publishedAt == null) return null;
   const d = new Date(publishedAt);
-  const md = `${d.getMonth() + 1}/${d.getDate()}`;
-  return d.getFullYear() === new Date(now).getFullYear() ? md : `${d.getFullYear()}/${md}`;
+  return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
 }
 
 interface VideoListProps {
@@ -128,7 +127,7 @@ export function VideoList({
     <Card flush className={cn('flex flex-col', className)}>
       <div className="flex items-center justify-between gap-3 px-[18px] pt-4 pb-3">
         <CardTitle>
-          動画リスト <span className="ml-1 text-md font-normal text-text-muted">{videos.length}話</span>
+          再生リストの登録動画 <span className="ml-1 text-md font-normal text-text-muted">{videos.length}話</span>
         </CardTitle>
         <Checkbox label="逆順" checked={reverseOrder} onChange={(e) => onReverseToggle(e.target.checked)} className="text-md" />
       </div>
@@ -192,7 +191,7 @@ export function VideoList({
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className={cn('line-clamp-2 text-md leading-snug', isCurrent ? 'text-text-primary' : 'text-text-secondary')}>{video.title}</span>
-                    <span className="mt-1 flex items-center gap-2 text-sm text-text-faint empty:hidden">
+                    <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 whitespace-nowrap text-sm text-text-faint empty:hidden">
                       {formatPublishedDate(video.publishedAt) && (
                         <time dateTime={new Date(video.publishedAt!).toISOString()} data-testid="video-published-date">
                           {formatPublishedDate(video.publishedAt)}
