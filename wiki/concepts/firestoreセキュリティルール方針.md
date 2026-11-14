@@ -2,7 +2,7 @@
 title: Firestoreセキュリティルール方針
 type: concept
 date: 2026-09-09
-updated: 2026-09-09
+updated: 2026-11-14
 ---
 
 # Firestoreセキュリティルール方針
@@ -63,6 +63,8 @@ Firestoreルールはドキュメント単位が基本だが、以下は `diff()
 - 例: `inquiries.operatorMemo`（対応メモ、管理者のみ閲覧）。送信者本人は自分の `inquiries` を読めるため、ユーザー側の履歴ページ（フェーズ7ステップ7-3-2）を
   クライアント購読で作るとメモが漏れる。対策は「管理者専用の別ドキュメント／サブコレクションへ分離」か「Admin SDK の API でフィールドを選んで返す」
   （プロフィールの公開APIと同じ考え方）。→ [[2026-10-14-phase7-step7-3-1-inquiries]]
+- 7-3-2 では「Admin SDK の API で返す」を採り、rules で本人の `inquiries` 直接読み取りを閉じた（[[2026-10-24-phase7-step7-3-2-inquiry-history]]）。
+  お問い合わせの添付画像も同じく Storage を全拒否にして API 経由で返す（[[2026-10-28-inquiry-image-attachments]]）
 
 ## 意図的に将来課題として残した点
 

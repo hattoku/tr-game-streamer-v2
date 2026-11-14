@@ -2,7 +2,7 @@
 title: プロジェクト概要
 type: meta
 date: 2026-09-08
-updated: 2026-09-09
+updated: 2026-11-14
 ---
 
 # tr-game-streamer-v2 概要
@@ -28,3 +28,15 @@ Next.js 16 + Firebase(Firestore) 製のゲーム実況・配信系Webサービ�
 企画・仕様の中身そのものは [[CLAUDE.md|役割分担]] によりこのWikiでは扱わない。
 実装作業中に参照した仕様書があれば、このWiki側では「実装がどう仕様に対応したか」
 という観点で [[sources]] にセッション記録として残す。
+
+## 2026-11 時点の構造（リブランディング後）
+
+- **掲載チャンネル起点のキュレーション**: 掲載チャンネル（DB は `exploration_channels`）の再生リストを毎日の巡回（`lib/channel-sweep.ts`）で全件保存し、
+  `playlists.listingStatus` で一般画面に出すかを決める → [[掲載状態と検索面]]
+- **一覧はサーバー側検索**: Cloud Run のメモリ索引（[[catalog-server]]）から `/api/catalog/*` で1ページずつ返す
+- **定期ジョブ（Cloud Scheduler → Cloud Run、`X-Cron-Secret`）**: `refresh-new-videos-daily` 6:00（新着の差分取得＋巡回＋30日ルール）、
+  `channel-popularity-daily` 4:00（人気の集計）、`purge-inquiry-attachments-daily` 4:30（添付画像の削除）
+- **Storage**: お問い合わせの添付画像だけ。US-EAST1、クライアントは全拒否で API 経由
+- **テスト**: stg に対する Playwright E2E（`e2e/`、[[2026-10-25-e2e-foundation]]）。stg へのデプロイはクラウドから（[[クラウドからのstgデプロイ]]）、本番はユーザーの手元から
+- まとめ機能は取り下げ中（`lib/feature-flags.ts`、データとコードは残す）
+

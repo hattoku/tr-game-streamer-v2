@@ -1,5 +1,21 @@
 # 操作ログ
 
+## [2026-11-14] lint | wiki の記録漏れの洗い出し
+2026-10-26 の 7-5 の記録を最後に、PR #2・#4〜#34 と 7-3-2・本番デプロイ（2026-11-11）が wiki に記録されていなかった（仕様書 `document/` は各 PR で更新済み）。
+原因は、Ingest の手順が `wiki/CLAUDE.md` にしか無く、作業のたびに読むルートの `CLAUDE.md`・`.agent/rules/development_flow.md` に無かったこと。
+両方に「PR ごとに wiki を記録する」を足し、下の ingest でまとめて追記した。`index.md` に 7-4・7-5 の行が抜けていたのも直した。
+
+## [2026-11-14] ingest | 2026-10-24〜11-14 の未記録分（PR #2・#4〜#34、7-3-2、本番デプロイ）
+PR の説明・コミット・プロジェクトメモリから sources 25ページを作成（関連する PR はまとめた）。
+→ [[2026-10-24-phase7-step7-3-2-inquiry-history]] / [[2026-10-25-e2e-foundation]] / [[2026-10-25-pwa-static-cache]] / [[2026-10-25-top-featured-exclude-completed]] /
+[[2026-10-25-admin-header-purple]] / [[2026-10-26-proposal-review-two-step]] / [[2026-10-28-collection-bulk-approve-new-games]] / [[2026-10-28-inquiry-image-attachments]] /
+[[2026-10-28-cloud-stg-deploy]] / [[2026-10-28-player-sleep-recovery]] / [[2026-11-01-collection-rakuten-pick-and-game-unset]] / [[2026-11-01-new-videos-diff-refresh]] /
+[[2026-11-01-rebranding-docs]] / [[2026-11-01-rebranding-stage2-collections-withdrawn]] / [[2026-11-01-rebranding-stage3-listing-status]] / [[2026-11-04-game-unset-user-link-and-proposal]] /
+[[2026-11-08-rebranding-stage4-sweep]] / [[2026-11-08-rebranding-stage6-applications]] / [[2026-11-08-rebranding-stage7-server-search]] / [[2026-11-08-rebranding-stage5-popular-channels]] /
+[[2026-11-11-production-deploy]] / [[2026-11-12-package-image-resolution]] / [[2026-11-12-collection-review-images-icons]] / [[2026-11-14-unavailable-videos]] / [[2026-11-14-new-video-notification-and-videolist]]
+concepts を6つ新設（[[YouTube Data APIのハマりどころ]] / [[YouTubeデータの30日ルール]] / [[掲載状態と検索面]] / [[楽天画像URLのサイズ指定]] / [[クラウドからのstgデプロイ]] / [[stgとE2Eの同時実行]]）、
+entity [[catalog-server]] を新設。[[proxy]]・[[firestoreセキュリティルール方針]]・[[overview]] を更新。
+
 ## [2026-10-26] ingest | session: フェーズ7ステップ7-5 有名チャンネル起点の再生リスト自動探索
 友人テスト前のコンテンツ不足を受け、コンテンツ収集仕様をチャンネル起点に改訂（v3.0）し最小版を実装。探索対象チャンネルの管理、
 週1/手動の探索、収集候補のまとめて承認（楽天自動検索つき）、タグ編集モーダルのカテゴリ別一覧、ユーザータグは使用数3以上のみ一覧表示。
