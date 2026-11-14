@@ -7,7 +7,7 @@
  */
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import { CountLabel } from '@/components/ui/Badge';
+import { EpisodeCount } from '@/components/ui/Badge';
 import { Card, THUMBNAIL_HOVER_IMG_CLASS } from '@/components/ui/Card';
 import { cn } from '@/components/ui/cn';
 import type { ProfilePlaylistJson } from '@/lib/profile';
@@ -20,7 +20,7 @@ export function ProfilePlaylistCard({
 }: {
   playlist: ProfilePlaylistJson;
   meta: ReactNode;
-  /** サムネイル右下に話数を出す（マイリストカード。TOPのマイリストカードと同じ表記） */
+  /** 話数を出す（マイリストカード）。サムネイルには重ねず、ステータスなどの行の先頭に置く */
   showVideoCount?: boolean;
   children?: ReactNode;
 }) {
@@ -43,7 +43,6 @@ export function ProfilePlaylistCard({
                 loading="lazy"
               />
             )}
-            {showVideoCount && p.videoCount > 0 && <CountLabel className="absolute bottom-1 right-1">{p.videoCount}話</CountLabel>}
           </span>
         </Link>
         <div className="flex min-w-0 flex-1 flex-col gap-[6px]">
@@ -58,7 +57,10 @@ export function ProfilePlaylistCard({
             ) : (
               <span className="truncate text-sm text-text-tertiary">{p.gameName}</span>
             ))}
-          <div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 pt-1">{meta}</div>
+          <div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 pt-1">
+            {showVideoCount && p.videoCount > 0 && <EpisodeCount count={p.videoCount} className="text-sm text-text-tertiary" />}
+            {meta}
+          </div>
         </div>
       </div>
       {children}

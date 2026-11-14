@@ -8,7 +8,7 @@ export interface ProfilePlaylistJson {
   id: string;
   title: string;
   thumbnailUrl: string;
-  /** 話数（マイリストカードのサムネイル右下に出す） */
+  /** 話数（マイリストカードのステータスの行に出す。サムネイルには重ねない） */
   videoCount: number;
   gameId: string | null;
   gameName: string;

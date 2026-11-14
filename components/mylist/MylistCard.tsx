@@ -1,6 +1,6 @@
 /**
  * マイリストのカード（ページ マイリスト機能仕様書 §5、共通 デザイントークン仕様書 v2.0 §6.1・§6.5・§6.6）。
- * - 親エリア: 再生リストのサムネイル（話数）・タイトル・配信者・ステータスチップ（クリックで変更ドロップダウン §5.8）・
+ * - 親エリア: 再生リストのサムネイル・タイトル・配信者と話数・ステータスチップ（クリックで変更ドロップダウン §5.8）・
  *   まとめに追加（まとめ機能仕様書 §4.1）・削除（ゴーストボタン）
  *   （逆順の切り替えは v1.13 で外し、再生リストページ側だけに置く §5.5。設定値 isReverseOrder は話数の計算に使う）
  * - 子エリア: 最後に再生した動画（§5.3）。サムネイル（右下に再生時間）＋進捗バー 3px・タイトル（省略せず折り返し）・
@@ -15,7 +15,7 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import { Card, CardChildArea } from '@/components/ui/Card';
-import { CountLabel, NewBadge } from '@/components/ui/Badge';
+import { CountLabel, EpisodeCount, NewBadge } from '@/components/ui/Badge';
 import { StatusChip, WATCH_STATUS_LABEL, WATCH_STATUS_ORDER, type WatchStatus } from '@/components/ui/Chip';
 import {
   DropdownMenu,
@@ -89,8 +89,7 @@ export function MylistCard({ entry, onStatusChange, onRemove }: MylistCardProps)
               <img src={p.thumbnailUrl} alt="" className="absolute inset-0 size-full object-cover" loading="lazy" />
             )}
           </span>
-          <span aria-hidden className="absolute inset-x-0 bottom-0 h-[46%] bg-thumb-overlay" />
-          {p && <CountLabel className="absolute bottom-2 right-2">{p.videoCount}話</CountLabel>}
+          {/* 再生リストの表紙へ遷移するため、サムネイルに話数は重ねない（話数は配信者の横。§5.2） */}
         </Link>
 
         <div className="flex min-w-0 flex-1 flex-col gap-[6px] md:gap-[10px]">
@@ -107,6 +106,7 @@ export function MylistCard({ entry, onStatusChange, onRemove }: MylistCardProps)
                 <span className="size-[18px] shrink-0 rounded-full bg-bg-btn md:size-[22px]" />
               )}
               <span className="truncate text-sm text-text-tertiary md:text-md">{p.channelName}</span>
+              <EpisodeCount count={p.videoCount} className="text-sm text-text-muted md:text-md" />
             </div>
           )}
           {/* PC ではここに操作列。モバイルは下に回す */}

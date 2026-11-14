@@ -7,7 +7,7 @@
  */
 import Link from 'next/link';
 import { Card, CardChildArea } from '@/components/ui/Card';
-import { CountLabel, NewBadge } from '@/components/ui/Badge';
+import { EpisodeCount, NewBadge } from '@/components/ui/Badge';
 import { StatusChip } from '@/components/ui/Chip';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import type { MylistEntry } from '@/lib/mylist-entries';
@@ -29,12 +29,7 @@ export function TopMylistCard({ entry, className }: { entry: MylistEntry; classN
             // eslint-disable-next-line @next/next/no-img-element
             <img src={thumbnailUrl} alt="" className="absolute inset-0 size-full object-cover" loading="lazy" />
           )}
-          <div aria-hidden className="absolute inset-x-0 bottom-0 h-[46%] bg-thumb-overlay" />
-          {p && (
-            <CountLabel className="absolute bottom-2 right-2">
-              {lp?.episodeNumber != null ? `${lp.episodeNumber} / ${p.videoCount}話` : `${p.videoCount}話`}
-            </CountLabel>
-          )}
+          {/* 再生リストの表紙（詳細ページ）へ遷移するため、サムネイルに話数は重ねない（§5.4。話数はステータスの横） */}
           {lp && (
             <ProgressBar
               value={lp.percent}
@@ -60,8 +55,9 @@ export function TopMylistCard({ entry, className }: { entry: MylistEntry; classN
               <span className="truncate text-md text-text-tertiary">{p.channelName}</span>
             </div>
           )}
-          <div className="mt-auto">
+          <div className="mt-auto flex items-center gap-3">
             <StatusChip status={entry.watchStatus} active readOnly />
+            {p && <EpisodeCount count={p.videoCount} current={lp?.episodeNumber} className="text-md text-text-tertiary" />}
           </div>
         </div>
 
