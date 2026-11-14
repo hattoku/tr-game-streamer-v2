@@ -184,7 +184,7 @@ export function VideoList({
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className={cn('line-clamp-2 text-md leading-snug', isCurrent ? 'text-text-primary' : 'text-text-secondary')}>{video.title}</span>
-                    <span className="mt-1 flex items-center gap-2 text-sm text-text-faint">
+                    <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 whitespace-nowrap text-sm text-text-faint">
                       <span>{formatDuration(video.durationSeconds)}</span>
                       {formatPublishedDate(video.publishedAt) && (
                         <time dateTime={new Date(video.publishedAt!).toISOString()} data-testid="video-published-date">
