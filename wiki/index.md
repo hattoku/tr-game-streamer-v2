@@ -2,7 +2,7 @@
 title: Wiki索引
 type: meta
 date: 2026-09-08
-updated: 2026-11-14
+updated: 2026-11-15
 ---
 
 
@@ -81,6 +81,7 @@ tr-game-streamer-v2 の**コーディング支援用**Wiki（実装の変更履�
 - [[2026-11-14-notification-unread-dot]] — 通知カードの未読ドットを左端の列から日時の左へ（既読時の左の空白をなくす）
 - [[2026-11-14-notification-split-inquiry-review]] — お問い合わせ返信・審査結果を通知一覧・ベルから外し、ユーザーアイコンの件数とメニューの未読数・提案履歴の「新しい審査結果」で知らせる（PR #39）
 - [[2026-11-14-mylist-continue-row]] — マイリストの「続きから再生」を幅いっぱいの赤ボタンから行全体のリンク＋右端の丸い再生アイコンに（iPhone は右矢印）
+- [[2026-11-15-wiki-record-at-merge]] — wiki への記録を「作業中の PR の中」から「「マージ」と言われたとき、マージの直前に同じ PR の中」へ（stg の直しで wiki だけ古くなるのを防ぐ）
 
 ## Entities
 - [[proxy]] — proxy.ts（旧middleware.ts、Next.js 16のproxy規約対応）。まとめ取り下げ後は `/collections*` を 404 に書き換える

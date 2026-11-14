@@ -14,7 +14,9 @@
 
 # Wiki への記録
 
-コード・スクリプト・設定を変える PR では、**その PR の中で** `wiki/` に記録すること（`wiki/sources/` にページ、`wiki/index.md`・`wiki/log.md` に1行ずつ）。
+コード・スクリプト・設定を変える PR では、**ユーザーから「マージ」と言われたとき、マージの直前に**、その PR に `wiki/` の記録を足すこと
+（`wiki/sources/` にページ、`wiki/index.md`・`wiki/log.md` に1行ずつ）。作業中・レビュー待ちの PR には wiki を入れない
+（stg で確認して直しが入ると wiki だけ古くなるため）。順番は「wiki を書く → main へマージ → Notion のチケットを完了・main済み」。
 マージ後に回さない。書き方は `wiki/CLAUDE.md`、いつ・何を書くかは `.agent/rules/development_flow.md` §5。
-完了報告では、仕様書・E2E と並べて wiki に記録したページを書き添える。
+マージの報告では、wiki に記録したページを書き添える。
 
