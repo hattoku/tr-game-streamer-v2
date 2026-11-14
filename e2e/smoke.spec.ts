@@ -20,6 +20,7 @@ const GUEST_PAGES: PageCase[] = [
 
 const USER_PAGES: PageCase[] = [
   { path: '/mylist', heading: 'マイリスト' },
+  { path: '/mypage', heading: 'マイページ' },
   { path: '/history', heading: '視聴履歴' },
   { path: '/notifications', heading: '通知' },
   { path: '/settings', heading: '設定' },
@@ -86,7 +87,7 @@ test.describe('未ログイン', () => {
     });
   }
 
-  for (const path of ['/mylist', '/settings', '/contact/history']) {
+  for (const path of ['/mylist', '/mypage', '/settings', '/contact/history']) {
     test(`${path} は /login へ誘導される`, async ({ guestPage }) => {
       await guestPage.goto(path);
       await expect(guestPage).toHaveURL(/\/login(\?|$)/);
