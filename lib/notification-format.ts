@@ -13,7 +13,6 @@ export function formatNewVideos(titles: string[], count: number): string | null 
  * ヘッダーのユーザーアイコンの件数と、メニューの「お問い合わせ履歴」「提案履歴」の未読数で知らせる。
  */
 export const ACCOUNT_NOTIFICATION_TYPES = ['inquiry_reply', 'review_result'] as const;
-export type AccountNotificationType = (typeof ACCOUNT_NOTIFICATION_TYPES)[number];
 
 /** 通知一覧・ベルに出す種別か（お問い合わせ返信・審査結果以外。種別のない古い通知は再生リスト新着として扱う） */
 export function isFeedNotification(type: unknown): boolean {

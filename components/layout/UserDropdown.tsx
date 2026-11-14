@@ -22,6 +22,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/DropdownMenu';
 import { ChevronDownIcon } from '@/components/ui/icons';
+import { UnreadDot } from '@/components/ui/Badge';
 import { cn } from '@/components/ui/cn';
 import { USER_NAV } from './nav';
 import { formatBadgeCount, usePendingWorkflowCount } from '@/components/admin/usePendingWorkflowCount';
@@ -167,8 +168,8 @@ function MenuItemWithUnread({ label, count }: { label: string; count: number }) 
       {label}
       {count > 0 && (
         <span className="inline-flex items-center gap-[6px] text-md text-text-secondary">
-          {/* 未読インジケーター（UnreadDot と同じ見た目。直後の「未読」の文字と重ねて読み上げないよう aria-hidden） */}
-          <span aria-hidden className="inline-block size-[7px] rounded-full bg-brand-primary" />
+          {/* 直後の「未読」の文字と重ねて読み上げないよう装飾扱い */}
+          <UnreadDot decorative />
           未読 {formatBadgeCount(count)}
         </span>
       )}

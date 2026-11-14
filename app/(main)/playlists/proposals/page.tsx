@@ -124,9 +124,12 @@ export default function ProposalHistoryPage() {
           .sort((a, b) => b.createdAt - a.createdAt);
         if (results.length === 0) return;
         setUnseen(results);
-        const batch = writeBatch(db);
-        results.forEach((r) => batch.update(doc(db, 'notifications', r.id), { isRead: true }));
-        await batch.commit();
+        // writeBatch は 500 件まで（通知一覧の一括既読と同じく 450 件ずつ）
+        for (let i = 0; i < results.length; i += 450) {
+          const batch = writeBatch(db);
+          results.slice(i, i + 450).forEach((r) => batch.update(doc(db, 'notifications', r.id), { isRead: true }));
+          await batch.commit();
+        }
       } catch (e) {
         console.error('審査結果の通知の読み込みに失敗しました', e);
       }
@@ -152,7 +155,7 @@ export default function ProposalHistoryPage() {
       {unseen.length > 0 && (
         <Card className="flex flex-col gap-3" data-testid="unseen-review-results">
           <h2 className="flex items-center gap-2 text-lg font-semibold text-text-primary">
-            <UnreadDot />
+            <UnreadDot decorative />
             新しい審査結果
           </h2>
           <ul className="flex flex-col gap-2">
