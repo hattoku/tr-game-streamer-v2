@@ -122,7 +122,7 @@ export default function SettingsPage() {
             onChange={(e) => toggleField('hideUpcomingThumbnails', e.target.checked)}
             className="mt-4"
           />
-          <p className="mt-1 text-md text-text-muted">再生リストの動画リストで、視聴済みより先の話のサムネイルを表示しません（ネタバレ防止）</p>
+          <p className="mt-1 text-md text-text-muted">再生リストの登録動画で、視聴済みより先の話のサムネイルを表示しません（ネタバレ防止）</p>
         </Card>
 
         <Card>
