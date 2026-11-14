@@ -28,7 +28,8 @@ import {
   ShieldIcon,
 } from '@/components/ui/icons';
 import { cn } from '@/components/ui/cn';
-import { UserAvatar } from '@/components/layout/UserDropdown';
+import { UnreadCountLabel, UserAvatar } from '@/components/layout/UserDropdown';
+import { useUnreadNotificationCounts } from '@/components/layout/useUnreadNotificationCounts';
 import { formatBadgeCount, usePendingWorkflowCount } from '@/components/admin/usePendingWorkflowCount';
 
 type IconComponent = ComponentType<{ size?: number; className?: string }>;
@@ -53,6 +54,8 @@ export default function MyPage() {
   const [signingOut, setSigningOut] = useState(false);
   const isAdmin = !!user && (role === 'owner' || role === 'operator');
   const pendingCount = usePendingWorkflowCount(isAdmin);
+  // 未読数（ページ ユーザー通知機能仕様書 §4.3）: 通知＝再生リスト新着、提案履歴＝審査結果、お問い合わせ履歴＝お問い合わせ返信
+  const unread = useUnreadNotificationCounts();
 
   // 未ログインはログインページへ（ボトムタブからはアカウント作成へ飛ぶので、ここに来るのは URL を直接開いたときだけ）
   useEffect(() => {
@@ -68,14 +71,14 @@ export default function MyPage() {
       title: '見る',
       items: [
         { label: '視聴履歴', href: '/history', icon: HistoryIcon },
-        { label: '通知', href: '/notifications', icon: BellIcon },
+        { label: '通知', href: '/notifications', icon: BellIcon, trailing: <UnreadCountLabel count={unread.feed} /> },
       ],
     },
     {
       title: '自分の投稿・やりとり',
       items: [
-        { label: '提案履歴', href: '/playlists/proposals', icon: SendIcon },
-        { label: 'お問い合わせ履歴', href: '/contact/history', icon: CommentIcon },
+        { label: '提案履歴', href: '/playlists/proposals', icon: SendIcon, trailing: <UnreadCountLabel count={unread.review} /> },
+        { label: 'お問い合わせ履歴', href: '/contact/history', icon: CommentIcon, trailing: <UnreadCountLabel count={unread.inquiry} /> },
       ],
     },
     {

@@ -69,10 +69,13 @@ export function NewBadge({ className, size = 'md' }: { className?: string; size?
   );
 }
 
-export function UnreadDot({ className }: { className?: string }) {
+/**
+ * decorative: 直後に「未読」などの文字や見出しがあり、ドットを読み上げなくてよいとき（aria-hidden にする）
+ */
+export function UnreadDot({ className, decorative = false }: { className?: string; decorative?: boolean }) {
   return (
     <span
-      aria-label="未読"
+      {...(decorative ? { 'aria-hidden': true } : { 'aria-label': '未読' })}
       className={cn('inline-block size-[7px] rounded-full bg-brand-primary shadow-[0_0_0_2px_var(--color-bg-base)]', className)}
     />
   );
