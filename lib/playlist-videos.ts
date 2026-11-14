@@ -2,7 +2,9 @@
 // 掲載するとき（動画一覧をまだ取っていない再生リスト）と、30日ごとの全件の取り直し（YouTube API 規約 III.E.4）で使う。
 // 管理_Ai運営者 コンテンツ収集機能仕様書 §10.11、共通 YouTube定期取得仕様書 §8.4・§8.6。
 // 既にある動画はタイトル・サムネイル・順番・再生時間・公開日時だけを上書きし、再生開始回数（playStartCount）は残す。
-// YouTube から消えた動画のドキュメントは、視聴記録が付いていることがあるので消さない。
+// 再生リストから消えた動画（削除・非公開・再生リストから外された動画）のドキュメントは消す。残すと一覧に
+// 「Deleted video」や重複した話数が出るうえ、取り直せない YouTube のデータを30日より長く持つことになる。
+// 視聴記録（watch_history・watch_progress）は動画IDで別に持っているので残り、視聴履歴には「動画情報が見つかりません」と出る。
 import { adminDb } from './firebase-admin';
 import { fetchPlaylistItems, fetchVideoDurations, type PlaylistItemSnippet } from './youtube';
 
@@ -12,6 +14,8 @@ export interface StoredVideos {
   items: PlaylistItemSnippet[];
   /** 今回はじめて保存した動画の数 */
   newCount: number;
+  /** 再生リストから消えたので消した動画の数 */
+  removedCount: number;
   /** 今回はじめて保存した動画（再生リストの並び順） */
   newItems: PlaylistItemSnippet[];
   /** 一番新しい動画の公開日時（動画が無ければ null） */
@@ -54,7 +58,15 @@ export async function fetchAndStoreAllVideos(playlistId: string): Promise<Stored
     await batch.commit();
   }
 
+  const current = new Set(items.map((i) => `${playlistId}_${i.youtubeVideoId}`));
+  const removed = existingSnap.docs.filter((d) => !current.has(d.id));
+  for (let start = 0; start < removed.length; start += WRITE_CHUNK_SIZE) {
+    const batch = adminDb.batch();
+    removed.slice(start, start + WRITE_CHUNK_SIZE).forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+  }
+
   const latest = items.length > 0 ? items.reduce((l, i) => (i.publishedAt > l ? i.publishedAt : l), items[0].publishedAt) : null;
   newItems.sort((a, b) => a.position - b.position);
-  return { items, newCount: newItems.length, newItems, latestPublishedAt: latest ? new Date(latest) : null };
+  return { items, newCount: newItems.length, newItems, removedCount: removed.length, latestPublishedAt: latest ? new Date(latest) : null };
 }

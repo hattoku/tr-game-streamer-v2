@@ -213,7 +213,18 @@ export async function fetchChannelSnippet(channelId: string): Promise<ChannelSni
   };
 }
 
-/** 再生リストに含まれる全動画のsnippetを取得する（ページネーション込み）。 */
+/**
+ * 再生リストで見られる動画の状態（playlistItems の status.privacyStatus）。
+ * 削除された動画は「Deleted video」、非公開の動画は「Private video」という項目として返り続ける
+ * （YouTube の画面では隠れているので欠番に見えない）。この2つ以外だけを取り込む。
+ */
+const VIEWABLE_PRIVACY = new Set(['public', 'unlisted']);
+
+/**
+ * 再生リストに含まれる全動画のsnippetを取得する（ページネーション込み）。
+ * 削除・非公開の動画は除き、position は残った動画で0から詰め直す（YouTube の position は隠れた動画も数えるため、
+ * そのままだと話数が飛び、最終話＝videoCount-1 の前提も崩れる）。
+ */
 export async function fetchPlaylistItems(playlistId: string): Promise<PlaylistItemSnippet[]> {
   const items: PlaylistItemSnippet[] = [];
   let pageToken: string | undefined;
@@ -229,18 +240,21 @@ export async function fetchPlaylistItems(playlistId: string): Promise<PlaylistIt
           publishedAt: string;
           resourceId: { videoId: string };
         };
+        status?: { privacyStatus?: string };
         contentDetails?: { videoPublishedAt?: string };
       }>;
       nextPageToken?: string;
     }>('playlistItems', {
-      // snippet.publishedAt は再生リストに追加された日時なので、動画の投稿日時は contentDetails から取る（ユニット数は変わらない）
-      part: 'snippet,contentDetails',
+      // snippet.publishedAt は再生リストに追加された日時なので、動画の投稿日時は contentDetails から取る（ユニット数は変わらない）。
+      // status は削除・非公開の動画を除くため
+      part: 'snippet,contentDetails,status',
       playlistId,
       maxResults: '50',
       ...(pageToken ? { pageToken } : {}),
     });
 
     for (const item of data.items) {
+      if (!VIEWABLE_PRIVACY.has(item.status?.privacyStatus ?? '')) continue;
       items.push({
         youtubeVideoId: item.snippet.resourceId.videoId,
         title: item.snippet.title,
@@ -253,7 +267,8 @@ export async function fetchPlaylistItems(playlistId: string): Promise<PlaylistIt
     pageToken = nextPageTokenOrStop(pageToken, data.nextPageToken, data.items.length, ++pageCount);
   } while (pageToken);
 
-  return items;
+  items.sort((a, b) => a.position - b.position);
+  return items.map((item, index) => ({ ...item, position: index }));
 }
 
 function parseIso8601DurationToSeconds(duration: string): number | null {
