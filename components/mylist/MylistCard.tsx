@@ -3,16 +3,16 @@
  * - 親エリア: 再生リストのサムネイル（話数）・タイトル・配信者・ステータスチップ（クリックで変更ドロップダウン §5.8）・
  *   逆順トグル（§5.5、セカンダリボタンのトグルON）・まとめに追加（まとめ機能仕様書 §4.1）・削除（ゴーストボタン）
  * - 子エリア: 最後に再生した動画（§5.3）。サムネイル（右下に再生時間）＋進捗バー 3px・タイトル（省略せず折り返し）・
- *   残り時間・「続きから再生」
- *   （「続きから再生」は `?autoplay=1` 付きで遷移し、遷移先で自動再生を試みる。自動再生できない
- *   iOS / Safari では「再生ページへ」として通常の遷移にする）
+ *   残り時間・右端の丸い再生アイコン。行全体が「続きから再生」のリンク
+ *   （`?autoplay=1` 付きで遷移し、遷移先で自動再生を試みる。自動再生できない iOS / Safari では
+ *   右矢印アイコン・読み上げ名「再生ページへ」の通常の遷移にする）
  * - 最終話を視聴済みなら子エリアは出さず、新着動画があれば「🔔 NEW 新着動画があります」行（§5.4）
  * - サムネイル・タイトルのクリックで動画プレーヤーページへ（§5.6）。カード全体はボタンを含むためリンクにしない
  */
 'use client';
 
 import Link from 'next/link';
-import { Button, LinkButton } from '@/components/ui/Button';
+import { Button } from '@/components/ui/Button';
 import { Card, CardChildArea } from '@/components/ui/Card';
 import { CountLabel, NewBadge } from '@/components/ui/Badge';
 import { StatusChip, WATCH_STATUS_LABEL, WATCH_STATUS_ORDER, type WatchStatus } from '@/components/ui/Chip';
@@ -119,12 +119,19 @@ export function MylistCard({ entry, onStatusChange, onReverseToggle, onRemove }:
         <Actions entry={entry} onStatusChange={onStatusChange} onReverseToggle={onReverseToggle} onRemove={onRemove} compact />
       </div>
 
-      {/* 子エリア（§5.3, §5.4） */}
+      {/* 子エリア（§5.3, §5.4）。行全体を「続きから再生」のリンクにする（v1.13。カードごとに幅いっぱいの
+          プライマリボタンを置くと、一覧で赤い帯が縦に並び「1ページに原則1つ」のルールにも反するため）。
+          右端の丸い再生アイコン／右矢印は押せることを示す目印で、それ自体は別のリンクにしない */}
       {entry.lastPlayed ? (
-        <CardChildArea className="flex flex-col gap-[10px] px-3 md:flex-row md:items-center md:gap-[14px] md:px-[18px]">
-          <div className="flex items-center gap-[10px] md:contents">
+        <CardChildArea className="p-0">
+          {/* 自動再生できない環境（iOS / Safari）では再生を約束する名前・アイコンにせず、遷移のみの表示にする（§5.3） */}
+          <Link
+            href={canAutoplay ? `${href}?autoplay=1` : href}
+            aria-label={`${canAutoplay ? '続きから再生' : '再生ページへ'}: ${entry.lastPlayed.title}`}
+            className="group flex items-center gap-[10px] px-3 pt-3 pb-[14px] transition-colors duration-[120ms] hover:bg-bg-hover md:gap-[14px] md:px-[18px]"
+          >
             <span className="hidden whitespace-nowrap text-sm text-text-muted md:inline">最後に再生</span>
-            <div className="flex w-[96px] shrink-0 flex-col md:w-[124px]">
+            <span className="flex w-[96px] shrink-0 flex-col md:w-[124px]">
               <span className="relative block aspect-video overflow-hidden rounded-t-[6px] bg-bg-player">
                 {entry.lastPlayed.thumbnailUrl && (
                   // absolute化: 通常フローの子だと画像自身の縦横比がaspect-videoコンテナの高さに影響してしまうため
@@ -138,35 +145,32 @@ export function MylistCard({ entry, onStatusChange, onReverseToggle, onRemove }:
                 )}
               </span>
               <ProgressBar value={entry.lastPlayed.percent} size="md" className="rounded-t-none rounded-b-[6px]" label="前回の再生位置" />
-            </div>
-            <div className="flex min-w-0 flex-col gap-[2px] md:gap-1">
+            </span>
+            <span className="flex min-w-0 flex-1 flex-col gap-[2px] md:gap-1">
               <span className="text-xs text-text-muted md:hidden">最後に再生</span>
-              <p className="break-words text-md text-text-secondary md:text-base">{entry.lastPlayed.title}</p>
+              <span className="break-words text-md text-text-secondary transition-colors duration-[120ms] group-hover:text-text-primary md:text-base">
+                {entry.lastPlayed.title}
+              </span>
               <span className="flex items-center gap-2 text-xs text-text-muted md:text-sm">
                 {entry.lastPlayed.remainingSeconds != null && formatRemaining(entry.lastPlayed.remainingSeconds)}
                 {entry.hasNew && <NewBadge />}
               </span>
-            </div>
-          </div>
-          {/* 自動再生できない環境（iOS / Safari）では再生を約束する文言にせず、遷移のみのボタンにする（§5.3） */}
-          <LinkButton
-            href={canAutoplay ? `${href}?autoplay=1` : href}
-            variant="primary"
-            size="full"
-            className="md:ml-auto md:w-auto md:shrink-0 md:px-[22px] md:py-[9px]"
-          >
+            </span>
             {canAutoplay ? (
-              <>
-                <PlayIcon size={14} />
-                続きから再生
-              </>
+              // セカンダリボタン（§4.2）の面を持つ丸い目印。赤い面はページ内の主要1アクション用なので使わない
+              <span
+                aria-hidden
+                data-testid="mylist-continue-play-icon"
+                className="flex size-9 shrink-0 items-center justify-center rounded-full border border-border-control bg-gradient-secondary text-text-btn shadow-control inset-shadow-highlight transition-colors duration-[120ms] group-hover:bg-gradient-secondary-hover group-hover:text-text-primary md:size-10"
+              >
+                <PlayIcon size={16} />
+              </span>
             ) : (
-              <>
-                再生ページへ
-                <ChevronRightIcon size={14} />
-              </>
+              <span aria-hidden data-testid="mylist-continue-chevron" className="shrink-0 text-text-muted transition-colors duration-[120ms] group-hover:text-text-primary">
+                <ChevronRightIcon size={20} />
+              </span>
             )}
-          </LinkButton>
+          </Link>
         </CardChildArea>
       ) : entry.hasNew ? (
         <CardChildArea className="flex items-center gap-3 px-3 md:px-[18px]">
