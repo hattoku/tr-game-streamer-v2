@@ -79,6 +79,7 @@ tr-game-streamer-v2 の**コーディング支援用**Wiki（実装の変更履�
 - [[2026-11-14-mypage-hub]] — スマホの「マイページ」タブを視聴履歴から項目一覧の `/mypage` に。タブのアクティブ判定は一番長く一致したプレフィクス
 - [[2026-11-14-mylist-reverse-toggle-removed]] — マイリストのカードから逆順ボタンを外し、切り替えは再生リストページだけにする（設定値は残す）
 - [[2026-11-14-notification-unread-dot]] — 通知カードの未読ドットを左端の列から日時の左へ（既読時の左の空白をなくす）
+- [[2026-11-14-mylist-continue-row]] — マイリストの「続きから再生」を幅いっぱいの赤ボタンから行全体のリンク＋右端の丸い再生アイコンに（iPhone は右矢印）
 
 ## Entities
 - [[proxy]] — proxy.ts（旧middleware.ts、Next.js 16のproxy規約対応）。まとめ取り下げ後は `/collections*` を 404 に書き換える
