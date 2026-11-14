@@ -136,7 +136,8 @@ export default function MyPage() {
               <ul>
                 {group.items.map((item, i) => (
                   <li key={item.href}>
-                    {i > 0 && <CardDivider className="ml-[52px]" />}
+                    {/* 区切り線はアイコンの右（左パディング18＋アイコン20＋間隔16px）から */}
+                    {i > 0 && <CardDivider className="ml-[54px]" />}
                     <MenuRow {...item} />
                   </li>
                 ))}
