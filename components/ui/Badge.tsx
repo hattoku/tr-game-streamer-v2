@@ -53,15 +53,17 @@ export function CountLabel({ className, children }: { className?: string; childr
   );
 }
 
-export function NewBadge({ className }: { className?: string }) {
+/** size="sm" は動画リストの行の中に置く小サイズ（動画プレーヤー仕様書「各動画に表示する情報」） */
+export function NewBadge({ className, size = 'md' }: { className?: string; size?: 'sm' | 'md' }) {
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 rounded-[4px] border border-border-control bg-bg-btn px-2 py-[3px] text-sm font-medium leading-none text-text-primary',
+        'inline-flex items-center gap-1 rounded-[4px] border border-border-control bg-bg-btn font-medium leading-none text-text-primary',
+        size === 'sm' ? 'px-[6px] py-[2px] text-xs' : 'px-2 py-[3px] text-sm',
         className,
       )}
     >
-      <BellIcon size={11} />
+      <BellIcon size={size === 'sm' ? 10 : 11} />
       NEW
     </span>
   );

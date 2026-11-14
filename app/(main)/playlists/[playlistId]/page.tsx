@@ -423,6 +423,8 @@ export default function PlaylistDetailPage() {
         title: d.data().title,
         thumbnailUrl: d.data().thumbnailUrl,
         durationSeconds: d.data().durationSeconds ?? null,
+        publishedAt: d.data().publishedAt?.toMillis?.() ?? null,
+        addedToPlaylistAt: d.data().addedToPlaylistAt?.toMillis?.() ?? null,
       }));
       setVideos(videoList);
 

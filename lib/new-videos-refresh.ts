@@ -69,6 +69,8 @@ function errorMessage(e: unknown): string {
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+/** 新着通知に持たせる新しい動画タイトルの数（表示は先頭1本＋「ほかN本」。残りは将来の表示用の余裕） */
+const NEW_VIDEO_TITLES_LIMIT = 5;
 
 /** YouTube の1日のクォータが尽きた（以降の呼び出しは全部失敗する。§6.2・§7.3） */
 function isQuotaExceeded(e: unknown): boolean {
@@ -85,10 +87,13 @@ async function refetchPlaylist(
   const isFirstFetch = playlist.youtubeItemCount == null;
   const stored = await fetchAndStoreAllVideos(playlistId);
 
-  // 新着通知（ユーザー通知機能仕様書「シリーズ新着通知」）
+  // 新着通知（ユーザー通知機能仕様書「再生リスト新着通知」）
   let notifications = 0;
   const newVideos = isFirstFetch ? 0 : stored.newCount;
   if (newVideos > 0) {
+    // どの動画が増えたかと、どの配信者の再生リストかを通知に持たせる（同じ名前の再生リストが別の配信者にもあるため）。
+    // 動画のサムネイルはネタバレになりうるので持たせない（ユーザー通知機能仕様書 §2.1 再生リスト新着通知）
+    const newVideoTitles = stored.newItems.slice(0, NEW_VIDEO_TITLES_LIMIT).map((i) => i.title);
     const mylistSnap = await adminDb.collection('mylist').where('playlistId', '==', playlistId).get();
     for (let start = 0; start < mylistSnap.docs.length; start += WRITE_CHUNK_SIZE) {
       const batch = adminDb.batch();
@@ -98,6 +103,10 @@ async function refetchPlaylist(
           type: 'series_new_episode',
           playlistId,
           playlistTitle: playlist.title,
+          channelName: (playlist.channelName as string | undefined) ?? '',
+          channelIconUrl: (playlist.channelIconUrl as string | undefined) ?? '',
+          newVideoTitles,
+          newVideoCount: newVideos,
           message: `「${playlist.title}」に新しい動画が追加されました`,
           isRead: false,
           createdAt: new Date(),

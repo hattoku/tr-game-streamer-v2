@@ -1,6 +1,6 @@
 # プレミテ Firestore データモデル設計書
 
-**バージョン**: v2.8  
+**バージョン**: v2.9  
 **作成日**: 2026年3月30日（更新）  
 **対象**: 開発チーム  
 **関連ドキュメント**: プレミテ企画書 / プレミテ_技術スタック仕様書 / 各機能仕様書
@@ -251,7 +251,8 @@ Firestoreはテーブル結合（JOIN）ができないため、一覧表示や�
 | `title` | string | ✅ | 動画タイトル |
 | `thumbnailUrl` | string | ✅ | サムネイルURL |
 | `durationSeconds` | number? | — | 動画の長さ（秒）。取得できない場合はnull |
-| `publishedAt` | Timestamp | ✅ | YouTube上の公開日時 |
+| `publishedAt` | Timestamp | ✅ | YouTube上の公開日時（`playlistItems` の `contentDetails.videoPublishedAt`。削除済み・非公開などで取れないときは再生リストに追加された日時。v2.9 より前に保存した動画は再生リストに追加された日時が入っていて、次の取り直しで直る） |
+| `addedToPlaylistAt` | Timestamp? | — | 再生リストに追加された日時（`snippet.publishedAt`。v2.9） |
 | `playStartCount` | number | ✅ | 再生開始回数（週間ランキングの集計元） |
 
 ---
@@ -892,8 +893,8 @@ AI運営者（審査AI）の設定。プラットフォーム共通で1体のみ
 ### 3.30 `notifications`
 
 ユーザー向けサイト内通知（ヘッダーベルアイコン・通知一覧ページ`/notifications`）。
-ユーザー通知機能仕様書に定義された4種別（シリーズ新着・お知らせ・審査結果・
-お問い合わせ返信）のうち、フェーズ2では「シリーズ新着通知」のみ実装する
+ユーザー通知機能仕様書に定義された4種別（再生リスト新着・お知らせ・審査結果・
+お問い合わせ返信）のうち、フェーズ2では「再生リスト新着通知」のみ実装する
 （他3種別は依拠する機能＝お知らせ管理・審査ワークフロー・お問い合わせ機能が
 未実装のためスコープ外。`type`フィールドは将来の種別追加を見込んだ設計とする）。
 管理者向け`admin_notifications`（3.19節）とは別物。
@@ -907,6 +908,10 @@ AI運営者（審査AI）の設定。プラットフォーム共通で1体のみ
 | `workflowId` | string? | — | 対象ワークフローのドキュメントID（`review_result`のみ）。承認時は `playlistId` に登録した再生リストのIDも入れる |
 | `playlistId` | string? | — | 対象再生リストのドキュメントID（`series_new_episode`のみ） |
 | `playlistTitle` | string? | — | 再生リストタイトル（denormalized、通知本文組み立て用） |
+| `channelName` | string? | — | 配信者名（denormalized、`series_new_episode`のみ。v2.9） |
+| `channelIconUrl` | string? | — | 配信者アイコンURL（denormalized、`series_new_episode`のみ。空文字のことがある。v2.9） |
+| `newVideoTitles` | array\<string\>? | — | 新しく増えた動画のタイトル（再生リストの並び順、先頭5本まで。`series_new_episode`のみ。v2.9） |
+| `newVideoCount` | number? | — | 新しく増えた動画の本数（`series_new_episode`のみ。v2.9） |
 | `inquiryId` | string? | — | 対象お問い合わせのドキュメントID（`inquiry_reply`のみ） |
 | `message` | string | ✅ | 通知本文（例：「「〇〇実況」に新しい動画が追加されました」） |
 | `isRead` | boolean | ✅ | 既読フラグ（デフォルト：`false`）。既読から未読へは戻さない |
@@ -1149,4 +1154,5 @@ ai_operators ──── (1) users
 | v2.5 | 2026-11-04 | 段階4の実装。§3.2 `playlists` に `metaFetchedAt`・`playlistPublishedAt`・`youtubeDataRemovedAt` を追加し、巡回で作る再生リストの値と `listingReason` の値を注記。§3.21 `batch_logs` に巡回の結果の項目を追加。§3.32 `exploration_channels` の登録者数の保存期間を注記。§3.23 `collection_candidates` は巡回に取り込んだら消し、残りも30日で消す（コンテンツ収集機能仕様書 §10.11） |
 | v2.7 | 2026-11-08 | 段階7 一覧のサーバー側検索化。§5.1 検索面の複合インデックスは検索面では使わなくなった旨を注記。フィールドの追加・変更はなし（v2.6 は段階6の PR #24 が使う） |
 | v2.2 | 2026-11-01 | 段階3の実装。§3.2 `playlists` の掲載状態（`listingStatus` ほか）と `source`・`explorationChannelId` を実装。管理者の登録・承認は `listed`（`listingReason: admin`）で作り、既存データは移行スクリプトで `listed`（`listingReason: migration`）または `channel_off` にする。`games.playlistCount`・`channels.playlistCount`・`tags.usagePlaylistCount` は掲載中の再生リストだけを数える（コンテンツ収集機能仕様書 §10.9）。フィールドの追加・変更はなし |
+| v2.9 | 2026-11-13 | §3.30 `notifications` に `channelName`・`channelIconUrl`・`newVideoTitles`・`newVideoCount` を追加（ユーザー通知機能仕様書 v1.4）。`videos.publishedAt` を動画の投稿日時に直し（これまでは再生リストに追加された日時だった）、`videos.addedToPlaylistAt` を追加 |
 | v2.8 | 2026-11-08 | 段階5 人気のチャンネル。§3.4 `channels.popularity`、§3.32 `featuredOrder` をピン留めの順に、§3.21 `batch_logs` に `channel_popularity`、§3.35 `playlist_viewers`・§3.36 `batch_state` を追加。§7.1 退会時の削除に `playlist_viewers` を追加（共通 人気のチャンネル 集計 仕様書） |

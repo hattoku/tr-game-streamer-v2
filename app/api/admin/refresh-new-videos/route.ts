@@ -14,7 +14,7 @@ import { getQuotaConsumed, resetQuotaCounter } from '../../../../lib/youtube';
 // 2026-11-01: 全公開再生リストを毎日全ページ取り直す方式をやめ、playlists.list で動画数をまとめて確認し、
 // 変わった再生リストだけ取り直す差分方式にした（共通 YouTube定期取得仕様書 §7。本体は lib/new-videos-refresh.ts）。
 // 新着があった再生リストをマイリスト登録しているユーザー全員に notifications を生成する
-// （ユーザー通知機能仕様書の「シリーズ新着通知」）。
+// （ユーザー通知機能仕様書の「再生リスト新着通知」）。
 //
 // Cloud Schedulerからの呼び出しはX-Cron-SecretヘッダーがCRON_SECRETと一致すれば
 // requireAdminをスキップする（/apiはproxy.tsのCookieゲート対象外のため、Cloud Run URLを
