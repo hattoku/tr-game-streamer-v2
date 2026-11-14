@@ -166,13 +166,19 @@ function MenuItemWithUnread({ label, count }: { label: string; count: number }) 
   return (
     <span className="flex w-full items-center justify-between gap-2">
       {label}
-      {count > 0 && (
-        <span className="inline-flex items-center gap-[6px] text-md text-text-secondary">
-          {/* 直後の「未読」の文字と重ねて読み上げないよう装飾扱い */}
-          <UnreadDot decorative />
-          未読 {formatBadgeCount(count)}
-        </span>
-      )}
+      <UnreadCountLabel count={count} />
+    </span>
+  );
+}
+
+/** 赤丸＋「未読 N」。0件なら何も出さない（ユーザードロップダウンとマイページで共用） */
+export function UnreadCountLabel({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span className="inline-flex items-center gap-[6px] text-md text-text-secondary">
+      {/* 直後の「未読」の文字と重ねて読み上げないよう装飾扱い */}
+      <UnreadDot decorative />
+      未読 {formatBadgeCount(count)}
     </span>
   );
 }

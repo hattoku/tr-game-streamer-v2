@@ -1,5 +1,5 @@
 // お問い合わせ返信・審査結果を通知一覧・ベルから外し、ユーザーアイコンとメニューで知らせる変更の確認項目。
-// ページ ユーザー通知機能仕様書 v1.7 §2・§4.1・§4.3・§5.3、共通 uiコンポーネント フロント 仕様書 v2.2 §2.12、
+// ページ ユーザー通知機能仕様書 v1.7 §2・§4.1・§4.3・§5.3、共通 uiコンポーネント フロント 仕様書 v2.3 §2.12、
 // ページ 再生リストを追加する 仕様書 v5.3 §9.4。
 // 通知は Admin SDK で直接作り、終了時に自分で消す。提案履歴を開くと一般ユーザーの未読の審査結果がすべて既読になるため、
 // 既読の流れは desktop だけで確かめる（mobile・tablet と同時に走って食い違わないように）。
@@ -51,6 +51,12 @@ test('§4.3 お問い合わせ返信・審査結果は通知一覧に出ず、�
     await expect(userPage.getByRole('menuitem', { name: /提案履歴.*未読 \d+/ })).toBeVisible();
     await expect(userPage.getByRole('menuitem', { name: /お問い合わせ履歴.*未読 \d+/ })).toBeVisible();
     await userPage.keyboard.press('Escape');
+  });
+
+  await test.step('マイページの「提案履歴」「お問い合わせ履歴」の行にも未読数が出る（§4.3・ページ マイページ 仕様書 v1.1）', async () => {
+    await userPage.goto('/mypage');
+    await expect(userPage.getByRole('link', { name: /提案履歴.*未読 \d+/ })).toBeVisible();
+    await expect(userPage.getByRole('link', { name: /お問い合わせ履歴.*未読 \d+/ })).toBeVisible();
   });
 
   await test.step('提案履歴の上部「新しい審査結果」に出て、開いた時点で既読になる', async () => {
