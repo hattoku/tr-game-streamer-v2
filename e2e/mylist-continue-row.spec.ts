@@ -1,5 +1,5 @@
 // マイリストのカードの子エリア（最後に再生した動画）を、幅いっぱいの赤いボタンから「行全体のリンク＋右端の丸い再生アイコン」に
-// 変えた確認項目。ページ マイリスト機能仕様書 v1.13 §5.3「続きから再生（行全体のリンク）」。
+// 変えた確認項目。ページ マイリスト機能仕様書 v1.14 §5.3「続きから再生（行全体のリンク）」。
 // 再生リスト・動画・マイリスト・視聴進捗は Admin SDK で直接作り、終了時に自分で消す（タイトルは [E2E] で始まる）。
 import type { Browser, Page, TestInfo } from '@playwright/test';
 import { expect, hasHorizontalScroll, test } from './support/fixtures';
