@@ -1,7 +1,8 @@
 /**
  * マイリストのカード（ページ マイリスト機能仕様書 §5、共通 デザイントークン仕様書 v2.0 §6.1・§6.5・§6.6）。
  * - 親エリア: 再生リストのサムネイル（話数）・タイトル・配信者・ステータスチップ（クリックで変更ドロップダウン §5.8）・
- *   逆順トグル（§5.5、セカンダリボタンのトグルON）・まとめに追加（まとめ機能仕様書 §4.1）・削除（ゴーストボタン）
+ *   まとめに追加（まとめ機能仕様書 §4.1）・削除（ゴーストボタン）
+ *   （逆順の切り替えは v1.13 で外し、再生リストページ側だけに置く §5.5。設定値 isReverseOrder は話数の計算に使う）
  * - 子エリア: 最後に再生した動画（§5.3）。サムネイル（右下に再生時間）＋進捗バー 3px・タイトル（省略せず折り返し）・
  *   残り時間・「続きから再生」
  *   （「続きから再生」は `?autoplay=1` 付きで遷移し、遷移先で自動再生を試みる。自動再生できない
@@ -26,7 +27,7 @@ import {
 } from '@/components/ui/DropdownMenu';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { formatDuration } from '@/components/playlists/VideoList';
-import { ChevronDownIcon, ChevronRightIcon, PlayIcon, ReverseIcon, TrashIcon } from '@/components/ui/icons';
+import { ChevronDownIcon, ChevronRightIcon, PlayIcon, TrashIcon } from '@/components/ui/icons';
 import { useCanAutoplayAfterNavigation } from '@/lib/autoplay';
 import { AddToCollectionButton } from '@/components/collections/AddToCollectionButton';
 import { COLLECTIONS_ENABLED } from '@/lib/feature-flags';
@@ -63,7 +64,6 @@ export interface MylistCardData {
 interface MylistCardProps {
   entry: MylistCardData;
   onStatusChange: (status: WatchStatus) => void;
-  onReverseToggle: (value: boolean) => void;
   onRemove: () => void;
 }
 
@@ -72,7 +72,7 @@ function formatRemaining(seconds: number): string {
   return min >= 60 ? `残り ${Math.floor(min / 60)} 時間 ${min % 60} 分` : `残り ${min} 分`;
 }
 
-export function MylistCard({ entry, onStatusChange, onReverseToggle, onRemove }: MylistCardProps) {
+export function MylistCard({ entry, onStatusChange, onRemove }: MylistCardProps) {
   const href = `/playlists/${entry.playlistId}`;
   const p = entry.playlist;
   const canAutoplay = useCanAutoplayAfterNavigation();
@@ -111,12 +111,12 @@ export function MylistCard({ entry, onStatusChange, onReverseToggle, onRemove }:
           )}
           {/* PC ではここに操作列。モバイルは下に回す */}
           <div className="mt-auto hidden md:block">
-            <Actions entry={entry} onStatusChange={onStatusChange} onReverseToggle={onReverseToggle} onRemove={onRemove} />
+            <Actions entry={entry} onStatusChange={onStatusChange} onRemove={onRemove} />
           </div>
         </div>
       </div>
       <div className="px-3 pb-3 md:hidden">
-        <Actions entry={entry} onStatusChange={onStatusChange} onReverseToggle={onReverseToggle} onRemove={onRemove} compact />
+        <Actions entry={entry} onStatusChange={onStatusChange} onRemove={onRemove} compact />
       </div>
 
       {/* 子エリア（§5.3, §5.4） */}
@@ -180,11 +180,10 @@ export function MylistCard({ entry, onStatusChange, onReverseToggle, onRemove }:
   );
 }
 
-/** ステータスチップ（変更ドロップダウン）／逆順トグル／削除 の操作列 */
+/** ステータスチップ（変更ドロップダウン）／削除 の操作列 */
 function Actions({
   entry,
   onStatusChange,
-  onReverseToggle,
   onRemove,
   compact = false,
 }: MylistCardProps & { compact?: boolean }) {
@@ -213,10 +212,6 @@ function Actions({
       {/* 性格の異なるボタンの間の縦線（トークン仕様書 §4.4） */}
       <span aria-hidden className="h-[18px] w-px bg-white/10" />
 
-      <Button variant="secondary" size="sm" active={entry.isReverseOrder} onClick={() => onReverseToggle(!entry.isReverseOrder)}>
-        <ReverseIcon size={13} />
-        {entry.isReverseOrder ? (compact ? '逆順中' : '逆順再生中') : compact ? '逆順' : '逆順で再生'}
-      </Button>
       {/* まとめ機能仕様書 §4.1「マイリストページ」の作成導線。まとめ機能の取り下げ（マイリスト機能仕様書 v1.12）で出さない */}
       {COLLECTIONS_ENABLED && <AddToCollectionButton playlistId={entry.playlistId} label={compact ? 'まとめ' : 'まとめに追加'} />}
       <Button variant="ghost" size="sm" onClick={onRemove} aria-label="マイリストから削除">
