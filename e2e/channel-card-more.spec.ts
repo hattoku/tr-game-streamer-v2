@@ -15,8 +15,8 @@ async function seedChannel(name: string) {
   return id;
 }
 
-/** スコア count, count-1, … 1 の再生リストを作る。サムネイルは `thumb-<スコア>`（index が空なら空文字） */
-async function seedPlaylists(channelId: string, channelName: string, count: number, emptyThumbScores: number[] = []) {
+/** スコア count, count-1, … 1 の再生リストを作る（rated=false ならスコアは空）。サムネイルは `e2e-thumb-<スコア>`（emptyThumbScores のものは空文字） */
+async function seedPlaylists(channelId: string, channelName: string, count: number, emptyThumbScores: number[] = [], rated = true) {
   const batch = e2eDb().batch();
   const ids = Array.from({ length: count }, (_, i) => {
     const score = count - i;
@@ -27,7 +27,7 @@ async function seedPlaylists(channelId: string, channelName: string, count: numb
       channelId, channelName, channelIconUrl: '',
       gameId: null, gameName: '', gameGenreIds: [], gameHint: null, gameSetBy: null, gameSetAt: null,
       videoCount: 10, latestVideoPublishedAt: null, registeredAt: new Date(), registeredBy: 'e2e', proposedBy: null,
-      isPublic: true, score, reviewCount: 0, mylistCount: 0, playlistTagIds: [], playlistTagsFixed: [],
+      isPublic: true, score: rated ? score : null, reviewCount: 0, mylistCount: 0, playlistTagIds: [], playlistTagsFixed: [],
       referenceUrl: '', lastFetchedAt: null,
       listingStatus: 'listed', listingReason: 'e2e', listingSetBy: 'admin', listingSetAt: new Date(),
       previousListingStatus: null, source: 'admin', explorationChannelId: null,
@@ -94,11 +94,11 @@ test('§9.6 ピックアップより多いときは「ほか N 本の再生リ�
   }
 });
 
-test('§9.6 再生リストが3本以下のときは「ほか N 本」を出さない', async ({ guestPage, request }) => {
+test('§9.6 再生リストが3本以下のときは「ほか N 本」を出さない（評価が無ければ見出しは「主な再生リスト」）', async ({ guestPage, request }) => {
   const t = token();
   const channelName = `[E2E] スクナイ ${t}`;
   const channelId = await seedChannel(channelName);
-  const ids = await seedPlaylists(channelId, channelName, 3);
+  const ids = await seedPlaylists(channelId, channelName, 3, [], false);
   try {
     const body = await channelUntil(request, t, 3);
     expect(body.items[0].moreThumbnailUrls).toEqual([]);
@@ -106,7 +106,7 @@ test('§9.6 再生リストが3本以下のときは「ほか N 本」を出さ�
     await guestPage.goto('/channels');
     await guestPage.getByLabel('チャンネル名で検索').filter({ visible: true }).fill(t);
     await expect(guestPage.getByText(channelName)).toBeVisible({ timeout: 30_000 });
-    await expect(guestPage.getByText('評価の高い再生リスト')).toBeVisible();
+    await expect(guestPage.getByText('主な再生リスト')).toBeVisible();
     await expect(guestPage.getByTestId('channel-card-more')).toHaveCount(0);
   } finally {
     await cleanup(ids, channelId);

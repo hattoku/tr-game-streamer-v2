@@ -57,8 +57,11 @@ export function ChannelListCard({ channel }: { channel: ChannelCardData }) {
 
       {channel.topPlaylists.length > 0 && (
         <div className="flex flex-col gap-1 border-t border-border-divider pt-3">
-          {/* 3行が「このチャンネルの全部」に見えないよう、選び方を小さく添える（§9.6） */}
-          <p className="px-1 text-sm text-text-muted">評価の高い再生リスト</p>
+          {/* 3行が「このチャンネルの全部」に見えないよう、選び方を小さく添える（§9.6）。
+              まだ1件も評価が無いときに「評価の高い」と書くと不自然なので「主な」にする */}
+          <p className="px-1 text-sm text-text-muted">
+            {channel.topPlaylists.some((p) => p.score != null) ? '評価の高い再生リスト' : '主な再生リスト'}
+          </p>
           <ul className="flex flex-col gap-1">
             {channel.topPlaylists.map((p) => (
               <li key={p.id}>
@@ -106,7 +109,7 @@ function MorePlaylistsRow({ href, restCount, thumbnailUrls }: { href: string; re
         {Array.from({ length: layerCount }, (_, i) => layerCount - 1 - i).map((i) => (
           <div
             key={i}
-            className={cn('absolute inset-0 overflow-hidden rounded-[6px] bg-bg-player shadow-[0_1px_2px_rgba(0,0,0,0.6)]', LAYER_CLASSES[i])}
+            className={cn('absolute inset-0 overflow-hidden rounded-[6px] bg-bg-player shadow-control', LAYER_CLASSES[i])}
           >
             {thumbnailUrls[i] && (
               // eslint-disable-next-line @next/next/no-img-element
