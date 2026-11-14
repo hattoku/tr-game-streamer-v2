@@ -1,5 +1,5 @@
-// シリーズ新着通知で、どの配信者のどの動画が新しいか分かるようにする変更の確認項目。
-// ページ ユーザー通知機能仕様書 v1.4 §2.1「シリーズ新着通知」、Firestore データモデル設計書 v2.9 §3.30、
+// 再生リスト新着通知で、どの配信者のどの動画が新しいか分かるようにする変更の確認項目。
+// ページ ユーザー通知機能仕様書 v1.4 §2.1「再生リスト新着通知」、Firestore データモデル設計書 v2.9 §3.30、
 // ページ 再生リスト詳細ページにおける動画プレーヤー 仕様書 v1.19「各動画に表示する情報」（投稿日・NEW）。
 // 再生リスト・動画・通知は Admin SDK で直接作り、終了時に自分で消す（タイトルは [E2E] で始まる）。
 // 「再取得で通知に配信者と動画タイトルが入る」は stg 全体の再取得を動かすため desktop だけで実行する。
@@ -62,12 +62,12 @@ function notificationCard(page: Page, playlistTitle: string) {
   return page.getByRole('listitem').filter({ hasText: playlistTitle });
 }
 
-test('§2.1 シリーズ新着: 配信者名・アイコンと、新しい動画のタイトル（先頭1本＋ほかN本）が出て、サムネイルは出ない', async ({ userPage }) => {
+test('§2.1 再生リスト新着: 配信者名・アイコンと、新しい動画のタイトル（先頭1本＋ほかN本）が出て、サムネイルは出ない', async ({ userPage }) => {
   const uid = await testUserUid();
-  const playlistId = await seedPlaylist('[E2E] 配信者A');
+  const playlistId = await seedPlaylist('[E2E] とても長い名前の配信者Aはホラーゲームばかりやっている');
   const title = `[E2E] 新着通知の再生リスト ${playlistId}`;
   await seedNotification(uid, playlistId, title, {
-    channelName: '[E2E] 配信者A',
+    channelName: '[E2E] とても長い名前の配信者Aはホラーゲームばかりやっている',
     channelIconUrl: 'https://yt3.ggpht.com/e2e-icon.jpg',
     newVideoTitles: ['[E2E] #6 新しい話', '[E2E] #7 もっと新しい話'],
     newVideoCount: 2,
@@ -75,7 +75,14 @@ test('§2.1 シリーズ新着: 配信者名・アイコンと、新しい動画
 
   await userPage.goto('/notifications');
   const card = notificationCard(userPage, title);
-  await expect(card.getByTestId('notification-channel')).toHaveText('[E2E] 配信者A');
+  await expect(card.getByTestId('notification-channel')).toHaveText('[E2E] とても長い名前の配信者Aはホラーゲームばかりやっている');
+  // 種別ラベルは「再生リスト新着」で、390px でも改行しない（v1.5）
+  const label = card.getByText('再生リスト新着', { exact: true });
+  await expect(label).toBeVisible();
+  const box = await label.boundingBox();
+  const lineHeight = await label.evaluate((el) => parseFloat(getComputedStyle(el).lineHeight) || parseFloat(getComputedStyle(el).fontSize) * 1.5);
+  const padding = await label.evaluate((el) => parseFloat(getComputedStyle(el).paddingTop) + parseFloat(getComputedStyle(el).paddingBottom));
+  expect(box!.height).toBeLessThan(lineHeight * 2 + padding);
   await expect(card.getByTestId('notification-new-videos')).toHaveText('[E2E] #6 新しい話 ほか1本');
   // 画像は配信者アイコンの1枚だけ（動画のサムネイルは出さない）
   const images = card.locator('img');
