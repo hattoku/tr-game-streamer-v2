@@ -80,6 +80,7 @@ tr-game-streamer-v2 の**コーディング支援用**Wiki（実装の変更履�
 - [[2026-11-14-mylist-reverse-toggle-removed]] — マイリストのカードから逆順ボタンを外し、切り替えは再生リストページだけにする（設定値は残す）
 - [[2026-11-14-notification-unread-dot]] — 通知カードの未読ドットを左端の列から日時の左へ（既読時の左の空白をなくす）
 - [[2026-11-14-notification-split-inquiry-review]] — お問い合わせ返信・審査結果を通知一覧・ベルから外し、ユーザーアイコンの件数とメニューの未読数・提案履歴の「新しい審査結果」で知らせる（PR #39）
+- [[2026-11-14-mylist-continue-row]] — マイリストの「続きから再生」を幅いっぱいの赤ボタンから行全体のリンク＋右端の丸い再生アイコンに（iPhone は右矢印）
 
 ## Entities
 - [[proxy]] — proxy.ts（旧middleware.ts、Next.js 16のproxy規約対応）。まとめ取り下げ後は `/collections*` を 404 に書き換える
