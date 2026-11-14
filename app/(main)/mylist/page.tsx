@@ -33,7 +33,7 @@ import { MylistCard } from '@/components/mylist/MylistCard';
 // - フィルタタブ（§3: すべて／視聴中／見たい／完走／その他▼=一時中断・断念、件数バッジ）
 // - ソート（§4: 最後に再生した動画（新しい順）＝watch_progress の最新 updatedAt、無い場合は mylist.updatedAt／
 //   再生リスト名（昇順））
-// - カード（§5: 親＝再生リスト情報・ステータス変更・逆順トグル・削除、子＝最後に再生した動画）
+// - カード（§5: 親＝再生リスト情報・ステータス変更・削除、子＝最後に再生した動画）
 // - 空状態（§2.2）。未ログインはログインページへ（§1.2）
 // データ取得（「最後に再生した動画」「最終話視聴済み」「新着動画あり」の判定を含む）は
 // lib/mylist-entries.ts の fetchMylistEntries に切り出し、TOPページのマイリストセクション
@@ -101,17 +101,6 @@ export default function MylistPage() {
       await updateDoc(doc(db, 'mylist', entry.mylistId), { watchStatus: status, updatedAt: serverTimestamp() });
       setEntries((prev) => prev?.map((e) => (e.mylistId === entry.mylistId ? { ...e, watchStatus: status, updatedAt: Date.now() } : e)) ?? prev);
       toast({ type: 'success', message: `ステータスを「${WATCH_STATUS_LABEL[status]}」に変更しました` });
-    } catch {
-      toast({ type: 'error', message: '通信エラーが発生しました。時間をおいて再試行してください' });
-    }
-  }
-
-  async function handleReverseToggle(entry: MylistEntry, value: boolean) {
-    try {
-      await updateDoc(doc(db, 'mylist', entry.mylistId), { isReverseOrder: value, updatedAt: serverTimestamp() });
-      // 逆順を切り替えると「最終話」が変わるため読み直す
-      if (user) setEntries(await fetchMylistEntries(user.uid));
-      toast({ type: 'success', message: value ? '逆順で再生するように設定しました' : '本来の順序で再生するように設定しました' });
     } catch {
       toast({ type: 'error', message: '通信エラーが発生しました。時間をおいて再試行してください' });
     }
@@ -247,7 +236,6 @@ export default function MylistPage() {
                   <MylistCard
                     entry={entry}
                     onStatusChange={(s) => handleStatusChange(entry, s)}
-                    onReverseToggle={(v) => handleReverseToggle(entry, v)}
                     onRemove={() => {
                       setRemoveTarget(entry);
                       setRemoveOpen(true);
