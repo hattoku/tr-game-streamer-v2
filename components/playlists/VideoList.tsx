@@ -126,7 +126,7 @@ export function VideoList({
     <Card flush className={cn('flex flex-col', className)}>
       <div className="flex items-center justify-between gap-3 px-[18px] pt-4 pb-3">
         <CardTitle>
-          動画リスト <span className="ml-1 text-md font-normal text-text-muted">{videos.length}話</span>
+          再生リストの登録動画 <span className="ml-1 text-md font-normal text-text-muted">{videos.length}話</span>
         </CardTitle>
         <Checkbox label="逆順" checked={reverseOrder} onChange={(e) => onReverseToggle(e.target.checked)} className="text-md" />
       </div>
