@@ -3,11 +3,13 @@
 // - 「消えた動画のドキュメントを消す」: stg の実在の再生リスト（マイリスト登録の無いもの）に、YouTube に無い動画IDの
 //   ドキュメント（タイトル「Deleted video」）を足し、前回の動画数の記録をずらして取り直させる
 // - 「非公開の動画を取り込まない」: YouTube 上で非公開の動画（Private video）を含む実在の再生リストを取り直させる。
-//   stg に無い・YouTube 側で非公開の動画が無くなった場合も、Private video のドキュメントが残らないことは確かめられる
+//   stg に無い・YouTube 側で非公開の動画が無くなった場合も、Private video のドキュメントが残らないことは確かめられる。
+//   テスト用会員のマイリストに入れ、公開の動画を1本消して取り直させ、新着通知に非公開の動画が混ざらないことも見る
 import type { Page } from '@playwright/test';
 import type { DocumentReference, QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import { expect, test } from './support/fixtures';
 import { db as e2eDb } from './support/cleanup';
+import { testUserUid } from './support/watch-progress';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -69,6 +71,21 @@ test('§7.2 再生リストから消えた動画は取り直しで消え、削�
   const privateDoc = await privateRef.get();
   const privateTarget = privateDoc.exists && privateDoc.data()!.listingStatus !== 'channel_off' && privateDoc.data()!.youtubeItemCount != null;
   const privateBefore = privateDoc.data()?.youtubeItemCount;
+  const uid = await testUserUid();
+  const mylistRef = e2eDb().collection('mylist').doc(`${uid}_${PLAYLIST_WITH_PRIVATE_VIDEO}`);
+  const mylistExisted = (await mylistRef.get()).exists;
+  let removedPublic: { ref: DocumentReference; data: FirebaseFirestore.DocumentData; title: string } | null = null;
+  const startedAt = new Date();
+  if (privateTarget) {
+    if (!mylistExisted) {
+      await mylistRef.set({ userId: uid, playlistId: PLAYLIST_WITH_PRIVATE_VIDEO, watchStatus: 'want_to_watch', isReverseOrder: false, createdAt: startedAt, updatedAt: startedAt });
+    }
+    // 最終話（公開の動画）を消す。取り直しで「新しく増えた動画」として戻り、通知はこの1本だけになるはず
+    const last = await e2eDb().collection('videos').where('playlistId', '==', PLAYLIST_WITH_PRIVATE_VIDEO).orderBy('position', 'desc').limit(1).get();
+    const doc = last.docs[0];
+    removedPublic = { ref: doc.ref, data: doc.data(), title: doc.data().title };
+    await doc.ref.delete();
+  }
 
   // 前回の動画数の記録をずらす（YouTube 側の数と違う＝変わった扱いにして取り直させる）
   await playlist.ref.update({ youtubeItemCount: -1 });
@@ -90,8 +107,21 @@ test('§7.2 再生リストから消えた動画は取り直しで消え、削�
     if (privateTarget) {
       const videos = await expectContiguousPositions(privateRef);
       expect(videos.docs.filter((v) => v.data().title === 'Private video' || v.data().title === 'Deleted video')).toEqual([]);
+
+      // 新着通知は消した公開の動画1本だけで、非公開の動画は入らない
+      const notes = await e2eDb().collection('notifications').where('userId', '==', uid).where('playlistId', '==', PLAYLIST_WITH_PRIVATE_VIDEO).get();
+      const fresh = notes.docs.filter((n) => n.data().createdAt.toMillis() >= startedAt.getTime());
+      expect(fresh).toHaveLength(1);
+      expect(fresh[0].data().newVideoCount).toBe(1);
+      expect(fresh[0].data().newVideoTitles).toEqual([removedPublic!.title]);
     }
   } finally {
+    if (privateTarget) {
+      const notes = await e2eDb().collection('notifications').where('userId', '==', uid).where('playlistId', '==', PLAYLIST_WITH_PRIVATE_VIDEO).get();
+      await Promise.all(notes.docs.filter((n) => n.data().createdAt.toMillis() >= startedAt.getTime()).map((n) => n.ref.delete()));
+      if (!mylistExisted) await mylistRef.delete();
+      if (removedPublic && !(await removedPublic.ref.get()).exists) await removedPublic.ref.set(removedPublic.data);
+    }
     if ((await fakeRef.get()).exists) await fakeRef.delete();
     if ((await playlist.ref.get()).data()!.youtubeItemCount === -1) await playlist.ref.update({ youtubeItemCount: before.youtubeItemCount });
     if (privateTarget && (await privateRef.get()).data()!.youtubeItemCount === -1) await privateRef.update({ youtubeItemCount: privateBefore });
