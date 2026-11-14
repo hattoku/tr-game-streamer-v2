@@ -459,7 +459,15 @@ async function channelIndex(): Promise<ChannelIndex> {
         playlistCount: agg.playlistCount,
         videoCount: agg.videoCount,
         reviewCount: agg.reviewCount,
-        topPlaylists: agg.topPlaylists.map((r) => ({ id: r.summary.id, title: r.summary.title, thumbnailUrl: r.summary.thumbnailUrl, score: r.summary.score })),
+        topPlaylists: agg.topPlaylists.map((r) => ({
+          id: r.summary.id,
+          title: r.summary.title,
+          thumbnailUrl: r.summary.thumbnailUrl,
+          score: r.summary.score,
+          mylistCount: r.summary.mylistCount,
+          videoCount: r.summary.videoCount,
+          latestVideoPublishedAt: r.summary.latestVideoPublishedAt,
+        })),
       });
     }
     list.sort((a, b) => {

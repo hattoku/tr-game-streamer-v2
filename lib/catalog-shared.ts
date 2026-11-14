@@ -76,6 +76,12 @@ export interface ChannelPickupPlaylist {
   title: string;
   thumbnailUrl: string;
   score: number | null;
+  /** マイリスト登録数（v2.3、§9.5） */
+  mylistCount: number;
+  /** 話数＝再生リストの動画数（v2.3、§9.5） */
+  videoCount: number;
+  /** 再生リストで一番新しい動画の投稿日時（ミリ秒。動画が無ければ null。v2.3、§9.5） */
+  latestVideoPublishedAt: number | null;
 }
 
 export interface ChannelListItem {

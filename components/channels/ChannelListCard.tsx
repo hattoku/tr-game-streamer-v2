@@ -1,13 +1,15 @@
 /**
  * チャンネルカード（ページ チャンネル 探す 仕様書 §3.2〜§3.4）。
  * 上段=チャンネル情報エリア（アイコン・チャンネル名・再生リスト数・動画数・レビューの合計件数（§9.3、段階5）、クリックでチャンネル詳細へ）、
- * 下段=ピックアップ再生リストエリア（スコア上位3件、行クリックで動画プレーヤーへ）。
+ * 下段=ピックアップ再生リストエリア（スコア上位3件、行クリックで動画プレーヤーへ）。各行はタイトルの下に
+ * スコア・マイリスト数・話数・最新話の日付を出す（§9.5、v2.3。どの再生リストが新しく更新されているかを一覧で分かるように）。
  * 遷移先が異なるため <a> の入れ子を避け、カード全体ではなく情報エリアと各行を個別の Link にする。
  * 名前が `components/playlists/ChannelCard.tsx`（再生リスト詳細の配信者カード）と衝突するため ListCard としている。
  */
 import Link from 'next/link';
 import { Card } from '@/components/ui/Card';
-import { CommentIcon, InventoryIcon, PlayIcon, StarIcon, UserIcon } from '@/components/ui/icons';
+import { CommentIcon, InventoryIcon, PlayIcon, StarIcon, UserIcon, UsersIcon } from '@/components/ui/icons';
+import { formatPublishedDate } from '@/components/playlists/VideoList';
 import type { ChannelListItem } from '@/lib/catalog-shared';
 
 export type ChannelCardData = ChannelListItem;
@@ -57,22 +59,35 @@ export function ChannelListCard({ channel }: { channel: ChannelCardData }) {
                 href={`/playlists/${encodeURIComponent(p.id)}`}
                 className="flex items-center gap-3 rounded-[8px] px-1 py-1 hover:bg-bg-hover"
               >
-                <div className="relative aspect-video w-[64px] shrink-0 overflow-hidden rounded-[6px] bg-bg-player">
+                <div className="relative aspect-video w-[64px] shrink-0 sm:w-[80px] overflow-hidden rounded-[6px] bg-bg-player">
                   {p.thumbnailUrl && (
                     // absolute化: 通常フローの子だと画像自身の縦横比がaspect-videoコンテナの高さに影響してしまうため
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={p.thumbnailUrl} alt="" className="absolute inset-0 size-full object-cover" loading="lazy" />
                   )}
                 </div>
-                <span className="min-w-0 flex-1 truncate text-base text-text-secondary">{p.title}</span>
-                <span className="inline-flex shrink-0 items-center gap-1 text-md text-text-tertiary">
-                  <StarIcon size={13} className="text-brand-score" />
-                  {p.score == null ? (
-                    <span className="text-text-muted">評価なし</span>
-                  ) : (
-                    <span className="font-semibold text-text-primary">{p.score.toFixed(1)}</span>
-                  )}
-                </span>
+                {/* 2段（§9.5）: 上=タイトル、下=スコア・マイリスト数・話数・最新話の日付。狭い画面では下段を折り返す */}
+                <div className="flex min-w-0 flex-1 flex-col gap-1">
+                  <span className="truncate text-base text-text-secondary">{p.title}</span>
+                  <span className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-md text-text-tertiary">
+                    <span className="inline-flex items-center gap-1">
+                      <StarIcon size={13} className="text-brand-score" />
+                      {p.score == null ? (
+                        <span className="text-text-muted">評価なし</span>
+                      ) : (
+                        <span className="font-semibold text-text-primary">{p.score.toFixed(1)}</span>
+                      )}
+                    </span>
+                    <span className="inline-flex items-center gap-1" title="マイリスト登録数">
+                      <UsersIcon size={13} />
+                      {p.mylistCount.toLocaleString()}
+                      <span className="sr-only">マイリスト</span>
+                    </span>
+                    <span>{p.videoCount.toLocaleString()}話</span>
+                    {/* 最新話の日付＝再生リストで一番新しい動画の投稿日（動画リストと同じ年つきの「2026/11/12」）。動画が無ければ出さない */}
+                    {p.latestVideoPublishedAt != null && <span>最新話 {formatPublishedDate(p.latestVideoPublishedAt)}</span>}
+                  </span>
+                </div>
               </Link>
             </li>
           ))}
