@@ -107,16 +107,26 @@ export const BOTTOM_TABS: BottomTab[] = [
   // 遷移先はチャンネル（UI仕様書 v2.0 §2.7、段階5で実装）
   { key: 'search', label: 'さがす', href: '/channels', prefixes: ['/channels', '/playlists', '/games', ...(COLLECTIONS_ENABLED ? [COLLECTIONS_HREF] : [])] },
   // 未ログイン時はアカウント作成フローへ（§2.7）
-  // マイページの遷移先はプロフィール／設定ページ実装後に見直す。当面は視聴履歴（準備中ページ）
-  { key: 'mypage', label: 'マイページ', href: '/history', guestHref: SIGNUP_HREF, prefixes: ['/history', '/profile', '/settings'] },
+  // 遷移先は項目一覧のマイページ（2026-11-14 ユーザー決定、ページ マイページ 仕様書）。そこから辿る先のページを開いている間もアクティブにする
+  {
+    key: 'mypage',
+    label: 'マイページ',
+    href: '/mypage',
+    guestHref: SIGNUP_HREF,
+    prefixes: ['/mypage', '/history', '/notifications', '/playlists/proposals', '/contact/history', '/settings', '/profile'],
+  },
 ];
 
 export function activeBottomTab(pathname: string): BottomTabKey | null {
   if (pathname === '/') return 'home';
+  // 一番長く一致したプレフィクスのタブにする（/playlists/proposals は「さがす」の /playlists ではなくマイページ）
+  let best: { key: BottomTabKey; length: number } | null = null;
   for (const tab of BOTTOM_TABS) {
-    if (tab.prefixes.some((p) => isActivePath(pathname, p))) return tab.key;
+    for (const p of tab.prefixes) {
+      if (isActivePath(pathname, p) && (!best || p.length > best.length)) best = { key: tab.key, length: p.length };
+    }
   }
-  return null;
+  return best?.key ?? null;
 }
 
 /** 「さがす」タブ列を出す一覧ページ（下層ページでは出さない、§2.7） */

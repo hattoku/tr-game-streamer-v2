@@ -23,7 +23,7 @@ const ICONS: Record<BottomTabKey, typeof HomeIcon> = {
 
 export function BottomTabBar() {
   const pathname = usePathname();
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
   const { headerHidden } = useLayout();
   const active = activeBottomTab(pathname);
 
@@ -38,7 +38,9 @@ export function BottomTabBar() {
         {BOTTOM_TABS.map((tab) => {
           const Icon = ICONS[tab.key];
           const isActive = active === tab.key;
-          const href = !user && tab.guestHref ? tab.guestHref : tab.href;
+          // ログイン状態の読み込み中はログイン済みの遷移先にしておく（読み込み前に押すとログイン中なのにアカウント作成へ飛んでしまうため）。
+          // 遷移先のマイページ・マイリストは未ログインならログインページへ移すので、未ログインの人が読み込み中に押しても行き止まりにはならない
+          const href = !loading && !user && tab.guestHref ? tab.guestHref : tab.href;
           return (
             <li key={tab.key}>
               <Link
