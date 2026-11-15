@@ -9,7 +9,7 @@
  *   （リブランディング段階7、共通 一覧のサーバー側検索 仕様書。呼び出しは lib/catalog.ts）。
  * - `fetchPublicPlaylists`: 公開再生リスト全件のクライアント取得。取り下げ中のまとめ機能（COLLECTIONS_ENABLED）でだけ使う。
  * 見た目: 共通 デザイントークン仕様書 v2.0 §6.1（カード・ホバーの浮き上がり）・§6.5（サムネイル。再生リストの表紙へ
- * 遷移するためサムネイルには何も重ねず、話数「N話」はスコアの行に置く）。クリックは詳細ページへの遷移でその場では再生しないため、サムネイルにボタンは重ねず
+ * 遷移するためサムネイルには何も重ねず、話数「N話」はスコアの行のスコアの次に置く）。クリックは詳細ページへの遷移でその場では再生しないため、サムネイルにボタンは重ねず
  * カード全体の浮き上がり（§6.1）のみでホバーを示す（ゲームタイトルカードと同じ方針）。
  */
 'use client';
@@ -93,13 +93,13 @@ export function PlaylistCard({
             )}
             <span className="truncate text-md text-text-tertiary">{p.channelName}</span>
           </div>
-          {/* 話数・スコア・マイリスト数・レビュー数（探す仕様書 §3.3）。レビュー0件は「評価なし」 */}
+          {/* スコア・話数・マイリスト数・レビュー数（探す仕様書 §3.3）。レビュー0件は「評価なし」 */}
           <div className="mt-auto flex items-center gap-3 text-md text-text-tertiary">
-            <EpisodeCount count={p.videoCount} />
             <span className="inline-flex items-center gap-1">
               <StarIcon size={13} className="text-brand-score" />
               {p.score == null ? <span className="text-text-muted">評価なし</span> : <span className="font-semibold text-text-primary">{p.score.toFixed(1)}</span>}
             </span>
+            <EpisodeCount count={p.videoCount} />
             <span className="inline-flex items-center gap-1">
               <UsersIcon size={13} />
               {p.mylistCount.toLocaleString()}

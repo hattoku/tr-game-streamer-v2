@@ -20,7 +20,7 @@ export function ProfilePlaylistCard({
 }: {
   playlist: ProfilePlaylistJson;
   meta: ReactNode;
-  /** 話数を出す（マイリストカード）。サムネイルには重ねず、ステータスなどの行の先頭に置く */
+  /** 話数を出す（マイリストカード）。サムネイルには重ねず、ステータスなどの行の後ろに置く */
   showVideoCount?: boolean;
   children?: ReactNode;
 }) {
@@ -58,8 +58,8 @@ export function ProfilePlaylistCard({
               <span className="truncate text-sm text-text-tertiary">{p.gameName}</span>
             ))}
           <div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 pt-1">
-            {showVideoCount && p.videoCount > 0 && <EpisodeCount count={p.videoCount} className="text-sm text-text-tertiary" />}
             {meta}
+            {showVideoCount && p.videoCount > 0 && <EpisodeCount count={p.videoCount} className="text-sm text-text-tertiary" />}
           </div>
         </div>
       </div>

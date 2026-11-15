@@ -217,11 +217,11 @@ function CollectionPlaylistCard({
               <span className="truncate text-md text-text-tertiary">{p.gameName}</span>
             ))}
           <div className="flex flex-wrap items-center gap-3">
-            <EpisodeCount count={p.videoCount} className="text-md text-text-tertiary" />
             <span className="inline-flex items-center gap-1 text-md">
               <StarIcon size={13} className="text-brand-score" />
               {p.score == null ? <span className="text-text-muted">評価なし</span> : <span className="font-semibold text-text-primary">{p.score.toFixed(1)}</span>}
             </span>
+            <EpisodeCount count={p.videoCount} className="text-md text-text-tertiary" />
             {review?.watchStatus && <StatusChip status={review.watchStatus} readOnly />}
           </div>
         </div>
