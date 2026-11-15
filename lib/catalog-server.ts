@@ -17,6 +17,7 @@ import { LISTED } from './listing';
 import { isListedTag, resolveTags, type TagInfo } from './tags-shared';
 import { popularityScore, readPopularity } from './popularity-shared';
 import {
+  latestVideoMillis,
   normalizeForSearch,
   paginate,
   TOP_CAROUSEL_LIMIT,
@@ -115,7 +116,7 @@ function toPlaylistRecord(d: QueryDocumentSnapshot<DocumentData>): PlaylistRecor
       score: typeof data.score === 'number' ? data.score : null,
       mylistCount: num(data.mylistCount),
       reviewCount: num(data.reviewCount),
-      latestVideoPublishedAt: millis(data.latestVideoPublishedAt),
+      latestVideoPublishedAt: latestVideoMillis(data.latestVideoPublishedAt),
       registeredAt: millis(data.registeredAt) ?? 0,
     },
     channelId: typeof data.channelId === 'string' && data.channelId ? data.channelId : null,

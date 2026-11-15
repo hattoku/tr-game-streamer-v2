@@ -21,6 +21,20 @@ export const TOP_CAROUSEL_LIMIT = 20;
  */
 export const TOP_FEATURED_FETCH_LIMIT = 40;
 
+/**
+ * `playlists.latestVideoPublishedAt` をミリ秒にする。Timestamp のほか、ISO 文字列も読む
+ * （2026-11-15 まで、管理者の登録・収集候補の承認・提案の承認で文字列のまま保存していた。保存し直すのは次の取り直しのとき）。
+ */
+export function latestVideoMillis(value: unknown): number | null {
+  const fromTimestamp = (value as { toMillis?: () => number } | null | undefined)?.toMillis?.();
+  if (typeof fromTimestamp === 'number') return fromTimestamp;
+  if (typeof value === 'string') {
+    const ms = Date.parse(value);
+    return Number.isNaN(ms) ? null : ms;
+  }
+  return null;
+}
+
 /** 公開再生リストのカード1枚分（ページ 再生リストを探す 仕様書 §3.3） */
 export interface PlaylistSummary {
   id: string;

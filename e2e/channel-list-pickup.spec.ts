@@ -12,7 +12,8 @@ interface SeedPlaylist {
   score: number | null;
   mylistCount: number;
   videoCount: number;
-  latestVideoPublishedAt: Date | null;
+  /** 文字列は、以前の登録処理が ISO 文字列のまま保存していたデータの再現 */
+  latestVideoPublishedAt: Date | string | null;
 }
 
 async function seedChannelWithPlaylists(channelName: string, list: SeedPlaylist[]) {
@@ -84,20 +85,22 @@ type ChannelPage = {
 // 日付はどのタイムゾーンでも同じ日になるよう、UTC の正午にする
 const LATEST = new Date(Date.UTC(2026, 10, 12, 12, 0, 0));
 
-test('§9.5 ピックアップの各行にスコア・マイリスト数・話数・最新話の日付が出る（最新話の日付が無い行は日付を出さない）', async ({ guestPage, request }) => {
+test('§9.5 ピックアップの各行にスコア・マイリスト数・話数・最新話の日付が出る（最新話の日付が無い行は日付を出さない。文字列で保存された日付も読む）', async ({ guestPage, request }) => {
   const t = token();
   const channelName = `[E2E] ピックアップ行 ${t}`;
   const { channelId, playlistIds } = await seedChannelWithPlaylists(channelName, [
     { title: `[E2E] 行A ${t}`, score: 4.5, mylistCount: 1234, videoCount: 48, latestVideoPublishedAt: LATEST },
-    { title: `[E2E] 行B ${t}`, score: null, mylistCount: 0, videoCount: 7, latestVideoPublishedAt: null },
+    { title: `[E2E] 行B ${t}`, score: 3.0, mylistCount: 0, videoCount: 7, latestVideoPublishedAt: null },
+    { title: `[E2E] 行C ${t}`, score: null, mylistCount: 2, videoCount: 19, latestVideoPublishedAt: '2020-12-12T07:28:58Z' },
   ]);
-  const [a, b] = playlistIds;
+  const [a, b, c] = playlistIds;
   try {
     // API: ピックアップに数と日付が入る（共通 一覧のサーバー側検索 仕様書 v1.3）
-    const body = await apiUntil<ChannelPage>(request, `/api/catalog/channels?q=${encodeURIComponent(t)}`, (r) => r.total === 1 && r.items[0].topPlaylists.length === 2);
-    const [pa, pb] = body.items[0].topPlaylists;
+    const body = await apiUntil<ChannelPage>(request, `/api/catalog/channels?q=${encodeURIComponent(t)}`, (r) => r.total === 1 && r.items[0].topPlaylists.length === 3);
+    const [pa, pb, pc] = body.items[0].topPlaylists;
     expect(pa).toMatchObject({ id: a, score: 4.5, mylistCount: 1234, videoCount: 48, latestVideoPublishedAt: LATEST.getTime() });
-    expect(pb).toMatchObject({ id: b, score: null, mylistCount: 0, videoCount: 7, latestVideoPublishedAt: null });
+    expect(pb).toMatchObject({ id: b, score: 3, mylistCount: 0, videoCount: 7, latestVideoPublishedAt: null });
+    expect(pc).toMatchObject({ id: c, score: null, videoCount: 19, latestVideoPublishedAt: Date.parse('2020-12-12T07:28:58Z') });
 
     // 画面
     await searchChannel(guestPage, t);
@@ -109,9 +112,14 @@ test('§9.5 ピックアップの各行にスコア・マイリスト数・話�
     await expect(rowA).toContainText('最新話 2026/11/12');
 
     const rowB = guestPage.locator(`a[href="/playlists/${b}"]`);
-    await expect(rowB).toContainText('評価なし');
+    await expect(rowB).toContainText('3.0');
     await expect(rowB).toContainText('7話');
     await expect(rowB).not.toContainText('最新話');
+
+    // 文字列で保存された日付も読む（バイオリベレーションズ2 の件）
+    const rowC = guestPage.locator(`a[href="/playlists/${c}"]`);
+    await expect(rowC).toContainText('評価なし');
+    await expect(rowC).toContainText('最新話 2020/12/12');
   } finally {
     await cleanup(channelId, playlistIds);
   }
