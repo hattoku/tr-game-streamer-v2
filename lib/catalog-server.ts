@@ -397,22 +397,24 @@ interface ChannelAggregate {
   playlistCount: number;
   videoCount: number;
   reviewCount: number;
+  mylistCount: number;
   topPlaylists: PlaylistRecord[];
   /** ピックアップの次のスコア順の再生リストのサムネイル（最大3枚。ページ チャンネル 探す 仕様書 §9.6） */
   moreThumbnailUrls: string[];
 }
 
-/** チャンネルごとの掲載中の再生リスト数・動画数・スコア上位3件と、その次の3件のサムネイル（ページ チャンネル 探す 仕様書 §3.3・§9.6） */
+/** チャンネルごとの掲載中の再生リスト数・動画数・レビュー数・マイリスト登録数・スコア上位3件と、その次の3件のサムネイル（ページ チャンネル 探す 仕様書 §3.3・§9.6） */
 function channelAggregates(listed: ListedPlaylists): Map<string, ChannelAggregate> {
   return memo('channels.aggregates', listed.versions.slice(0, 1), () => {
     const map = new Map<string, ChannelAggregate>();
     // スコア順の一覧を先頭から見るので、各チャンネルの最初の3件がそのままピックアップになる
     for (const r of listed.sorted.score) {
       if (!r.channelId) continue;
-      const entry = map.get(r.channelId) ?? { playlistCount: 0, videoCount: 0, reviewCount: 0, topPlaylists: [], moreThumbnailUrls: [] };
+      const entry = map.get(r.channelId) ?? { playlistCount: 0, videoCount: 0, reviewCount: 0, mylistCount: 0, topPlaylists: [], moreThumbnailUrls: [] };
       entry.playlistCount += 1;
       entry.videoCount += r.summary.videoCount;
       entry.reviewCount += r.summary.reviewCount;
+      entry.mylistCount += r.summary.mylistCount;
       if (entry.topPlaylists.length < PICKUP_COUNT) entry.topPlaylists.push(r);
       else if (entry.moreThumbnailUrls.length < MORE_THUMBNAIL_COUNT && r.summary.thumbnailUrl) entry.moreThumbnailUrls.push(r.summary.thumbnailUrl);
       map.set(r.channelId, entry);
@@ -465,6 +467,7 @@ async function channelIndex(): Promise<ChannelIndex> {
         playlistCount: agg.playlistCount,
         videoCount: agg.videoCount,
         reviewCount: agg.reviewCount,
+        mylistCount: agg.mylistCount,
         topPlaylists: agg.topPlaylists.map((r) => ({
           id: r.summary.id,
           title: r.summary.title,
@@ -577,7 +580,16 @@ export async function topCatalog(): Promise<TopCatalog> {
   // 人気のチャンネル（§6A）。チャンネル一覧の人気順の先頭20件
   const popularChannels = channels.popular
     .slice(0, TOP_CAROUSEL_LIMIT)
-    .map((c): PopularChannelItem => ({ id: c.id, name: c.name, iconUrl: c.iconUrl, playlistCount: c.playlistCount }));
+    .map(
+      (c): PopularChannelItem => ({
+        id: c.id,
+        name: c.name,
+        iconUrl: c.iconUrl,
+        playlistCount: c.playlistCount,
+        videoCount: c.videoCount,
+        mylistCount: c.mylistCount,
+      }),
+    );
   const playlistSections = memo('top', listed.versions, () => {
     const picked = new Map<string, PlaylistRecord>();
     const ids = (list: PlaylistRecord[]) => list.map((r) => (picked.set(r.summary.id, r), r.summary.id));
