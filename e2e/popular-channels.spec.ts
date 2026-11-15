@@ -284,7 +284,7 @@ test('TOP §6A: 「人気のチャンネル」にピン留めしたチャンネ�
 
 test('TOP §4.2: キャッチコピーと検索バーのプレースホルダーが新しい文言', async ({ guestPage }) => {
   await guestPage.goto('/');
-  await expect(guestPage.getByText('人気のゲーム実況者のシリーズを、最初から・続きから。').first()).toBeVisible();
+  await expect(guestPage.getByText('人気のゲーム実況者まとめ&シリーズ視聴記録').first()).toBeVisible();
   await expect(guestPage.getByPlaceholder('チャンネル名・ゲームタイトルで検索')).toBeVisible();
 });
 
@@ -324,7 +324,7 @@ test('ナビ §2.4・§3.3（PC）: グローバルナビとフッターのサ�
   const nav = guestPage.getByRole('navigation', { name: 'グローバルナビゲーション' });
   await expect(nav.getByRole('link')).toHaveText(['チャンネルから探す', '再生リストを探す', 'ゲームから探す']);
   const footer = guestPage.locator('footer');
-  await expect(footer.getByText('人気のゲーム実況者のシリーズを、最初から・続きから。')).toBeVisible();
+  await expect(footer.getByText('人気のゲーム実況者まとめ&シリーズ視聴記録')).toBeVisible();
   const service = footer.getByRole('link', { name: /から探す|を探す/ });
   await expect(service).toHaveText(['チャンネル名から探す', '再生リストを探す', 'ゲームタイトルから探す']);
 });

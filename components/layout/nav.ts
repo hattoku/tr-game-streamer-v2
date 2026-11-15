@@ -72,7 +72,7 @@ export const FOOTER_LEGAL_NAV: NavItem[] = [
 ];
 
 /** TOPのキャッチコピーとフッターのサービス説明（ページ top 仕様書 §4.2 v2.2、UI仕様書 §3.2） */
-export const SERVICE_TAGLINE = '人気のゲーム実況者のシリーズを、最初から・続きから。';
+export const SERVICE_TAGLINE = '人気のゲーム実況者まとめ&シリーズ視聴記録';
 export const COPYRIGHT = '© 2026 発見&納得コミュニケーションズ';
 
 /**
