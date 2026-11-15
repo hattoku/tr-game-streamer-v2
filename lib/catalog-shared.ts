@@ -108,6 +108,8 @@ export interface ChannelListItem {
   videoCount: number;
   /** このチャンネルの掲載中の再生リストのレビュー数合計（ページ チャンネル 探す 仕様書 §9.3） */
   reviewCount: number;
+  /** このチャンネルの掲載中の再生リストのマイリスト登録数合計（TOP の人気のチャンネルのカードに出す。ページ top 仕様書 §6A.4） */
+  mylistCount: number;
   /** スコアが高い順の上位3件（評価なしは末尾） */
   topPlaylists: ChannelPickupPlaylist[];
 }
@@ -132,6 +134,10 @@ export interface PopularChannelItem {
   iconUrl: string;
   /** 掲載中の再生リスト数 */
   playlistCount: number;
+  /** 掲載中の再生リストの動画数合計 */
+  videoCount: number;
+  /** 掲載中の再生リストのマイリスト登録数合計（再生リスト詳細の配信者欄と同じ数え方） */
+  mylistCount: number;
 }
 
 /** TOP の各セクションに出す再生リスト（ページ top 仕様書）。カードは `playlists` に1回ずつ入れ、各セクションは ID で引く */
