@@ -24,6 +24,7 @@ import { Tag } from '@/components/ui/Tag';
 import { CommentIcon, InventoryIcon, StarIcon, UsersIcon } from '@/components/ui/icons';
 import { cn } from '@/components/ui/cn';
 import { LISTED } from '@/lib/listing';
+import { latestVideoMillis } from '@/lib/catalog-shared';
 import { fetchTagsMap, resolveTags, type TagInfo } from '@/lib/tags';
 import type { PlaylistSummary } from '@/lib/catalog-shared';
 
@@ -49,7 +50,7 @@ function toSummary(d: { id: string; data(): Record<string, unknown> }, tagsMap?:
     score: (data.score as number | null) ?? null,
     mylistCount: (data.mylistCount as number) ?? 0,
     reviewCount: (data.reviewCount as number) ?? 0,
-    latestVideoPublishedAt: (data.latestVideoPublishedAt as { toMillis(): number } | null)?.toMillis?.() ?? null,
+    latestVideoPublishedAt: latestVideoMillis(data.latestVideoPublishedAt),
     registeredAt: (data.registeredAt as { toMillis(): number } | undefined)?.toMillis?.() ?? 0,
     tags: tagsMap
       ? resolveTags((data.playlistTagIds as string[]) ?? [], (data.playlistTagsFixed as string[]) ?? [], tagsMap)

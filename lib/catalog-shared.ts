@@ -21,6 +21,20 @@ export const TOP_CAROUSEL_LIMIT = 20;
  */
 export const TOP_FEATURED_FETCH_LIMIT = 40;
 
+/**
+ * `playlists.latestVideoPublishedAt` をミリ秒にする。Timestamp のほか、ISO 文字列も読む
+ * （2026-11-15 まで、管理者の登録・収集候補の承認・提案の承認で文字列のまま保存していた。保存し直すのは次の取り直しのとき）。
+ */
+export function latestVideoMillis(value: unknown): number | null {
+  const fromTimestamp = (value as { toMillis?: () => number } | null | undefined)?.toMillis?.();
+  if (typeof fromTimestamp === 'number') return fromTimestamp;
+  if (typeof value === 'string') {
+    const ms = Date.parse(value);
+    return Number.isNaN(ms) ? null : ms;
+  }
+  return null;
+}
+
 /** 公開再生リストのカード1枚分（ページ 再生リストを探す 仕様書 §3.3） */
 export interface PlaylistSummary {
   id: string;
@@ -76,6 +90,12 @@ export interface ChannelPickupPlaylist {
   title: string;
   thumbnailUrl: string;
   score: number | null;
+  /** マイリスト登録数（v2.3、§9.5） */
+  mylistCount: number;
+  /** 話数＝再生リストの動画数（v2.3、§9.5） */
+  videoCount: number;
+  /** 再生リストで一番新しい動画の投稿日時（ミリ秒。動画が無ければ null。v2.3、§9.5） */
+  latestVideoPublishedAt: number | null;
 }
 
 export interface ChannelListItem {
@@ -88,8 +108,15 @@ export interface ChannelListItem {
   videoCount: number;
   /** このチャンネルの掲載中の再生リストのレビュー数合計（ページ チャンネル 探す 仕様書 §9.3） */
   reviewCount: number;
+  /** このチャンネルの掲載中の再生リストのマイリスト登録数合計（TOP の人気のチャンネルのカードに出す。ページ top 仕様書 §6A.4） */
+  mylistCount: number;
   /** スコアが高い順の上位3件（評価なしは末尾） */
   topPlaylists: ChannelPickupPlaylist[];
+  /**
+   * ピックアップの次にスコアが高い再生リストのサムネイル（最大3枚、サムネイルの無いものは飛ばす）。
+   * カードの「ほか N 本の再生リスト」に重ねて見せ、まだたくさんあることを伝える（ページ チャンネル 探す 仕様書 §9.6）
+   */
+  moreThumbnailUrls: string[];
 }
 
 export interface GameListItem {
@@ -112,6 +139,10 @@ export interface PopularChannelItem {
   iconUrl: string;
   /** 掲載中の再生リスト数 */
   playlistCount: number;
+  /** 掲載中の再生リストの動画数合計 */
+  videoCount: number;
+  /** 掲載中の再生リストのマイリスト登録数合計（再生リスト詳細の配信者欄と同じ数え方） */
+  mylistCount: number;
 }
 
 /** TOP の各セクションに出す再生リスト（ページ top 仕様書）。カードは `playlists` に1回ずつ入れ、各セクションは ID で引く */

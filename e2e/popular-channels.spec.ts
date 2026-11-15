@@ -111,7 +111,7 @@ interface ChannelPage {
 }
 
 interface TopBody {
-  popularChannels: Array<{ id: string; name: string; playlistCount: number }>;
+  popularChannels: Array<{ id: string; name: string; playlistCount: number; videoCount: number; mylistCount: number }>;
 }
 
 /** 管理者のトークンで集計の API を呼ぶ */
@@ -232,15 +232,17 @@ test.describe('集計と並び（desktop だけ）', () => {
   });
 });
 
-test('TOP §6A: 「人気のチャンネル」にピン留めしたチャンネルが出て、カードからチャンネル詳細へ行ける', async ({ guestPage, request }, testInfo) => {
+test('TOP §6A: 「人気のチャンネル」にピン留めしたチャンネルが出て、カードに件数が出て、チャンネル詳細へ行ける', async ({ guestPage, request }, testInfo) => {
   test.setTimeout(120_000);
   const t = token();
   const seed = new Seed();
   try {
     const name = `[E2E] TOP人気 ${t}`;
     const id = await seed.channel(name);
-    await seed.playlist(id, name);
-    await seed.playlist(id, name);
+    await seed.playlist(id, name, { mylistCount: 1 });
+    await seed.playlist(id, name, { mylistCount: 2 });
+    // 掲載していない再生リストは数えない
+    await seed.playlist(id, name, { listingStatus: 'unconfirmed', mylistCount: 50 });
     // stg にある他のピン留めより前に出す（desktop と mobile が同時に走っても重ならない値）
     await seed.pin(id, name, testInfo.project.name === 'desktop' ? -2_000_000 : -1_000_000);
     await apiUntil<TopBody>(request, '/api/catalog/top', (b) => b.popularChannels.slice(0, 2).some((c) => c.id === id));
@@ -250,7 +252,22 @@ test('TOP §6A: 「人気のチャンネル」にピン留めしたチャンネ�
     const card = section.locator(`a[href="/channels/${id}"]`);
     await expect(card).toBeVisible({ timeout: 30_000 });
     await expect(card).toContainText(name);
-    await expect(card).toContainText('再生リスト 2');
+    // §6A.4 v2.3: 再生リスト・動画・マイリストの数（掲載中の再生リストの合計）を並べる
+    const stats = card.getByTestId('popular-channel-stats');
+    await expect(stats).toContainText('2 再生リスト');
+    await expect(stats).toContainText('20 動画');
+    await expect(stats).toContainText('3 マイリスト');
+    await expect(stats).not.toContainText('レビュー');
+    // 件数は幅によらず2行（1行目 再生リスト・動画、2行目 マイリスト）。どちらの行も折り返さない
+    const rows = stats.locator('p');
+    await expect(rows).toHaveCount(2);
+    await expect(rows.nth(0)).toContainText('2 再生リスト');
+    await expect(rows.nth(0)).toContainText('20 動画');
+    await expect(rows.nth(1)).toContainText('3 マイリスト');
+    for (const row of [rows.nth(0), rows.nth(1)]) expect((await row.boundingBox())!.height).toBeLessThan(24);
+    // カードの幅は PC 280px・スマートフォン 240px（§6A.4 v2.3）
+    const width = (await card.boundingBox())!.width;
+    expect(width).toBeCloseTo(testInfo.project.name === 'desktop' ? 280 : 240, 0);
     // セクションは「注目の再生リスト」より上（§3）
     const popularTop = (await section.boundingBox())!.y;
     const featured = guestPage.getByRole('heading', { name: '注目の再生リスト' });
