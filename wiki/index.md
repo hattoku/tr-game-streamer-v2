@@ -85,6 +85,7 @@ tr-game-streamer-v2 の**コーディング支援用**Wiki（実装の変更履�
 - [[2026-11-15-channel-list-pickup-rows]] — チャンネル一覧のピックアップ行にマイリスト数・話数・最新話の日付。登録時に `latestVideoPublishedAt` を文字列で保存していた不具合も修正（PR #46）
 - [[2026-11-15-top-popular-channel-stats]] — TOP の人気のチャンネルのカードに「N 再生リスト・N 動画・N マイリスト」（2行固定）。カード幅は実際の 280/240px に仕様書を合わせた（PR #44）
 - [[2026-11-15-channel-card-more]] — チャンネル一覧のカードに「評価の高い再生リスト」の見出しと「ほか N 本の再生リスト すべて見る」（次の再生リストのサムネイルを重ねる）を追加（PR #45）
+- [[2026-11-15-service-tagline]] — TOP・フッターのキャッチコピーを「人気のゲーム実況者まとめ&シリーズ視聴記録」に（PR #43）
 
 ## Entities
 - [[proxy]] — proxy.ts（旧middleware.ts、Next.js 16のproxy規約対応）。まとめ取り下げ後は `/collections*` を 404 に書き換える
