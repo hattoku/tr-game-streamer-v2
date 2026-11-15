@@ -17,6 +17,7 @@ import { LISTED } from './listing';
 import { isListedTag, resolveTags, type TagInfo } from './tags-shared';
 import { popularityScore, readPopularity } from './popularity-shared';
 import {
+  latestVideoMillis,
   normalizeForSearch,
   paginate,
   TOP_CAROUSEL_LIMIT,
@@ -115,7 +116,7 @@ function toPlaylistRecord(d: QueryDocumentSnapshot<DocumentData>): PlaylistRecor
       score: typeof data.score === 'number' ? data.score : null,
       mylistCount: num(data.mylistCount),
       reviewCount: num(data.reviewCount),
-      latestVideoPublishedAt: millis(data.latestVideoPublishedAt),
+      latestVideoPublishedAt: latestVideoMillis(data.latestVideoPublishedAt),
       registeredAt: millis(data.registeredAt) ?? 0,
     },
     channelId: typeof data.channelId === 'string' && data.channelId ? data.channelId : null,
@@ -459,7 +460,15 @@ async function channelIndex(): Promise<ChannelIndex> {
         playlistCount: agg.playlistCount,
         videoCount: agg.videoCount,
         reviewCount: agg.reviewCount,
-        topPlaylists: agg.topPlaylists.map((r) => ({ id: r.summary.id, title: r.summary.title, thumbnailUrl: r.summary.thumbnailUrl, score: r.summary.score })),
+        topPlaylists: agg.topPlaylists.map((r) => ({
+          id: r.summary.id,
+          title: r.summary.title,
+          thumbnailUrl: r.summary.thumbnailUrl,
+          score: r.summary.score,
+          mylistCount: r.summary.mylistCount,
+          videoCount: r.summary.videoCount,
+          latestVideoPublishedAt: r.summary.latestVideoPublishedAt,
+        })),
       });
     }
     list.sort((a, b) => {

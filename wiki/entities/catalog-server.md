@@ -23,3 +23,4 @@ updated: 2026-11-14
 
 - 新しい一覧を足すときは、ここに索引と検索関数を足す。画面から Firestore を直接全件読まない（[[掲載状態と検索面]]）
 - 索引に入れるフィールドを増やしたら、変更の購読で更新されるかを確かめる
+- `latestVideoPublishedAt` は古いデータに ISO 文字列が残っていることがあるので `latestVideoMillis` で読む（[[2026-11-15-channel-list-pickup-rows]]）
