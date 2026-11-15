@@ -1,5 +1,9 @@
 # 操作ログ
 
+## [2026-11-15] ingest | チャンネル一覧のピックアップ行に数と最新話の日付（PR #46）
+ピックアップ再生リストの行を2段にし、★スコア・マイリスト数・話数・最新話の日付を出す。stg で見つかった、登録時に最新話の日付を ISO 文字列で保存していた不具合も直した（登録は Date、保存済みの文字列も読む）。
+→ [[2026-11-15-channel-list-pickup-rows]]
+
 ## [2026-11-15] ingest | wiki への記録をマージの直前に変える
 作業中・レビュー待ちの PR には wiki を入れず、「マージ」と言われたときに最終的な内容で書いて PR に足してからマージする（ユーザー決定）。順番は wiki → マージ → Notion。ルート CLAUDE.md・development_flow.md §2・§5・wiki/CLAUDE.md・spec-conformance-reviewer を書き換え。
 → [[2026-11-15-wiki-record-at-merge]]
