@@ -258,6 +258,13 @@ test('TOP §6A: 「人気のチャンネル」にピン留めしたチャンネ�
     await expect(stats).toContainText('20 動画');
     await expect(stats).toContainText('3 マイリスト');
     await expect(stats).not.toContainText('レビュー');
+    // 件数は幅によらず2行（1行目 再生リスト・動画、2行目 マイリスト）。どちらの行も折り返さない
+    const rows = stats.locator('p');
+    await expect(rows).toHaveCount(2);
+    await expect(rows.nth(0)).toContainText('2 再生リスト');
+    await expect(rows.nth(0)).toContainText('20 動画');
+    await expect(rows.nth(1)).toContainText('3 マイリスト');
+    for (const row of [rows.nth(0), rows.nth(1)]) expect((await row.boundingBox())!.height).toBeLessThan(24);
     // カードの幅は PC 280px・スマートフォン 240px（§6A.4 v2.3）
     const width = (await card.boundingBox())!.width;
     expect(width).toBeCloseTo(testInfo.project.name === 'desktop' ? 280 : 240, 0);

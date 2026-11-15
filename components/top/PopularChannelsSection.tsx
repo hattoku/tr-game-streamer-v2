@@ -42,21 +42,25 @@ function PopularChannelCard({ channel }: { channel: PopularChannelItem }) {
           </div>
         )}
       </div>
-      <p className="line-clamp-2 text-base font-medium text-text-primary group-hover:text-text-secondary">{channel.name}</p>
-      <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-md text-text-tertiary" data-testid="popular-channel-stats">
-        <span className="inline-flex items-center gap-1">
-          <InventoryIcon size={13} />
-          {channel.playlistCount.toLocaleString()} 再生リスト
-        </span>
-        <span className="inline-flex items-center gap-1">
-          <PlayIcon size={11} />
-          {channel.videoCount.toLocaleString()} 動画
-        </span>
-        <span className="inline-flex items-center gap-1">
+      {/* 名前が1行でも2行分の高さを取り、件数の位置をカード間でそろえる */}
+      <p className="line-clamp-2 min-h-[2lh] text-base font-medium text-text-primary group-hover:text-text-secondary">{channel.name}</p>
+      {/* 件数は幅によらず2行に固定（1行目 再生リスト・動画、2行目 マイリスト）。スマートフォンでは3つが1行に入らないため */}
+      <div className="flex flex-col gap-1 text-md text-text-tertiary" data-testid="popular-channel-stats">
+        <p className="flex items-center gap-x-3 whitespace-nowrap">
+          <span className="inline-flex items-center gap-1">
+            <InventoryIcon size={13} />
+            {channel.playlistCount.toLocaleString()} 再生リスト
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <PlayIcon size={11} />
+            {channel.videoCount.toLocaleString()} 動画
+          </span>
+        </p>
+        <p className="inline-flex items-center gap-1 whitespace-nowrap">
           <UsersIcon size={13} />
           {channel.mylistCount.toLocaleString()} マイリスト
-        </span>
-      </p>
+        </p>
+      </div>
     </Link>
   );
 }
