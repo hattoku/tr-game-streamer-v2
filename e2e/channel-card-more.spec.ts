@@ -80,10 +80,10 @@ test('§9.6 ピックアップより多いときは「ほか N 本の再生リ�
 
     await guestPage.goto('/channels');
     await guestPage.getByLabel('チャンネル名で検索').filter({ visible: true }).fill(t);
-    // 目印で絞り込むと一覧はこのチャンネルだけになる
-    await expect(guestPage.getByText(channelName)).toBeVisible({ timeout: 30_000 });
-    await expect(guestPage.getByText('評価の高い再生リスト')).toBeVisible();
-    const more = guestPage.getByTestId('channel-card-more');
+    // 絞り込みの反映前は他のチャンネルのカードも並んでいるので、このチャンネルのカードの中だけを見る
+    const card = guestPage.getByTestId('channel-card').filter({ hasText: channelName });
+    await expect(card.getByText('評価の高い再生リスト')).toBeVisible({ timeout: 30_000 });
+    const more = card.getByTestId('channel-card-more');
     await expect(more).toContainText('ほか 5 本の再生リスト');
     await expect(more).toContainText('すべて見る');
     await expect(more.locator('img')).toHaveCount(3);
@@ -105,9 +105,9 @@ test('§9.6 再生リストが3本以下のときは「ほか N 本」を出さ�
 
     await guestPage.goto('/channels');
     await guestPage.getByLabel('チャンネル名で検索').filter({ visible: true }).fill(t);
-    await expect(guestPage.getByText(channelName)).toBeVisible({ timeout: 30_000 });
-    await expect(guestPage.getByText('主な再生リスト')).toBeVisible();
-    await expect(guestPage.getByTestId('channel-card-more')).toHaveCount(0);
+    const card = guestPage.getByTestId('channel-card').filter({ hasText: channelName });
+    await expect(card.getByText('主な再生リスト')).toBeVisible({ timeout: 30_000 });
+    await expect(card.getByTestId('channel-card-more')).toHaveCount(0);
   } finally {
     await cleanup(ids, channelId);
   }

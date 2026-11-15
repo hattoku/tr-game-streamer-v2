@@ -23,7 +23,7 @@ export function ChannelListCard({ channel }: { channel: ChannelCardData }) {
   // Card自体には`interactive`（カード全体のホバー浮き上がり）を付けない
   // （components/mylist/MylistCard.tsxと同じ方針。ホバーの手がかりは各Link側のgroup-hover等で個別に出す）
   return (
-    <Card className="flex flex-col gap-3">
+    <Card className="flex flex-col gap-3" data-testid="channel-card">
       <Link href={channelHref} className="group flex gap-3">
         {/* アイコンは仕様どおり正方形（角丸）。yt3.ggpht.com の Referer 制限対策で no-referrer */}
         <div className="size-[72px] shrink-0 overflow-hidden rounded-[10px] bg-bg-btn">
