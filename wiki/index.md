@@ -83,6 +83,7 @@ tr-game-streamer-v2 の**コーディング支援用**Wiki（実装の変更履�
 - [[2026-11-14-mylist-continue-row]] — マイリストの「続きから再生」を幅いっぱいの赤ボタンから行全体のリンク＋右端の丸い再生アイコンに（iPhone は右矢印）
 - [[2026-11-15-wiki-record-at-merge]] — wiki への記録を「作業中の PR の中」から「「マージ」と言われたとき、マージの直前に同じ PR の中」へ（stg の直しで wiki だけ古くなるのを防ぐ）
 - [[2026-11-15-channel-list-pickup-rows]] — チャンネル一覧のピックアップ行にマイリスト数・話数・最新話の日付。登録時に `latestVideoPublishedAt` を文字列で保存していた不具合も修正（PR #46）
+- [[2026-11-15-channel-card-more]] — チャンネル一覧のカードに「評価の高い再生リスト」の見出しと「ほか N 本の再生リスト すべて見る」（次の再生リストのサムネイルを重ねる）を追加（PR #45）
 
 ## Entities
 - [[proxy]] — proxy.ts（旧middleware.ts、Next.js 16のproxy規約対応）。まとめ取り下げ後は `/collections*` を 404 に書き換える
