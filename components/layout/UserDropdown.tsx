@@ -1,6 +1,6 @@
 /**
  * ヘッダーのユーザードロップダウン（共通 uiコンポーネント フロント 仕様書 §2.6）。
- * ユーザーアイコン（24px 円形、未設定時はイニシャル。デザイントークン仕様書 v2.0 §14）＋ユーザー名をピルに収め、クリックで
+ * ユーザーアイコン（24px 円形、未設定時は人物シルエット。デザイントークン仕様書 v2.0 §14）＋ユーザー名をピルに収め、クリックで
  * 次のまとまりを表示する（v2.5 で整理）:
  *   ユーザー名・メール（表示専用）＋プロフィール＋設定／マイリスト・視聴履歴（スマホではマイリストを出さない）／
  *   サポート（提案履歴・お問い合わせ履歴）／管理画面（管理者のみ）／ログアウト。
@@ -11,6 +11,7 @@
  */
 'use client';
 
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
@@ -33,43 +34,53 @@ import { useUnreadNotificationCounts } from './useUnreadNotificationCounts';
 import { COLLECTIONS_ENABLED } from '@/lib/feature-flags';
 import { useIsMobile } from './useIsMobile';
 
+/**
+ * ユーザーアイコン（円形）。画像が未設定・読み込めないときは、名無しの人物シルエットを出す
+ * （ページ 設定 プロフィール仕様書 §4.2、共通 デザイントークン仕様書 §14）。
+ * 画像はこのサイトの配信 API（`/api/users/{uid}/avatar/...`）の URL だけを使い、外部の URL は表示しない。
+ */
 export function UserAvatar({
-  name,
   imageUrl,
   size = 28,
   className,
 }: {
-  name: string;
-  /** 未設定・取得失敗時はイニシャル表示にフォールバックする（レビュー一覧等） */
+  /** 呼び出し側の互換のため残している（シルエットは名前によらず同じ） */
+  name?: string;
   imageUrl?: string | null;
   size?: number;
   className?: string;
 }) {
-  const initial = name.trim().charAt(0).toUpperCase() || '?';
-  if (imageUrl) {
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  if (imageUrl && imageUrl.startsWith('/api/users/') && failedUrl !== imageUrl) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
         src={imageUrl}
         alt=""
-        className={cn('inline-block shrink-0 rounded-full object-cover', className)}
+        className={cn('inline-block shrink-0 rounded-full bg-bg-selected object-cover', className)}
         style={{ width: size, height: size }}
+        onError={() => setFailedUrl(imageUrl)}
+        data-testid="user-avatar-image"
       />
     );
   }
   return (
     <span
       aria-hidden
-      className={cn('inline-flex shrink-0 items-center justify-center rounded-full bg-bg-selected font-semibold text-text-primary', className)}
-      style={{ width: size, height: size, fontSize: Math.round(size * 0.46) }}
+      className={cn('inline-flex shrink-0 items-end justify-center overflow-hidden rounded-full bg-bg-selected text-text-muted', className)}
+      style={{ width: size, height: size }}
+      data-testid="user-avatar-silhouette"
     >
-      {initial}
+      <svg viewBox="0 0 24 24" fill="currentColor" style={{ width: '100%', height: '100%' }} aria-hidden>
+        <circle cx="12" cy="9.5" r="4.25" />
+        <path d="M3.5 24c0-5 3.8-8.25 8.5-8.25s8.5 3.25 8.5 8.25z" />
+      </svg>
     </span>
   );
 }
 
 export function UserDropdown() {
-  const { user, displayName, role } = useAuth();
+  const { user, displayName, profileImageUrl, role } = useAuth();
   const router = useRouter();
   const isAdmin = !!user && (role === 'owner' || role === 'operator');
   const pendingCount = usePendingWorkflowCount(isAdmin);
@@ -102,7 +113,7 @@ export function UserDropdown() {
           'data-[state=open]:border-border-control data-[state=open]:text-text-primary',
         )}
       >
-        <UserAvatar name={name} size={24} />
+        <UserAvatar name={name} imageUrl={profileImageUrl} size={24} />
         {/* 表示名は 1024px 以上でのみ。768〜1023px はヘッダーに収まらないためアイコン＋▾ だけにする（UI仕様書 §2.9） */}
         <span className="hidden max-w-[6em] truncate text-base text-text-primary lg:inline">{name}</span>
         <ChevronDownIcon size={12} />

@@ -48,7 +48,7 @@ interface MenuGroup {
 }
 
 export default function MyPage() {
-  const { user, displayName, role, loading } = useAuth();
+  const { user, displayName, profileImageUrl, role, loading } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
   const [signingOut, setSigningOut] = useState(false);
@@ -120,7 +120,7 @@ export default function MyPage() {
         {/* 自分のアイコン・名前。押すとプロフィール（公開ページ。表示名・自己紹介の編集もここ） */}
         <Link href={`/profile/${user.uid}`} className="block rounded-[12px]" data-testid="mypage-profile">
           <Card interactive className="flex items-center gap-3">
-            <UserAvatar name={name} size={48} />
+            <UserAvatar name={name} imageUrl={profileImageUrl} size={48} />
             <div className="min-w-0 flex-1">
               <p className="truncate text-lg font-medium text-text-primary">{name}</p>
               {user.email && <p className="truncate text-md text-text-muted">{user.email}</p>}
