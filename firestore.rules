@@ -56,12 +56,16 @@ service cloud.firestore {
         && request.resource.data.uid == userId
         && request.resource.data.role == 'user'
         && request.resource.data.isAI == false
-        && request.resource.data.isBanned == false;
+        && request.resource.data.isBanned == false
+        // アイコンは API だけが書く（update と同じ。削除して作り直す抜け道を塞ぐ）
+        && !('profileImageUrl' in request.resource.data);
 
       // 本人はプロフィール・設定系フィールドのみ変更可。role/BAN関連/集計値は管理者のみ変更可。
+      // profileImageUrl（アイコン）は API（PUT/DELETE /api/users/{uid}/avatar）だけが書く。任意の外部 URL を
+      // 入れられないよう本人にも直接は書かせない（ページ 設定 プロフィール仕様書 §9.5）。
       allow update: if isAdmin()
         || (isSelf(userId) && onlyChangedKeys([
-              'displayName', 'profileImageUrl', 'bio', 'fcmTokens',
+              'displayName', 'bio', 'fcmTokens',
               'isMylistPublic', 'isReviewHistoryPublic',
               'showNewArrivalNotification', 'isContinuousPlayEnabled', 'lastLoginAt',
               'hideSpoilerReviews', 'hideUpcomingThumbnails'

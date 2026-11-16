@@ -4,6 +4,7 @@ import { adminDb } from '@/lib/firebase-admin';
 import { readJsonObject, toCollectionJson } from '@/lib/collections-server';
 import { COLLECTIONS_ENABLED } from '@/lib/feature-flags';
 import { normalizeWatchStatus, WATCH_STATUS_ORDER } from '@/components/ui/Chip';
+import { syncUserDenormalizedFields } from '@/lib/profile-server';
 import { validateProfileInput, type ProfileJson, type ProfilePlaylistJson } from '@/lib/profile-shared';
 
 // 公開プロフィール（ページ 設定 プロフィール仕様書、まとめ機能仕様書 §9.1）。ログイン不要。
@@ -167,7 +168,7 @@ export async function GET(request: NextRequest, { params }: Params) {
 // プロフィール編集（§9。表示名・自己紹介）。本人のみ。
 // 表示名が変わったら、自分の reviews・collections の非正規化コピー（userDisplayName）も新しい名前に揃える
 // （2026-10-12 ユーザー決定。投稿者名・作成者名からプロフィールへリンクするため、リンク先と表示名を食い違わせない）。
-// 更新対象は userId の等価条件のみで引くため複合インデックスは不要。
+// アイコン（プロフィール画像）は multipart のため別の API（PUT/DELETE /api/users/[userId]/avatar）で保存する。
 export async function PATCH(request: NextRequest, { params }: Params) {
   const { userId } = await params;
   const auth = await requireUser(request);
@@ -190,23 +191,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   await userRef.update({ displayName, bio });
 
   if (userData.displayName !== displayName) {
-    const [reviewSnap, collectionSnap] = await Promise.all([
-      adminDb.collection('reviews').where('userId', '==', userId).get(),
-      adminDb.collection('collections').where('userId', '==', userId).get(),
-    ]);
-    // 個々の書き込み失敗は BulkWriter の既定リトライ後に握り潰す（未処理 rejection にしない）。取り残した分は古い名前のまま残るが、
-    // 次に表示名を変えたとき（userDisplayName が異なる分）か、そのレビュー・まとめを保存し直したときに揃う
-    let failed = 0;
-    const writer = adminDb.bulkWriter();
-    for (const d of [...reviewSnap.docs, ...collectionSnap.docs]) {
-      if (d.data().userDisplayName !== displayName) {
-        writer.update(d.ref, { userDisplayName: displayName }).catch(() => {
-          failed += 1;
-        });
-      }
-    }
-    await writer.close();
-    if (failed > 0) console.error(`[profile PATCH] userDisplayName の更新に ${failed} 件失敗 (uid=${userId})`);
+    await syncUserDenormalizedFields(userId, { userDisplayName: displayName }, 'profile PATCH');
   }
 
   return NextResponse.json({ displayName, bio: bio || null });

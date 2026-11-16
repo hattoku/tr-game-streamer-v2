@@ -5,8 +5,10 @@
  */
 import { auth } from '@/lib/firebase';
 import type { ProfileJson } from '@/lib/profile-shared';
+import { isProfileImageErrorCode, type ProfileImageErrorCode } from '@/lib/profile-image-shared';
 
 export * from '@/lib/profile-shared';
+export * from '@/lib/profile-image-shared';
 
 export class ProfileNotFoundError extends Error {}
 
@@ -36,4 +38,37 @@ export async function updateProfile(userId: string, input: { displayName: string
   });
   if (!res.ok) throw new Error(`status_${res.status}`);
   return (await res.json()) as { displayName: string; bio: string | null };
+}
+
+export class ProfileImageUploadError extends Error {
+  constructor(readonly code: ProfileImageErrorCode | null) {
+    super(code ?? 'network');
+  }
+}
+
+/** アイコンの設定（§9.2・§9.5）。サーバーで中央を正方形に切り抜き 256×256 にして保存し、新しい URL を返す */
+export async function uploadProfileImage(userId: string, file: File): Promise<string> {
+  if (!auth.currentUser) throw new Error('not signed in');
+  const form = new FormData();
+  form.append('image', file);
+  const res = await fetch(`/api/users/${encodeURIComponent(userId)}/avatar`, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${await auth.currentUser.getIdToken()}` },
+    body: form,
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: unknown } | null;
+    throw new ProfileImageUploadError(isProfileImageErrorCode(body?.error) ? body.error : res.status === 413 ? 'image_size' : null);
+  }
+  return ((await res.json()) as { profileImageUrl: string }).profileImageUrl;
+}
+
+/** アイコンを外す（未設定のシルエット表示に戻す） */
+export async function removeProfileImage(userId: string): Promise<void> {
+  if (!auth.currentUser) throw new Error('not signed in');
+  const res = await fetch(`/api/users/${encodeURIComponent(userId)}/avatar`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${await auth.currentUser.getIdToken()}` },
+  });
+  if (!res.ok) throw new Error(`status_${res.status}`);
 }

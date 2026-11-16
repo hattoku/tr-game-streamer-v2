@@ -15,6 +15,8 @@ interface AuthContextValue {
   role: Role;
   /** users/{uid}.displayName（ヘッダー表示用。未取得・未ログイン時は null） */
   displayName: string | null;
+  /** users/{uid}.profileImageUrl（ヘッダー・マイページのアイコン用。未設定・未取得・未ログイン時は null） */
+  profileImageUrl: string | null;
   loading: boolean;
   refreshRole: () => Promise<void>;
 }
@@ -23,6 +25,7 @@ const AuthContext = createContext<AuthContextValue>({
   user: null,
   role: null,
   displayName: null,
+  profileImageUrl: null,
   loading: true,
   refreshRole: async () => {},
 });
@@ -31,6 +34,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [role, setRole] = useState<Role>(null);
   const [displayName, setDisplayName] = useState<string | null>(null);
+  const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -42,23 +46,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         setRole(null);
         setDisplayName(null);
+        setProfileImageUrl(null);
       }
       setLoading(false);
     });
   }, []);
 
-  // ヘッダーのユーザーメニュー用の表示名を購読する（/settings での変更を即座に反映するため
+  // ヘッダーのユーザーメニュー用の表示名・アイコンを購読する（プロフィール編集での変更を即座に反映するため
   // 一度きりの取得ではなく onSnapshot を使う。失敗しても認証状態には影響させない）。
   useEffect(() => {
     if (!user) return;
     const unsubscribe = onSnapshot(
       doc(db, 'users', user.uid),
-      (snap) => setDisplayName((snap.data()?.displayName as string | undefined) ?? null),
-      () => setDisplayName(null),
+      (snap) => {
+        setDisplayName((snap.data()?.displayName as string | undefined) ?? null);
+        setProfileImageUrl((snap.data()?.profileImageUrl as string | undefined) || null);
+      },
+      () => {
+        setDisplayName(null);
+        setProfileImageUrl(null);
+      },
     );
     return () => {
       unsubscribe();
       setDisplayName(null);
+      setProfileImageUrl(null);
     };
   }, [user]);
 
@@ -71,7 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, role, displayName, loading, refreshRole }}>
+    <AuthContext.Provider value={{ user, role, displayName, profileImageUrl, loading, refreshRole }}>
       {children}
     </AuthContext.Provider>
   );
