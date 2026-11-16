@@ -159,7 +159,7 @@ export function AlertIcon(props: IconProps) {
   );
 }
 
-/** 旗（詳細ページの「変更を提案する」。Material Symbols: flag） */
+/** 旗（詳細ページの「変更を提案する」。Material Symbols の flag に近い形を線で描いたもの） */
 export function FlagIcon(props: IconProps) {
   return (
     <svg {...base(props)}>

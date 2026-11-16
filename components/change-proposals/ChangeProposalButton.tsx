@@ -44,7 +44,7 @@ const ERROR_MESSAGE: Record<string, string> = {
 /** 本人・事務所の方への案内（チャンネルのみ。仕様書 §5.3） */
 function CreatorNote() {
   return (
-    <div className="rounded-[8px] bg-bg-hover px-3 py-2 text-md text-text-tertiary" data-testid="change-proposal-creator-note">
+    <div className="w-full rounded-[8px] bg-bg-hover px-3 py-2 text-left text-md text-text-tertiary" data-testid="change-proposal-creator-note">
       ご本人・事務所の方へ: 掲載を止めたい場合は、お問い合わせからお知らせください。確認でき次第、掲載を止めます。{' '}
       <Link href="/contact?type=channel_listing" className="text-text-primary underline underline-offset-[3px] hover:text-text-secondary">
         掲載についてお問い合わせ →
@@ -64,7 +64,7 @@ interface ChangeProposalButtonProps {
 }
 
 export function ChangeProposalButton({ targetType, targetId, targetName, thumbnailUrl, currentGameId = null, className }: ChangeProposalButtonProps) {
-  const { user, role } = useAuth();
+  const { user, role, loading } = useAuth();
   const { toast } = useToast();
   const isAdmin = role === 'owner' || role === 'operator';
   const [open, setOpen] = useState(false);
@@ -83,7 +83,8 @@ export function ChangeProposalButton({ targetType, targetId, targetName, thumbna
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (isAdmin) return null;
+  // 管理者には出さない。ログイン状態を読み込むまでは、管理者に一瞬出ないよう何も出さない
+  if (isAdmin || loading) return null;
 
   const label = CHANGE_TARGET_LABEL[targetType];
   const reasons = targetType === 'channel' ? CHANNEL_CHANGE_REASONS : PLAYLIST_CHANGE_REASONS.filter((r) => r.value !== 'wrong_game' || !!currentGameId);
@@ -192,7 +193,7 @@ export function ChangeProposalButton({ targetType, targetId, targetName, thumbna
 
   return (
     <>
-      <Button variant="ghost" size="sm" onClick={handleOpen} className={cn('text-text-tertiary', className)} data-testid="change-proposal-button">
+      <Button variant="ghost" size="sm" onClick={handleOpen} className={className} data-testid="change-proposal-button">
         <FlagIcon size={13} />
         変更を提案する
       </Button>
@@ -245,7 +246,7 @@ export function ChangeProposalButton({ targetType, targetId, targetName, thumbna
                 <legend className="mb-1 text-md text-text-tertiary">何が違いますか？{targetType === 'game' ? '（複数選べます）' : ''}</legend>
                 {targetType === 'game'
                   ? GAME_CHANGE_FIELDS.map((f) => (
-                      <label key={f.value} className="inline-flex cursor-pointer items-center gap-2 text-base text-text-secondary">
+                      <label key={f.value} className="inline-flex cursor-pointer items-center gap-2 text-base text-text-secondary has-[:disabled]:cursor-not-allowed">
                         <input
                           type="checkbox"
                           value={f.value}
@@ -258,7 +259,7 @@ export function ChangeProposalButton({ targetType, targetId, targetName, thumbna
                       </label>
                     ))
                   : reasons.map((r) => (
-                      <label key={r.value} className="inline-flex cursor-pointer items-start gap-2 text-base text-text-secondary">
+                      <label key={r.value} className="inline-flex cursor-pointer items-start gap-2 text-base text-text-secondary has-[:disabled]:cursor-not-allowed">
                         <input
                           type="radio"
                           name="change-reason"

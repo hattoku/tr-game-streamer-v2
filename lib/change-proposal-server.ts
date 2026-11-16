@@ -145,19 +145,23 @@ export async function submitChangeProposal(uid: string, body: Record<string, unk
     reportData.duplicateGameName = (game.data()!.title as string) ?? '';
   }
 
-  // 同じ人の重複と1日の上限（直近24時間、3種類の合計）
-  const mine = await adminDb.collection('workflows').where('submittedBy', '==', uid).get();
-  const mineChanges = mine.docs.filter((d) => CHANGE_PROPOSAL_TYPES.includes(d.data().type as string));
-  if (mineChanges.some((d) => d.data().reportData?.targetKey === reportData.targetKey && PENDING.has(d.data().status as string))) {
-    return { error: 'already_proposed', status: 409 };
-  }
-  const since = Date.now() - 24 * 60 * 60 * 1000;
-  if (mineChanges.filter((d) => (d.data().submittedAt?.toMillis?.() ?? 0) >= since).length >= CHANGE_PROPOSAL_DAILY_LIMIT) {
-    return { error: 'daily_limit', status: 429 };
-  }
-
+  // 同じ人の重複と1日の上限（直近24時間、3種類の合計）。二重クリック・複数タブで同時に送られても超えないよう、
+  // 読み取りと書き込みを同じトランザクションで行う
   const ref = adminDb.collection('workflows').doc();
-  await ref.set({ ...newWorkflowRecord(CHANGE_PROPOSAL_TYPE[targetType], uid, {}), proposalData: null, reportData });
+  const since = Date.now() - 24 * 60 * 60 * 1000;
+  const blocked = await adminDb.runTransaction(async (tx) => {
+    const mine = await tx.get(adminDb.collection('workflows').where('submittedBy', '==', uid));
+    const mineChanges = mine.docs.filter((d) => CHANGE_PROPOSAL_TYPES.includes(d.data().type as string));
+    if (mineChanges.some((d) => d.data().reportData?.targetKey === reportData.targetKey && PENDING.has(d.data().status as string))) {
+      return { error: 'already_proposed', status: 409 };
+    }
+    if (mineChanges.filter((d) => (d.data().submittedAt?.toMillis?.() ?? 0) >= since).length >= CHANGE_PROPOSAL_DAILY_LIMIT) {
+      return { error: 'daily_limit', status: 429 };
+    }
+    tx.set(ref, { ...newWorkflowRecord(CHANGE_PROPOSAL_TYPE[targetType], uid, {}), proposalData: null, reportData });
+    return null;
+  });
+  if (blocked) return blocked;
   return { ok: true, id: ref.id };
 }
 
@@ -197,6 +201,8 @@ async function runApproveAction(
     if (snap.docs.some((d) => d.data().status === 'excluded' || d.data().status === 'opted_out')) return { ok: true };
     return { error: 'channel_not_listed', status: 409 };
   }
+  // 再生リストを先に外してから掲載チャンネルの状態を変える（逆だと、途中で失敗したとき「外れている」と見なして再生リストが残る）。
+  // 状態の更新だけ失敗した場合は審査中のまま残り、もう一度承認すれば turnChannelOff は何もせず状態だけ直る
   await turnChannelOff(active.id, targetId, 'channel_excluded');
   await active.ref.update({ status: 'excluded', statusNote: '詳細ページからの変更の提案で掲載から外した', updatedAt: new Date() });
   return { ok: true };
@@ -254,7 +260,8 @@ export async function decideChangeProposal(params: {
     }
 
     const gameName = gameId ? (((await adminDb.collection('games').doc(gameId).get()).data()?.title as string) ?? '') : null;
-    const group = await pendingGroup(targetKey);
+    // まとめるのは、運営が承認・却下を押した時点（now）までに届いた提案だけ。処理中に届いた提案は確認されていないので審査中に残す
+    const group = (await pendingGroup(targetKey)).filter((d) => (d.data()!.submittedAt?.toMillis?.() ?? 0) <= now.getTime());
     const ids = new Set([workflowId, ...group.map((d) => d.id)]);
     const refs = [...ids].map((id) => adminDb.collection('workflows').doc(id));
     const historyEntry = {
