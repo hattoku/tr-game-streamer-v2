@@ -1,6 +1,6 @@
 /**
  * モバイルの「さがす」一覧ページ（/playlists /games /channels。まとめを出す間は /collections も）に出す「＋」の浮きボタン。
- * 押すと「再生リストを追加する」（/playlists/new。管理者は登録、一般ユーザーは提案）へ遷移する
+ * 押すと「再生リストを追加する」（/propose。管理者は登録、一般ユーザーは提案）へ遷移する
  * （ページ 再生リストを追加する 仕様書 §1.4 の導線のモバイル版、フェーズ7ステップ7-4・2026-10-25 ユーザー決定）。
  * 未ログインで押した場合は遷移先で /login へ送られる。PC（768px以上）は各ページの見出しボタン・フッターが担うため出さない。
  * ボトムタブバーの上に置く。stg のテストモードウィジェットが右下を占めるため、テストモード中は左下に置く。
@@ -25,7 +25,7 @@ export function AddPlaylistFab() {
     <>
       <div aria-hidden className="h-[72px] md:hidden" />
       <Link
-        href="/playlists/new"
+        href="/propose"
         aria-label="再生リストを追加する"
         title="再生リストを追加する"
         className={cn(

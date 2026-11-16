@@ -25,7 +25,7 @@ const USER_PAGES: PageCase[] = [
   { path: '/notifications', heading: '通知' },
   { path: '/settings', heading: '設定' },
   { path: '/contact/history', heading: 'お問い合わせ履歴' },
-  { path: '/channels/apply', heading: 'チャンネルを申請する' },
+  { path: '/propose', heading: '提案する' },
 ];
 
 const ADMIN_PAGES: PageCase[] = [
@@ -39,7 +39,7 @@ const ADMIN_PAGES: PageCase[] = [
 // 一覧ページから最初の1件をたどって開く詳細ページ（データが無い環境では飛ばす）
 // exclude: 同じ接頭辞を持つ詳細以外のページ（「再生リストを追加する」ボタン等）
 const DETAIL_PAGES = [
-  { list: '/playlists', linkPrefix: '/playlists/', exclude: ['/playlists/new', '/playlists/proposals'] },
+  { list: '/playlists', linkPrefix: '/playlists/', exclude: ['/playlists/proposals'] },
   { list: '/games', linkPrefix: '/games/', exclude: [] },
   { list: '/channels', linkPrefix: '/channels/', exclude: [] },
 ];

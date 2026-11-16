@@ -143,11 +143,9 @@ export default function ProposalHistoryPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <SectionHeading>提案履歴</SectionHeading>
         <div className="flex flex-wrap gap-2">
-          <LinkButton href="/channels/apply" variant="secondary" size="sm">
-            チャンネルを申請する
-          </LinkButton>
-          <LinkButton href="/playlists/new" variant="secondary" size="sm">
-            再生リストを提案する
+          {/* 提案の入口は1つ（ページ 提案する 仕様書 §4） */}
+          <LinkButton href="/propose" variant="secondary" size="sm">
+            提案する
           </LinkButton>
         </div>
       </div>
@@ -191,8 +189,8 @@ export default function ProposalHistoryPage() {
           title="提案・申請はまだありません"
           description="おすすめの再生リストの提案やチャンネルの申請をすると、運営の確認状況をここで確認できます"
           action={
-            <LinkButton href="/playlists/new" variant="secondary">
-              再生リストを提案する
+            <LinkButton href="/propose" variant="secondary">
+              提案する
             </LinkButton>
           }
         />

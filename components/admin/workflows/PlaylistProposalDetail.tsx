@@ -52,6 +52,16 @@ const APPROVE_ERRORS: Record<string, string> = {
   game_required: 'ゲームタイトルを登録するか、選んでから承認してください',
   channel_not_listed: 'このチャンネルは掲載チャンネルではなくなったため承認できません。提案は却下してください',
   already_processed: 'ほかの操作で処理中か、すでに処理済みです。画面を再読み込みして確認してください',
+  hidden_by_admin: 'この再生リストは運営が非表示にしたため承認できません。公開する場合は収集の画面から掲載してください',
+  quota_exceeded: 'YouTubeの取得上限に達しました。時間をおいて再試行してください',
+};
+
+/** 提案時点の掲載状態の表示（審査ワークフロー仕様書 §15.3） */
+const LISTING_STATUS_LABEL: Record<string, string> = {
+  unconfirmed: '未確認',
+  non_game: 'ゲーム以外と判定',
+  too_short: '本数不足',
+  excluded: '除外',
 };
 
 export function PlaylistProposalDetail({ workflowId, data }: { workflowId: string; data: DocumentData }) {
@@ -79,10 +89,24 @@ export function PlaylistProposalDetail({ workflowId, data }: { workflowId: strin
   /** 提案された新しいゲームタイトルが登録済みだったため自動で選んだ */
   const [autoSelectedExisting, setAutoSelectedExisting] = useState(false);
 
+  /** ゲームが分からないとして送られた提案（ページ 提案する 仕様書 §5.4）。ゲームを決めずに承認できる */
+  const noGame = proposal.noGame === true;
+  /** すでにプレミテにある、掲載していない再生リストの提案（審査ワークフロー仕様書 §15.3） */
+  const existingListingStatus = (proposal.existingListingStatus as string | undefined) ?? null;
+  const proposeReason = (proposal.proposeReason as string | null | undefined) ?? null;
+  /** すでにある再生リストに今付いているゲーム（巡回の推定など）。ゲームを選ばずに承認するとこのまま */
+  const [currentGameName, setCurrentGameName] = useState<string | null>(null);
   const game = selectedGame ?? proposedGame;
   const gameChanged = game.id !== proposedGame.id;
   /** まだゲームタイトルが決まっていない（新しいゲームタイトル付きの提案で、登録も選択もしていない） */
-  const needsGame = !game.id;
+  const needsGame = !game.id && !!newGameTitle;
+
+  useEffect(() => {
+    if (!pending || !existingListingStatus || !proposal.youtubePlaylistId) return;
+    getDoc(doc(db, 'playlists', proposal.youtubePlaylistId as string))
+      .then((snap) => setCurrentGameName((snap.data()?.gameName as string | undefined) || null))
+      .catch(() => setCurrentGameName(null));
+  }, [pending, existingListingStatus, proposal.youtubePlaylistId]);
 
   useEffect(() => {
     if (!pending || !proposal.channelId) return;
@@ -127,7 +151,7 @@ export function PlaylistProposalDetail({ workflowId, data }: { workflowId: strin
   async function handleDecision(
     action: DecisionAction,
     comment: string | null,
-    { gameId = game.id, rejectReasonCode = null }: { gameId?: string; rejectReasonCode?: string | null } = {},
+    { gameId = game.id || undefined, rejectReasonCode = null }: { gameId?: string; rejectReasonCode?: string | null } = {},
   ): Promise<boolean> {
     setApproveError(null);
     setDeciding(true);
@@ -157,8 +181,10 @@ export function PlaylistProposalDetail({ workflowId, data }: { workflowId: strin
 
   // 承認済みなら実際に登録したゲームタイトル（差し替えた場合は差し替え後）を出す
   const shownGameName = pending
-    ? game.title || `${newGameTitle ?? ''}（新しいゲームタイトル・未登録）`
+    ? game.title || (newGameTitle ? `${newGameTitle}（新しいゲームタイトル・未登録）` : '')
     : ((proposal.approvedGameName as string) ?? proposedGame.title);
+  /** ゲームを選ばずに承認したときの扱い（ゲーム未設定、すでにある再生リストは今のゲームのまま） */
+  const noGameApproveLabel = currentGameName ? `今のゲーム「${currentGameName}」のまま` : 'ゲーム未設定で';
 
   return (
     <>
@@ -194,7 +220,7 @@ export function PlaylistProposalDetail({ workflowId, data }: { workflowId: strin
             </a>
           </div>
           {newGameTitle && (
-            <div className="flex flex-col gap-1 rounded-[8px] bg-bg-hover px-3 py-2">
+            <div className="flex flex-col gap-1 rounded-[8px] bg-bg-child px-3 py-2">
               <p className="text-base text-text-primary">新しいゲームタイトルとして提案: {newGameTitle}</p>
               {newGamePlatforms.length > 0 && <p className="text-base text-text-secondary">機種: {newGamePlatforms.join('、')}</p>}
               {newGameRakuten && (
@@ -211,6 +237,15 @@ export function PlaylistProposalDetail({ workflowId, data }: { workflowId: strin
                 </p>
               )}
               {newGameNote && <p className="whitespace-pre-wrap text-base text-text-secondary">備考: {newGameNote}</p>}
+            </div>
+          )}
+          {existingListingStatus && (
+            <div className="flex flex-col gap-1 rounded-[8px] bg-bg-child px-3 py-2" data-testid="proposal-existing-playlist">
+              <p className="text-base text-text-primary">
+                プレミテにある、まだ公開していない再生リストの公開の提案です（提案時の状態: {LISTING_STATUS_LABEL[existingListingStatus] ?? existingListingStatus}
+                {proposal.existingListingReason ? ` ・ ${proposal.existingListingReason as string}` : ''}）
+              </p>
+              {proposeReason && <p className="whitespace-pre-wrap text-base text-text-secondary">公開してほしい理由: {proposeReason}</p>}
             </div>
           )}
           {pending && <ProposalVideoList workflowId={workflowId} />}
@@ -231,6 +266,16 @@ export function PlaylistProposalDetail({ workflowId, data }: { workflowId: strin
                     </Button>
                   </div>
                 </>
+              ) : !game.id ? (
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <p className="text-md text-text-primary">
+                    {noGame ? 'ゲームが分からない提案です。' : ''}選ばずに承認すると、{noGameApproveLabel}公開します
+                  </p>
+                  <Button variant="ghost" size="sm" onClick={openGameModal}>
+                    <PencilIcon size={14} />
+                    ゲームタイトルを選ぶ
+                  </Button>
+                </div>
               ) : (
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                   <p className="inline-flex items-center gap-1 text-md text-text-primary">
@@ -324,7 +369,7 @@ export function PlaylistProposalDetail({ workflowId, data }: { workflowId: strin
         onClose={() => setConfirmAction(null)}
         title={{ approve: '提案を承認しますか?', reject: '提案を却下しますか?' }}
         description={{
-          approve: `承認すると、この再生リストを「${game.title}」で登録して公開し、提案者に通知します。`,
+          approve: `承認すると、この再生リストを${game.title ? `「${game.title}」で` : noGameApproveLabel}公開し、提案者に通知します。`,
           reject: '却下すると、再生リストは登録されません。提案者には選んだ見送り理由を通知します。',
         }}
         onSubmit={(action, comment, rejectReasonCode) => handleDecision(action, comment, { rejectReasonCode })}

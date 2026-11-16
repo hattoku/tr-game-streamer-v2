@@ -33,7 +33,7 @@ function LinkGroup({ title, items }: { title: string; items: NavItem[] }) {
 export function Footer() {
   const { user } = useAuth();
   const serviceNav = user
-    ? [...FOOTER_SERVICE_NAV, { label: '再生リストを追加する', href: '/playlists/new' }]
+    ? [...FOOTER_SERVICE_NAV, { label: '再生リストを追加する', href: '/propose' }]
     : FOOTER_SERVICE_NAV;
 
   return (

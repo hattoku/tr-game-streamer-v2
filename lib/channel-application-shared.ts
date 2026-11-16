@@ -5,22 +5,8 @@
 /** `workflows.type`: チャンネル申請 */
 export const CHANNEL_APPLICATION_TYPE = 'channel_application';
 
-/** 申請者の種別（自己申告。運営の参考情報） */
-export const APPLICANT_TYPES = [
-  { value: 'creator', label: '自分（または所属事務所）のチャンネル' },
-  { value: 'viewer', label: '好きなチャンネルを推薦する' },
-] as const;
-export type ApplicantType = (typeof APPLICANT_TYPES)[number]['value'];
-
-export function isApplicantType(value: unknown): value is ApplicantType {
-  return APPLICANT_TYPES.some((t) => t.value === value);
-}
-
-/** 管理画面で見せる申請者の種別 */
-export const APPLICANT_TYPE_ADMIN_LABEL: Record<ApplicantType, string> = {
-  creator: '本人・事務所の申請',
-  viewer: '視聴者の推薦',
-};
+// 申請の区分（本人・事務所／推薦）は聞かず、記録もしない（2026-11-16 ユーザー決定。ページ 提案する 仕様書 §6.1）。
+// 以前の申請に残っている `proposalData.applicantType` は読まない。
 
 /** 申請の理由の上限（任意） */
 export const MAX_APPLICATION_REASON_LENGTH = 200;

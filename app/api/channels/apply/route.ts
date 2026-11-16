@@ -7,7 +7,6 @@ import { checkApplyChannel, countTodayApplications, resolveApplyInput } from '@/
 import {
   CHANNEL_APPLICATION_TYPE,
   DAILY_APPLICATION_LIMIT,
-  isApplicantType,
   MAX_APPLICATION_REASON_LENGTH,
 } from '@/lib/channel-application-shared';
 
@@ -21,7 +20,7 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
   const input = typeof body.input === 'string' ? body.input.trim() : '';
   const reason = typeof body.reason === 'string' ? body.reason.trim() : '';
-  if (!input || !isApplicantType(body.applicantType)) return NextResponse.json({ error: 'invalid_request' }, { status: 400 });
+  if (!input) return NextResponse.json({ error: 'invalid_request' }, { status: 400 });
   if (reason.length > MAX_APPLICATION_REASON_LENGTH) return NextResponse.json({ error: 'reason_too_long' }, { status: 400 });
 
   const record = await adminAuth.getUser(auth.uid).catch(() => null);
@@ -45,7 +44,6 @@ export async function POST(request: NextRequest) {
       channelTitle: channel.title,
       channelIconUrl: channel.iconUrl,
       subscriberCount: channel.subscriberCount,
-      applicantType: body.applicantType,
       reason: reason || null,
     }),
   );

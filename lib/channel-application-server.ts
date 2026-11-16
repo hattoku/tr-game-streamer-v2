@@ -9,6 +9,8 @@ import { after } from 'next/server';
 import { adminDb } from './firebase-admin';
 import {
   extractPlaylistId,
+  extractVideoId,
+  fetchVideoChannelId,
   fetchChannelDetails,
   fetchPlaylistSnippet,
   parseChannelRef,
@@ -30,7 +32,7 @@ export type ChannelApiError = { error: string; status: number; message?: string 
 const PENDING_STATUSES = new Set(['reviewing_lv1', 'reviewing_lv2']);
 
 /**
- * 申請画面の入力（チャンネルURL・@ハンドル・UC…・再生リストURL）からチャンネルを特定する（仕様書 §4）。
+ * 申請画面の入力（チャンネルURL・@ハンドル・UC…・再生リストURL・動画URL）からチャンネルを特定する（仕様書 §4、ページ 提案する 仕様書 §6.1）。
  * 名前での検索はしない。再生リストURLはその再生リストの所属チャンネルとして扱う。
  */
 export async function resolveApplyInput(input: string): Promise<ChannelDetail | ChannelApiError> {
@@ -47,6 +49,14 @@ export async function resolveApplyInput(input: string): Promise<ChannelDetail | 
       const playlist = await fetchPlaylistSnippet(playlistId);
       if (!playlist) return { error: 'channel_not_found', status: 404 };
       const [detail] = await fetchChannelDetails([playlist.channelId]);
+      return detail ?? { error: 'channel_not_found', status: 404 };
+    }
+    // 動画のURL（list= の無いもの）は、その動画の投稿チャンネルとして扱う（ページ 提案する 仕様書 §6.1）
+    const videoId = extractVideoId(text);
+    if (videoId) {
+      const channelId = await fetchVideoChannelId(videoId);
+      if (!channelId) return { error: 'channel_not_found', status: 404 };
+      const [detail] = await fetchChannelDetails([channelId]);
       return detail ?? { error: 'channel_not_found', status: 404 };
     }
   } catch (e) {
@@ -129,6 +139,78 @@ const APPROVING_LOCK_MS = 2 * 60 * 1000;
  * そのチャンネルの再生リストを1回取り込む（取り込みの失敗は承認を取り消さない）。
  * 承認・却下とも申請者にサイト内通知（review_result）を作る。
  */
+/**
+ * YouTube チャンネルを掲載チャンネル（`exploration_channels`、status: active、掲載方法「確認してから掲載」）にする。
+ * チャンネル申請の承認（審査ワークフロー仕様書 §15.2）と、管理者の直接登録でチャンネルも同時に掲載するとき
+ * （ページ 提案する 仕様書 §9）に使う。同じ YouTube チャンネルの既存ドキュメント（未特定・確認待ち・掲載しない）があればそれを使う。
+ * 戻り値は掲載チャンネルのドキュメントID。取り込み（exploreChannels）は呼び出し側で行う。
+ */
+export async function activateListingChannel(params: {
+  youtubeChannelId: string;
+  authorizedVia: 'channel_application' | 'admin';
+  uid: string;
+  applicationWorkflowId: string | null;
+  existing: DocumentSnapshot | null;
+  fallback: { title: string; iconUrl: string; subscriberCount: number | null };
+}): Promise<string> {
+  const { youtubeChannelId, authorizedVia, uid, applicationWorkflowId, existing, fallback } = params;
+  const now = new Date();
+  // チャンネルの情報はこの時点の YouTube から取り直す（取れなければ呼び出し側から渡された情報）
+  let detail: ChannelDetail | null = null;
+  try {
+    [detail] = await fetchChannelDetails([youtubeChannelId]);
+  } catch {
+    detail = null;
+  }
+  const fields = {
+    status: 'active',
+    youtubeChannelId,
+    channelTitle: detail?.title ?? fallback.title,
+    channelIconUrl: detail?.iconUrl ?? fallback.iconUrl,
+    subscriberCount: detail ? detail.subscriberCount : fallback.subscriberCount,
+    searchCandidates: [],
+    // 申請・管理者の同時掲載で入ったチャンネルは「確認してから掲載」（コンテンツ収集機能仕様書 §10.3）
+    publishMode: 'confirm',
+    authorizedVia,
+    applicationWorkflowId,
+    updatedAt: now,
+  };
+  if (existing) {
+    await existing.ref.update(fields);
+    return existing.id;
+  }
+  // ドキュメントIDを YouTube のチャンネルIDにして、同じチャンネルを同時に掲載しても二重に作らない
+  // （作成済みなら create が失敗するので、その場合は作った側のドキュメントを active にするだけ）
+  const ref = adminDb.collection('exploration_channels').doc(youtubeChannelId);
+  const created = {
+    name: fields.channelTitle,
+    ...fields,
+    tagIds: [],
+    lastExploredAt: null,
+    lastFoundCount: null,
+    createdAt: now,
+    createdBy: uid,
+  };
+  try {
+    await ref.create(created);
+  } catch {
+    await ref.update(fields);
+  }
+  return ref.id;
+}
+
+/** 掲載チャンネルに加えたあと、そのチャンネルの再生リストを1回取り込む（応答のあとに実行。失敗しても元の操作は取り消さない） */
+export function importChannelAfterResponse(explorationChannelId: string, uid: string, label: string): void {
+  after(async () => {
+    try {
+      const quota = await checkCollectionQuota(1);
+      if (quota.ok) await exploreChannels({ trigger: 'manual', executedBy: uid, explorationChannelId });
+    } catch (e) {
+      console.error(`${label}の取り込みに失敗`, e);
+    }
+  });
+}
+
 export async function decideChannelApplication(params: {
   workflowRef: DocumentReference;
   workflow: FirebaseFirestore.DocumentData;
@@ -174,52 +256,18 @@ export async function decideChannelApplication(params: {
       if (status === 'active' && doc) {
         updates['proposalData.explorationChannelId'] = doc.id;
       } else {
-        // チャンネルの情報は承認時点の YouTube から取り直す（取れなければ申請時点の情報）
-        let detail: ChannelDetail | null = null;
-        try {
-          [detail] = await fetchChannelDetails([youtubeChannelId]);
-        } catch {
-          detail = null;
-        }
-        const authorizedVia = proposal.applicantType === 'creator' ? 'creator_application' : 'viewer_recommendation';
-        const fields = {
-          status: 'active',
+        newlyActivatedId = await activateListingChannel({
           youtubeChannelId,
-          channelTitle: detail?.title ?? channelTitle,
-          channelIconUrl: detail?.iconUrl ?? ((proposal.channelIconUrl as string) ?? ''),
-          subscriberCount: detail ? detail.subscriberCount : ((proposal.subscriberCount as number | null) ?? null),
-          searchCandidates: [],
-          // 申請で入ったチャンネルは「確認してから掲載」（コンテンツ収集機能仕様書 §10.3）
-          publishMode: 'confirm',
-          authorizedVia,
+          authorizedVia: 'channel_application',
+          uid,
           applicationWorkflowId: workflowId,
-          updatedAt: now,
-        };
-        // 同じ YouTube チャンネルの既存ドキュメント（未特定・確認待ち・掲載しない）があればそれを使う
-        const existing = doc ?? docs[0] ?? null;
-        if (existing) {
-          await existing.ref.update(fields);
-          newlyActivatedId = existing.id;
-        } else {
-          // ドキュメントIDを YouTube のチャンネルIDにして、同じチャンネルの別の申請を同時に承認しても二重に作らない
-          // （作成済みなら create が失敗するので、その場合は作った側のドキュメントを active にするだけ）
-          const ref = adminDb.collection('exploration_channels').doc(youtubeChannelId);
-          const created = {
-            name: fields.channelTitle,
-            ...fields,
-            tagIds: [],
-            lastExploredAt: null,
-            lastFoundCount: null,
-            createdAt: now,
-            createdBy: uid,
-          };
-          try {
-            await ref.create(created);
-          } catch {
-            await ref.update(fields);
-          }
-          newlyActivatedId = ref.id;
-        }
+          existing: doc ?? docs[0] ?? null,
+          fallback: {
+            title: channelTitle,
+            iconUrl: (proposal.channelIconUrl as string) ?? '',
+            subscriberCount: (proposal.subscriberCount as number | null) ?? null,
+          },
+        });
         updates['proposalData.explorationChannelId'] = newlyActivatedId;
       }
     } catch (e) {
@@ -270,14 +318,7 @@ export async function decideChannelApplication(params: {
   if (newlyActivatedId) {
     const explorationChannelId = newlyActivatedId;
     imported = true;
-    after(async () => {
-      try {
-        const quota = await checkCollectionQuota(1);
-        if (quota.ok) await exploreChannels({ trigger: 'manual', executedBy: uid, explorationChannelId });
-      } catch (e) {
-        console.error('チャンネル申請の承認後の取り込みに失敗', e);
-      }
-    });
+    importChannelAfterResponse(explorationChannelId, uid, 'チャンネル申請の承認後');
   }
   return { ok: true, imported };
 }
