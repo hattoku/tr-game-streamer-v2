@@ -1,7 +1,9 @@
 /**
  * ヘッダーのユーザードロップダウン（共通 uiコンポーネント フロント 仕様書 §2.6）。
  * ユーザーアイコン（24px 円形、未設定時はイニシャル。デザイントークン仕様書 v2.0 §14）＋ユーザー名をピルに収め、クリックで
- * ユーザー名・メール（表示専用）／プロフィール／設定／ログアウト を表示する。
+ * 次のまとまりを表示する（v2.5 で整理）:
+ *   ユーザー名・メール（表示専用）＋プロフィール＋設定／マイリスト・視聴履歴（スマホではマイリストを出さない）／
+ *   サポート（提案履歴・お問い合わせ履歴）／管理画面（管理者のみ）／ログアウト。
  * ログアウト後は TOP へ遷移する。
  * 管理者には審査中のワークフロー件数をアイコン右上と「管理画面」項目に出す（§2.10）。
  * お問い合わせ返信・審査結果の未読も同じアイコン右上の件数に足し、「お問い合わせ履歴」「提案履歴」項目に未読数を出す
@@ -16,6 +18,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -28,6 +31,7 @@ import { USER_NAV } from './nav';
 import { formatBadgeCount, usePendingWorkflowCount } from '@/components/admin/usePendingWorkflowCount';
 import { useUnreadNotificationCounts } from './useUnreadNotificationCounts';
 import { COLLECTIONS_ENABLED } from '@/lib/feature-flags';
+import { useIsMobile } from './useIsMobile';
 
 export function UserAvatar({
   name,
@@ -70,6 +74,7 @@ export function UserDropdown() {
   const isAdmin = !!user && (role === 'owner' || role === 'operator');
   const pendingCount = usePendingWorkflowCount(isAdmin);
   const unread = useUnreadNotificationCounts();
+  const isMobile = useIsMobile();
   if (!user) return null;
 
   const badgeCount = pendingCount + unread.inquiry + unread.review;
@@ -112,19 +117,23 @@ export function UserDropdown() {
         )}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-[220px]">
-        <DropdownMenuLabel className="py-2">
-          <span className="block truncate text-base text-text-primary">{name}</span>
-          {user.email && <span className="block truncate text-md text-text-muted">{user.email}</span>}
-        </DropdownMenuLabel>
+        {/* 自分のアカウントのまとまり: ユーザー名・メール（表示専用）の直下にプロフィールと設定を置く（UI仕様書 v2.5 §2.6） */}
+        <DropdownMenuGroup>
+          <DropdownMenuLabel className="py-2">
+            <span className="block truncate text-base text-text-primary">{name}</span>
+            {user.email && <span className="block truncate text-md text-text-muted">{user.email}</span>}
+          </DropdownMenuLabel>
+          <DropdownMenuItem onSelect={() => router.push(`/profile/${user.uid}`)}>プロフィール</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => router.push('/settings')}>設定</DropdownMenuItem>
+        </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        {/* マイリスト／視聴履歴: 768〜1023px ではヘッダーの文字リンクを出せないため、ここからも辿れるようにする（UI仕様書 §2.6） */}
-        {USER_NAV.map((item) => (
+        {/* マイリスト／視聴履歴: 768〜1023px ではヘッダーの文字リンクを出せないため、ここからも辿れるようにする（UI仕様書 §2.6）。
+            スマホ（767px以下）はボトムタブにマイリストがあるので、マイリストは出さない（v2.5） */}
+        {USER_NAV.filter((item) => !(isMobile && item.href === '/mylist')).map((item) => (
           <DropdownMenuItem key={item.href} onSelect={() => router.push(item.href)}>
             {item.label}
           </DropdownMenuItem>
         ))}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={() => router.push(`/profile/${user.uid}`)}>プロフィール</DropdownMenuItem>
         {/* 自分のまとめ一覧（まとめ機能仕様書 §4.1。プロフィールのまとめセクションは公開まとめのみのため、非公開を含む管理画面として残す）
             と保存したまとめ（§8.3。仕様のヘッダーリンクの代わりにメニューに置く）。まとめ機能の取り下げ（UI仕様書 v2.0 §2.6）で出さない */}
         {COLLECTIONS_ENABLED && (
@@ -133,15 +142,19 @@ export function UserDropdown() {
             <DropdownMenuItem onSelect={() => router.push('/collections/saved')}>保存したまとめ</DropdownMenuItem>
           </>
         )}
-        {/* 提案履歴（ページ 再生リストを追加する 仕様書 §9.4） */}
-        <DropdownMenuItem onSelect={() => router.push('/playlists/proposals')}>
-          <MenuItemWithUnread label="提案履歴" count={unread.review} />
-        </DropdownMenuItem>
-        {/* お問い合わせ履歴（ページ お問い合わせ履歴 仕様書 §2。設定ページ経由だけでは分かりにくいため追加） */}
-        <DropdownMenuItem onSelect={() => router.push('/contact/history')}>
-          <MenuItemWithUnread label="お問い合わせ履歴" count={unread.inquiry} />
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => router.push('/settings')}>設定</DropdownMenuItem>
+        <DropdownMenuSeparator />
+        {/* サポート: 運営とのやり取りの履歴をまとめる（UI仕様書 v2.5 §2.6） */}
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>サポート</DropdownMenuLabel>
+          {/* 提案履歴（ページ 再生リストを追加する 仕様書 §9.4） */}
+          <DropdownMenuItem onSelect={() => router.push('/playlists/proposals')}>
+            <MenuItemWithUnread label="提案履歴" count={unread.review} />
+          </DropdownMenuItem>
+          {/* お問い合わせ履歴（ページ お問い合わせ履歴 仕様書 §2。設定ページ経由だけでは分かりにくいため追加） */}
+          <DropdownMenuItem onSelect={() => router.push('/contact/history')}>
+            <MenuItemWithUnread label="お問い合わせ履歴" count={unread.inquiry} />
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
         {isAdmin && (
           <>
             <DropdownMenuSeparator />
