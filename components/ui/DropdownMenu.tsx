@@ -18,6 +18,8 @@ import { INPUT_CLASS } from './Input';
 export const DropdownMenu = Radix.Root;
 export const DropdownMenuTrigger = Radix.Trigger;
 export const DropdownMenuRadioGroup = Radix.RadioGroup;
+/** 見出し（DropdownMenuLabel）付きの項目のまとまり。読み上げでまとまりとして伝える */
+export const DropdownMenuGroup = Radix.Group;
 
 export function DropdownMenuContent({ className, sideOffset = 6, align = 'end', ...rest }: ComponentProps<typeof Radix.Content>) {
   return (
