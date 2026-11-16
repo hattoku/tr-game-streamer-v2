@@ -11,6 +11,8 @@ type Params = { params: Promise<{ userId: string; fileName: string }> };
 
 export async function GET(_request: NextRequest, { params }: Params) {
   const { userId, fileName } = await params;
+  // パスとして解釈される値は Firestore が例外を投げるため、先に 404 にする
+  if (!userId || userId.includes('/')) return NextResponse.json({ error: 'not_found' }, { status: 404 });
   const data = (await adminDb.collection('users').doc(userId).get()).data();
   if (!data || data.isBanned === true || data.profileImageUrl !== profileImageUrl(userId, fileName)) {
     return NextResponse.json({ error: 'not_found' }, { status: 404 });

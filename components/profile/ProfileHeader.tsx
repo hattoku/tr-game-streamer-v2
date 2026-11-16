@@ -8,7 +8,7 @@
  */
 'use client';
 
-import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
+import { useEffect, useId, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { UserAvatar } from '@/components/layout/UserDropdown';
 import { Button } from '@/components/ui/Button';
 import { Card, SectionHeading } from '@/components/ui/Card';
@@ -97,6 +97,9 @@ export function ProfileHeader({
 }
 
 /** アイコンの変更内容。keep＝そのまま、file＝新しい画像に替える、remove＝外す */
+/** 編集フォームのアイコンの大きさ（プレビューと UserAvatar で揃える） */
+const EDIT_AVATAR_SIZE = 72;
+
 type ImageChange = { kind: 'keep' } | { kind: 'file'; file: File; previewUrl: string } | { kind: 'remove' };
 
 function ProfileEditForm({
@@ -119,6 +122,7 @@ function ProfileEditForm({
   const [imageError, setImageError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageNoteId = useId();
   const bioOver = bio.trim().length > BIO_MAX;
   const hasImage = image.kind === 'file' || (image.kind === 'keep' && !!u.profileImageUrl);
 
@@ -187,11 +191,12 @@ function ProfileEditForm({
             <img
               src={image.previewUrl}
               alt=""
-              className="inline-block size-[72px] shrink-0 rounded-full bg-bg-selected object-cover"
+              className="inline-block shrink-0 rounded-full bg-bg-selected object-cover"
+              style={{ width: EDIT_AVATAR_SIZE, height: EDIT_AVATAR_SIZE }}
               data-testid="profile-image-preview"
             />
           ) : (
-            <UserAvatar imageUrl={image.kind === 'remove' ? null : u.profileImageUrl} size={72} />
+            <UserAvatar imageUrl={image.kind === 'remove' ? null : u.profileImageUrl} size={EDIT_AVATAR_SIZE} />
           )}
           <Field label="表示名" error={errors.displayName} hint={COLLECTIONS_ENABLED ? 'レビューやまとめに表示される名前です' : 'レビューに表示される名前です'} className="min-w-0 flex-1 md:max-w-sm">
             {(props) => (
@@ -211,7 +216,7 @@ function ProfileEditForm({
             アイコン
           </p>
           <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="secondary" size="sm" onClick={() => fileInputRef.current?.click()} disabled={saving}>
+            <Button type="button" variant="secondary" size="sm" onClick={() => fileInputRef.current?.click()} disabled={saving} aria-describedby={imageNoteId}>
               {hasImage ? '画像を変更' : '画像を選ぶ'}
             </Button>
             {hasImage && (
@@ -239,11 +244,11 @@ function ProfileEditForm({
             aria-label="アイコンの画像"
           />
           {imageError ? (
-            <p role="alert" className="text-md text-input-error">
+            <p id={imageNoteId} role="alert" className="text-md text-input-error">
               {imageError}
             </p>
           ) : (
-            <p className="text-md text-text-muted">PNG・JPEG・WebP、5MBまで。中央を正方形に切り抜いて表示します</p>
+            <p id={imageNoteId} className="text-md text-text-muted">PNG・JPEG・WebP、5MBまで。中央を正方形に切り抜いて表示します</p>
           )}
         </div>
 

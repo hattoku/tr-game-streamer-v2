@@ -45,7 +45,10 @@ export async function PUT(request: NextRequest, { params }: Params) {
   if (!(request.headers.get('content-type') ?? '').startsWith('multipart/form-data')) {
     return NextResponse.json({ error: 'invalid_body' }, { status: 400 });
   }
-  if (Number(request.headers.get('content-length') ?? 0) > PROFILE_IMAGE_REQUEST_BYTES_MAX) return profileImageErrorResponse('image_size');
+  // 大きさの分からない送信（チャンク転送）は、本文を全部読み込む前に断れないので受け付けない
+  const length = Number(request.headers.get('content-length'));
+  if (!Number.isFinite(length) || length <= 0) return NextResponse.json({ error: 'length_required' }, { status: 411 });
+  if (length > PROFILE_IMAGE_REQUEST_BYTES_MAX) return profileImageErrorResponse('image_size');
   const form = await request.formData().catch(() => null);
   const file = form?.get('image');
   if (!file || typeof file !== 'object' || !('arrayBuffer' in file)) {

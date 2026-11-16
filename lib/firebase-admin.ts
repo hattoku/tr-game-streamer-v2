@@ -11,7 +11,7 @@ import { IS_PROD } from './app-env';
 // 接続先は lib/app-env.ts の判定に従う（明示的に prod と指定しない限りステージング）
 const projectId = IS_PROD ? 'tr-game-streamer' : 'tr-game-streamer-stg';
 
-// Cloud Storage はお問い合わせの添付画像だけに使う（lib/inquiry-attachments-server.ts）。バケットは Firebase のデフォルトバケット
+// Cloud Storage はお問い合わせの添付画像（lib/inquiry-attachments-server.ts）とユーザーアイコン（lib/profile-image-server.ts）に使う。バケットは Firebase のデフォルトバケット
 const storageBucket = `${projectId}.firebasestorage.app`;
 
 export const adminApp = getApps().length === 0
