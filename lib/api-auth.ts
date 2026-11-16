@@ -50,6 +50,15 @@ export async function requireUser(
   return { uid: verified.uid };
 }
 
+/** ログイン必須で、管理者（owner/operator）かどうかも返す。管理者と一般ユーザーで返す内容が変わる API 向け */
+export async function requireUserWithRole(
+  request: NextRequest,
+): Promise<{ uid: string; isAdmin: boolean } | { errorResponse: NextResponse }> {
+  const verified = await verifyBearerToken(request);
+  if ('errorResponse' in verified) return verified;
+  return { uid: verified.uid, isAdmin: typeof verified.role === 'string' && ADMIN_ROLES.has(verified.role) };
+}
+
 /**
  * ログイン任意の API 向け。Bearer トークンがあれば検証して uid を返し、無い・無効なら null（未ログイン扱い）。
  * 公開プロフィールのように、閲覧者が本人かどうかで返す内容だけが変わる読み取り API で使う。

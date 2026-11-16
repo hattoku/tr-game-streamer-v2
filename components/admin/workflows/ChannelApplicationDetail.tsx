@@ -1,7 +1,7 @@
 /**
  * 審査ワークフロー詳細のうち、チャンネル申請（type: "channel_application"、リブランディング段階6）。
  * 管理 審査ワークフロー仕様書 §15.2・§15.4。チャンネルのアイコン・名前・登録者数・YouTube へのリンク、
- * チャンネルの再生リスト（最大20件、都度取得）、申請者の種別・理由、掲載チャンネルとしての今の状態を出す。
+ * チャンネルの再生リスト（最大20件、都度取得）、申請の理由、掲載チャンネルとしての今の状態を出す。
  * 承認すると PATCH /api/admin/workflows/[workflowId] が掲載チャンネルに加え（確認してから掲載）、再生リストを1回取り込む。
  * 却下は定型の見送り理由が必須で、自由記述は内部メモ（申請者には見せない）。
  */
@@ -27,11 +27,9 @@ import {
   type WorkflowStatus,
 } from './shared';
 import {
-  APPLICANT_TYPE_ADMIN_LABEL,
   CHANNEL_APPLICATION_REJECT_REASONS,
   channelApplicationRejectReasonLabel,
   EXPLORATION_STATUS_LABEL,
-  type ApplicantType,
 } from '@/lib/channel-application-shared';
 import { formatSubscribers } from '@/lib/collection-admin';
 
@@ -54,7 +52,6 @@ export function ChannelApplicationDetail({ workflowId, data }: { workflowId: str
   const pending = isPendingStatus(status);
   const proposal = data.proposalData ?? {};
   const youtubeChannelId = (proposal.youtubeChannelId as string) ?? '';
-  const applicantType = (proposal.applicantType as ApplicantType) ?? 'viewer';
   const rejectCode = proposal.rejectReasonCode as string | undefined;
 
   const [confirmAction, setConfirmAction] = useState<DecisionAction | null>(null);
@@ -142,7 +139,6 @@ export function ChannelApplicationDetail({ workflowId, data }: { workflowId: str
         </div>
 
         <div className="flex flex-col gap-1 text-base text-text-secondary">
-          <p>申請の種別: {APPLICANT_TYPE_ADMIN_LABEL[applicantType] ?? applicantType}（自己申告・本人確認はしていません）</p>
           <p className="whitespace-pre-wrap">申請の理由: {reason || '（未記入）'}</p>
           <p className="break-all">入力されたURL: {(proposal.channelUrl as string) ?? ''}</p>
           {pending && (

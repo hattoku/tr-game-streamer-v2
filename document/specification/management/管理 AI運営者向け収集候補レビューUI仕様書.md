@@ -449,7 +449,7 @@ v2.x まで改訂履歴に使っていた章番号のため欠番とする（改
 
 ### 9.4 申請からの掲載（段階6）
 
-チャンネル申請（審査ワークフロー仕様書 §15）を承認すると、この画面の「登録済み」に `authorizedVia: creator_application`／`viewer_recommendation`、掲載方法 `confirm` で入り、その場で1回取り込む。
+チャンネル申請（審査ワークフロー仕様書 §15）を承認すると、この画面の「登録済み」に `authorizedVia: channel_application`（2026-11-15 までは `creator_application`／`viewer_recommendation`）、掲載方法 `confirm` で入り、その場で1回取り込む。
 
 ### 9.5 実装（v3.3、2026-11-04）
 

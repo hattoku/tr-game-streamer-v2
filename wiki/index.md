@@ -2,7 +2,7 @@
 title: Wiki索引
 type: meta
 date: 2026-09-08
-updated: 2026-11-16
+updated: 2026-11-17
 ---
 
 
@@ -94,6 +94,7 @@ tr-game-streamer-v2 の**コーディング支援用**Wiki（実装の変更履�
 - [[2026-11-17-profile-review-history-filter]] — プロフィールのレビュー履歴を星評価かコメントがある投稿だけに。視聴ステータスだけの投稿は出さず、統計のレビュー投稿数・ジャンル分布も同じ定義に（PR #53）
 - [[2026-11-17-proposal-history-youtube-link]] — 提案履歴のチャンネル申請のカードに「YouTubeで見る」ボタン（申請したチャンネルを本人が確かめられる）（PR #52）
 - [[2026-11-17-user-avatar-upload]] — ユーザーが自分のアイコンをアップロードできるように（PNG・JPEG・WebP、5MB、中央で切り抜き256×256 WebP、Storage `avatars/{uid}/` を API 経由で配信）。未設定は人物シルエット（PR #54）
+- [[2026-11-16-propose-page-merge]] — 再生リストの提案とチャンネルの推薦・申請を `/propose` に統合。掲載中チャンネルの再生リストは一覧から選ぶ、ゲーム任意、動画URL、申請の区分は設問も記録もなし、管理者はその場で公開（PR #55）
 
 ## Entities
 - [[proxy]] — proxy.ts（旧middleware.ts、Next.js 16のproxy規約対応）。まとめ取り下げ後は `/collections*` を 404 に書き換える

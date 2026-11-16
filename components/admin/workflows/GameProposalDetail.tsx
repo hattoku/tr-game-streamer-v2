@@ -2,7 +2,7 @@
  * 審査ワークフロー詳細のうち、ゲームタイトル登録提案（type: "game_title_register"、フェーズ7ステップ7-4）。
  * 「ゲームタイトルを登録して承認」で GameCreateModal（タイトル名入り）を開き、登録できたらその id を渡して承認する
  * （管理_審査ワークフロー仕様書 §3）。旧形式の提案は提案者に結果を通知しないため、承認後は同じ提案に付いていた再生リストを
- * そのまま登録できるよう「この再生リストも登録する」（/playlists/new?gameId=&url=）を出す。
+ * そのまま登録できるよう「この再生リストも登録する」（/propose?gameId=&url=）を出す。
  * v1.16: 登録済みでゲーム未設定の再生リストに付けたいゲームタイトルの提案（proposalData.playlistId あり）は、承認すると
  * その再生リストにゲームを付け、提案者に結果を通知する。「既存のゲームに付けて承認」（表記ゆれの別名扱いなど）も選べる。
  */
@@ -137,7 +137,7 @@ export function GameProposalDetail({ workflowId, data }: { workflowId: string; d
           {status === 'approved' && registeredGameId && !targetPlaylistId && (
             <div className="mt-2 flex flex-wrap gap-3">
               <LinkButton
-                href={`/playlists/new?gameId=${encodeURIComponent(registeredGameId)}&url=${encodeURIComponent(playlistUrl)}`}
+                href={`/propose?gameId=${encodeURIComponent(registeredGameId)}&url=${encodeURIComponent(playlistUrl)}`}
                 variant="primary"
                 size="sm"
               >
