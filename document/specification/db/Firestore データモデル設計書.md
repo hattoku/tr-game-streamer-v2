@@ -1,6 +1,6 @@
 # プレミテ Firestore データモデル設計書
 
-**バージョン**: v2.9  
+**バージョン**: v2.10  
 **作成日**: 2026年3月30日（更新）  
 **対象**: 開発チーム  
 **関連ドキュメント**: プレミテ企画書 / プレミテ_技術スタック仕様書 / 各機能仕様書
@@ -153,7 +153,7 @@ Firestoreはテーブル結合（JOIN）ができないため、一覧表示や�
 | `uid` | string | ✅ | Firebase Auth UID（ドキュメントIDと同一） |
 | `displayName` | string | ✅ | ユーザー名（1〜30文字） |
 | `email` | string | ✅ | メールアドレス（管理者のみ公開。一般ユーザーは非公開） |
-| `profileImageUrl` | string? | — | プロフィール画像のURL |
+| `profileImageUrl` | string? | — | アイコン（プロフィール画像）の URL。このサイトの配信 API の相対 URL `/api/users/{uid}/avatar/{20文字の英数字}.webp`（画像本体は Cloud Storage の `avatars/{uid}/` に1枚だけ置く）。未設定は null か無し。書き込みは `PUT`／`DELETE /api/users/{uid}/avatar`（Admin SDK）のみで、本人のクライアント更新の許可フィールドに含めない（v2.10。ページ 設定 プロフィール仕様書 §9.5） |
 | `bio` | string? | — | 自己紹介文（最大200文字） |
 | `role` | string | ✅ | `"user"` / `"operator"` / `"owner"` / `"ai_operator"` |
 | `isAI` | boolean | ✅ | AI運営者フラグ。`role = "ai_operator"` のとき `true` |
@@ -381,7 +381,7 @@ YouTubeチャンネルの情報。
 | `genreExpertiseScore` | number? | — | ジャンル専門性スコア（変数G、算出時点のスナップショット） |
 | `commentScore` | number? | — | コメント有無による乗数（変数C。あり: `1.0` / なし: `0.5`。共通 信頼度スコアリングシステム仕様書 §3.3に準拠） |
 | `userDisplayName` | string | ✅ | 投稿者の表示名の非正規化コピー（投稿・更新時点のスナップショット）。`users`は本人・管理者以外読めないルールのため、レビュー一覧での表示にはこちらを参照する（HANDOFF.md未解決事項1の対応）。プロフィールで表示名を変更すると `PATCH /api/users/[userId]/profile` が本人の全レビュー分を新しい名前に揃える |
-| `userProfileImageUrl` | string? | — | 投稿者のプロフィール画像URLの非正規化コピー（同上） |
+| `userProfileImageUrl` | string? | — | 投稿者のプロフィール画像URLの非正規化コピー（同上。アイコンを替える・外すと `PUT`／`DELETE /api/users/[userId]/avatar` が本人の全レビュー分を揃える） |
 | `isHidden` | boolean? | — | 通報承認による非表示（論理削除）フラグ。`true` のレビューは一覧・集計・スコアから除外する（管理 審査ワークフロー仕様書 §3.1）。未設定は `false` 扱い。書き込みは Admin SDK のみ（本人のクライアント更新の許可フィールドに含めない） |
 | `hiddenAt` | Timestamp? | — | 非表示にした日時 |
 | `hiddenByWorkflowId` | string? | — | 非表示の根拠となった `workflows` のドキュメントID |
@@ -1096,6 +1096,7 @@ ai_operators ──── (1) users
 
 ### 7.1 退会時の物理削除
 - `users`, `reviews`, `mylist`, `watch_history`, `watch_progress`, `helpful_votes`, `collections`, `playlist_viewers`（v2.8）を物理削除。
+- Cloud Storage の `avatars/{uid}/`（アイコン、v2.10）も削除する。
 - `saved_collections` は本人の保存記録に加え、削除される本人のまとめに対する他ユーザーの保存記録も物理削除する（3.14.1節）。
 
 ### 7.2 マスタ削除時の影響
@@ -1155,4 +1156,5 @@ ai_operators ──── (1) users
 | v2.7 | 2026-11-08 | 段階7 一覧のサーバー側検索化。§5.1 検索面の複合インデックスは検索面では使わなくなった旨を注記。フィールドの追加・変更はなし（v2.6 は段階6の PR #24 が使う） |
 | v2.2 | 2026-11-01 | 段階3の実装。§3.2 `playlists` の掲載状態（`listingStatus` ほか）と `source`・`explorationChannelId` を実装。管理者の登録・承認は `listed`（`listingReason: admin`）で作り、既存データは移行スクリプトで `listed`（`listingReason: migration`）または `channel_off` にする。`games.playlistCount`・`channels.playlistCount`・`tags.usagePlaylistCount` は掲載中の再生リストだけを数える（コンテンツ収集機能仕様書 §10.9）。フィールドの追加・変更はなし |
 | v2.9 | 2026-11-13 | §3.30 `notifications` に `channelName`・`channelIconUrl`・`newVideoTitles`・`newVideoCount` を追加（ユーザー通知機能仕様書 v1.4）。`videos.publishedAt` を動画の投稿日時に直し（これまでは再生リストに追加された日時だった）、`videos.addedToPlaylistAt` を追加 |
+| v2.10 | 2026-11-16 | §3.1 `users.profileImageUrl` をアイコンのアップロード実装に合わせて定義（配信 API の相対 URL、本体は Storage の `avatars/{uid}/`、書き込みは API のみ）。§7.1 退会時に `avatars/{uid}/` も消す（ページ 設定 プロフィール仕様書 v1.11） |
 | v2.8 | 2026-11-08 | 段階5 人気のチャンネル。§3.4 `channels.popularity`、§3.32 `featuredOrder` をピン留めの順に、§3.21 `batch_logs` に `channel_popularity`、§3.35 `playlist_viewers`・§3.36 `batch_state` を追加。§7.1 退会時の削除に `playlist_viewers` を追加（共通 人気のチャンネル 集計 仕様書） |

@@ -140,6 +140,11 @@ test('§4 チャンネルの確認、必須項目、送信、完了画面、提�
       const card = userPage.getByTestId('channel-application-card').filter({ hasText: channel.name }).first();
       await expect(card).toContainText('チャンネル申請');
       await expect(card).toContainText('確認待ち');
+      // §6 v1.3: 申請したチャンネルが合っているか、YouTube で確かめられる（新しいタブ）
+      const yt = card.getByTestId('channel-application-youtube-link');
+      await expect(yt).toHaveAttribute('href', `https://www.youtube.com/channel/${channel.id}`);
+      await expect(yt).toHaveAttribute('target', '_blank');
+      await expect(yt).toContainText('YouTubeで見る');
       expect(await hasHorizontalScroll(userPage)).toBe(false);
     });
 
