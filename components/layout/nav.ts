@@ -103,7 +103,8 @@ export interface BottomTab {
 export const BOTTOM_TABS: BottomTab[] = [
   { key: 'home', label: 'ホーム', href: '/', prefixes: [] },
   // マイリスト（2026-09-12 ユーザー決定で「タイムライン」を置き換え）。未ログイン時はログインページへ
-  { key: 'mylist', label: 'マイリスト', href: '/mylist', guestHref: '/login', prefixes: ['/mylist'] },
+  // 視聴履歴はマイリスト画面上部の切り替えで行き来するため、こちらのタブをアクティブにする（2026-11-16 ユーザー決定、マイリスト仕様書 §2.4）
+  { key: 'mylist', label: 'マイリスト', href: '/mylist', guestHref: '/login', prefixes: ['/mylist', '/history'] },
   // 遷移先はチャンネル（UI仕様書 v2.0 §2.7、段階5で実装）
   { key: 'search', label: 'さがす', href: '/channels', prefixes: ['/channels', '/playlists', '/games', ...(COLLECTIONS_ENABLED ? [COLLECTIONS_HREF] : [])] },
   // 未ログイン時はアカウント作成フローへ（§2.7）
@@ -113,7 +114,7 @@ export const BOTTOM_TABS: BottomTab[] = [
     label: 'マイページ',
     href: '/mypage',
     guestHref: SIGNUP_HREF,
-    prefixes: ['/mypage', '/history', '/notifications', '/playlists/proposals', '/contact/history', '/settings', '/profile'],
+    prefixes: ['/mypage', '/notifications', '/playlists/proposals', '/contact/history', '/settings', '/profile'],
   },
 ];
 
