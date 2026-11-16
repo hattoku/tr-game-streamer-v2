@@ -8,7 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { fetchMylistEntries, type MylistEntry } from '@/lib/mylist-entries';
 import { useMylistEntries } from '@/components/mylist/useMylistEntries';
 import { Button, LinkButton } from '@/components/ui/Button';
-import { Card, CardChildArea, SectionHeading } from '@/components/ui/Card';
+import { Card, CardChildArea } from '@/components/ui/Card';
 import { CountBadge } from '@/components/ui/Badge';
 import { WATCH_STATUS_LABEL, WATCH_STATUS_OTHER, type WatchStatus } from '@/components/ui/Chip';
 import {
@@ -27,6 +27,7 @@ import { useToast } from '@/components/ui/Toast';
 import { AlertIcon, ChevronDownIcon, FavoriteIcon } from '@/components/ui/icons';
 import { cn } from '@/components/ui/cn';
 import { MylistCard } from '@/components/mylist/MylistCard';
+import { LibrarySwitch } from '@/components/mylist/LibrarySwitch';
 
 // マイリストページ。document/specification/page/ページ マイリスト機能仕様書.md 準拠。
 // フェーズ2.5ステップ5でデザイン適用（wiki/sources/2026-09-11-phase2.5-design-plan.md §4）。
@@ -35,6 +36,7 @@ import { MylistCard } from '@/components/mylist/MylistCard';
 //   再生リスト名（昇順））
 // - カード（§5: 親＝再生リスト情報・ステータス変更・削除、子＝最後に再生した動画）
 // - 空状態（§2.2）。未ログインはログインページへ（§1.2）
+// - 見出しは視聴履歴との切り替えを兼ねる（§2.4、components/mylist/LibrarySwitch.tsx）
 // データ取得（「最後に再生した動画」「最終話視聴済み」「新着動画あり」の判定を含む）は
 // lib/mylist-entries.ts の fetchMylistEntries に切り出し、TOPページのマイリストセクション
 // （components/top/MylistSection.tsx、フェーズ6ステップ2）と共用している。判定の詳細は同ファイル参照。
@@ -131,7 +133,7 @@ export default function MylistPage() {
     // 読み込み失敗。空状態と区別する（止まったFirestore接続上での再試行では直らないことがあるためページごと再読み込み）
     return (
       <div className="flex flex-col gap-4">
-        <SectionHeading>マイリスト</SectionHeading>
+        <LibrarySwitch current="mylist" />
         <EmptyState
           icon={<AlertIcon />}
           title="マイリストを読み込めませんでした"
@@ -155,7 +157,7 @@ export default function MylistPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <SectionHeading>マイリスト</SectionHeading>
+      <LibrarySwitch current="mylist" />
 
       {entries.length === 0 ? (
         // 空状態（§2.2、UIコンポーネント仕様書 §8）

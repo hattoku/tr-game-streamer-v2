@@ -4,6 +4,7 @@
  * 複合インデックス`userId + watchedAt DESC`）はフェーズ2から既に揃っており、書き込みも動画プレーヤー
  * （app/(main)/playlists/[playlistId]/page.tsx）が既に行っているため、本ステップは一覧・検索・削除のみ実装する。
  *
+ * - 見出しはマイリストとの切り替えを兼ねる（§2.4、components/mylist/LibrarySwitch.tsx）
  * - 左カラム: 日付グルーピング一覧（今日／昨日／それ以外は「YYYY年M月D日（曜）」）＋カード
  *   （サムネイル＋進捗バー・タイトル・配信者・再生時間・⋮メニューからの個別削除）
  * - 右カラム: キーワード検索（動画タイトル・配信者名）・日付フィルター（この日付以前）・全件削除
@@ -25,7 +26,7 @@ import { collection, deleteDoc, doc, getDoc, getDocs, orderBy, query, where, wri
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button, LinkButton } from '@/components/ui/Button';
-import { Card, SectionHeading } from '@/components/ui/Card';
+import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
@@ -33,6 +34,7 @@ import { Skeleton, SkeletonText } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 import { ChevronDownIcon, ChevronUpIcon, HistoryIcon, SearchIcon, XIcon } from '@/components/ui/icons';
 import { HistoryCard, type HistoryCardData } from '@/components/history/HistoryCard';
+import { LibrarySwitch } from '@/components/mylist/LibrarySwitch';
 
 interface HistoryItem extends HistoryCardData {
   watchedAt: number;
@@ -281,7 +283,7 @@ export default function HistoryPage() {
 
   return (
     <div>
-      <SectionHeading className="mb-5">視聴履歴</SectionHeading>
+      <LibrarySwitch current="history" className="mb-5" />
 
       {historyEntries.length === 0 ? (
         <EmptyState
