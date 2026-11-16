@@ -28,6 +28,7 @@ import { Checkbox, Field, Textarea } from '@/components/ui/Input';
 import { Skeleton, SkeletonText } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 import { CommentIcon, ExternalLinkIcon, InventoryIcon, PencilIcon, PlayIcon, UserIcon, UsersIcon, YouTubeIcon } from '@/components/ui/icons';
+import { ChangeProposalButton } from '@/components/change-proposals/ChangeProposalButton';
 
 interface ChannelDetail {
   name: string;
@@ -159,6 +160,10 @@ export default function ChannelDetailPage() {
           isAiGenerated={channel.isAiGeneratedDescription}
           editable={isAdmin}
         />
+        {/* 一般ユーザー向けの変更の提案（ページ 詳細ページからの変更提案 仕様書 §5。管理者には出さない） */}
+        <div className="-mt-2 flex justify-end">
+          <ChangeProposalButton targetType="channel" targetId={channelId} targetName={channel.name} thumbnailUrl={channel.iconUrl} />
+        </div>
       </Card>
 
       <PlaylistListSection title="このチャンネルの再生リスト" filter={{ channelId }} addHref={addHref} onTotals={handleTotals} />

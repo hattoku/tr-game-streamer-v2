@@ -2,7 +2,7 @@
  * 審査ワークフロー一覧（/admin/workflows）。管理_審査ワークフロー仕様書 §7 準拠。
  *
  * §7.1 どおり「通報」「提案」の2セクション構成（通報を上に置く）。各セクションがステータスタブと
- * ページングを独立して持つ。通報はレビューコメント通報のみ（フェーズ6ステップ3）、提案は
+ * ページングを独立して持つ。通報はレビューコメント通報と詳細ページからの変更の提案（§16、対象ごとに1行）、提案は
  * 再生リスト登録提案・ゲームタイトル登録提案（フェーズ7ステップ7-4。ゲームタイトル編集提案は投稿経路が無い）。
  * 絞り込み条件（審査種別・ジャンル・提出日）は件数が少ないうちは不要として省略。要確認フラグ列は
  * AI運営者が未実装のため省略。
@@ -19,6 +19,7 @@ import { db } from '@/lib/firebase';
 import { reportReasonLabel } from '@/lib/report-reasons';
 import { CHANNEL_APPLICATION_TYPE } from '@/lib/channel-application-shared';
 import { GAME_PROPOSAL_TYPE, PROPOSAL_TYPE_LABEL, PROPOSAL_TYPES } from '@/lib/proposal-shared';
+import { CHANGE_PROPOSAL_TYPES, CHANGE_TARGET_LABEL, describeChangeReason, type ChangeTargetType } from '@/lib/change-proposal-shared';
 import { Card, SectionHeading } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Pagination } from '@/components/ui/Pagination';
@@ -80,6 +81,43 @@ async function fetchReportRows(): Promise<WorkflowRow[]> {
   });
 }
 
+/**
+ * 詳細ページからの変更の提案（管理 審査ワークフロー仕様書 §16）。対象ごとに1行にまとめ、人数を出す。
+ * 審査中は同じ対象（reportData.targetKey）、処理済みは同じ処理（reportData.decisionId）でまとめる。行のリンク先はまとめのうち最も古い提案。
+ */
+async function fetchChangeRows(): Promise<WorkflowRow[]> {
+  const snap = await getDocs(query(collection(db, 'workflows'), where('type', 'in', CHANGE_PROPOSAL_TYPES)));
+  const groups = new Map<string, Array<{ id: string; data: Record<string, unknown> & { reportData?: Record<string, unknown> }; submittedAt: number }>>();
+  for (const d of snap.docs) {
+    const data = d.data();
+    const status = data.status as WorkflowStatus;
+    const key = isPending(status) ? `pending:${data.reportData?.targetKey}` : `decided:${data.reportData?.decisionId ?? d.id}`;
+    const list = groups.get(key) ?? [];
+    list.push({ id: d.id, data, submittedAt: data.submittedAt?.toMillis?.() ?? 0 });
+    groups.set(key, list);
+  }
+  return [...groups.values()].map((list): WorkflowRow => {
+    list.sort((a, b) => a.submittedAt - b.submittedAt);
+    const first = list[0];
+    const r = first.data.reportData ?? {};
+    const targetType = r.targetType as ChangeTargetType;
+    // いちばん多い理由（ゲームは選んだ項目のうち最も多いもの）
+    const tally = new Map<string, number>();
+    for (const item of list) {
+      const ir = item.data.reportData ?? {};
+      for (const key of targetType === 'game' ? ((ir.fields as string[] | undefined) ?? []) : [ir.reason as string]) tally.set(key, (tally.get(key) ?? 0) + 1);
+    }
+    const top = [...tally.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+    const reasonText = targetType === 'game' ? describeChangeReason('game', null, top ? [top] : []) : describeChangeReason(targetType, top, null);
+    return {
+      id: first.id,
+      summary: `変更の提案（${CHANGE_TARGET_LABEL[targetType] ?? ''}）${list.length}人 — ${reasonText} — 「${(r.targetName as string) ?? ''}」`,
+      status: (first.data.status as WorkflowStatus) ?? 'reviewing_lv1',
+      submittedAt: first.submittedAt,
+    };
+  });
+}
+
 async function fetchProposalRows(): Promise<WorkflowRow[]> {
   const snap = await getDocs(query(collection(db, 'workflows'), where('type', 'in', [...PROPOSAL_TYPES])));
   return snap.docs.map((d): WorkflowRow => {
@@ -106,7 +144,7 @@ export default function AdminWorkflowsPage() {
 
   useEffect(() => {
     const byNewest = (rows: WorkflowRow[]) => rows.sort((a, b) => b.submittedAt - a.submittedAt);
-    fetchReportRows().then((rows) => setReportRows(byNewest(rows)));
+    Promise.all([fetchReportRows(), fetchChangeRows()]).then(([reports, changes]) => setReportRows(byNewest([...reports, ...changes])));
     fetchProposalRows().then((rows) => setProposalRows(byNewest(rows)));
   }, []);
 
@@ -118,7 +156,7 @@ export default function AdminWorkflowsPage() {
         rows={reportRows}
         emptyIcon={<AlertIcon />}
         emptyTitle="通報はありません"
-        emptyDescription="レビューが通報されると、ここに一覧表示されます"
+        emptyDescription="レビューの通報や、詳細ページからの変更の提案があると、ここに一覧表示されます"
         noMatchText="該当する通報はありません"
       />
       <WorkflowSection

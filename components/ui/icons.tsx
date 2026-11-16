@@ -159,6 +159,15 @@ export function AlertIcon(props: IconProps) {
   );
 }
 
+/** 旗（詳細ページの「変更を提案する」。Material Symbols: flag） */
+export function FlagIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M5 21V4M5 4h11l-2 4 2 4H5" />
+    </svg>
+  );
+}
+
 export function InfoIcon(props: IconProps) {
   return (
     <svg {...base(props)}>

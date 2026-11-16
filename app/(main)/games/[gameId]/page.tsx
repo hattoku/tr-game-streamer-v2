@@ -5,8 +5,8 @@
  *
  * 「情報を編集ボタン」（第3.3節）は管理者（owner/operator）向けの「ゲームタイトル情報を編集する」のみ
  * 表示し、登録フォーム（components/games/GameCreateModal.tsx）を編集モードで開く（第7章の暫定版、
- * 2026-09-21）。一般ユーザー向けの「編集を提案する」は審査ワークフロー自体が未実装のため引き続き
- * 非表示（フェーズ2.5でパスワード再発行リンク等を「未実装機能は置かない」方針で省略した前例に合わせる）。
+ * 2026-09-21）。一般ユーザーには「変更を提案する」（components/change-proposals/ChangeProposalButton.tsx、
+ * ページ 詳細ページからの変更提案 仕様書 §4）を出す。運営が審査ワークフローで確認してから直す。
  * ゲーム基本情報は games ドキュメントを onSnapshot で購読して表示するため、編集保存後は即座に反映される。
  */
 'use client';
@@ -19,6 +19,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { fetchTagsMap, resolveTags, type ResolvedTag } from '@/lib/tags';
 import type { PlaylistTotals } from '@/components/playlists/PlaylistListSection';
 import { GamePlaylistSection } from '@/components/games/GamePlaylistSection';
+import { ChangeProposalButton } from '@/components/change-proposals/ChangeProposalButton';
 import { GameCreateModal, type GameFormInitial } from '@/components/games/GameCreateModal';
 import { TagEditModal } from '@/components/tags/TagEditModal';
 import { TagRow } from '@/components/tags/TagRow';
@@ -207,6 +208,10 @@ export default function GameDetailPage() {
               </Button>
             )}
           </div>
+        </div>
+        {/* 一般ユーザー向けの変更の提案（ページ 詳細ページからの変更提案 仕様書 §4。管理者には出さない） */}
+        <div className="-mt-2 flex justify-end">
+          <ChangeProposalButton targetType="game" targetId={gameId} targetName={game.title} thumbnailUrl={game.packageImageUrl} />
         </div>
       </Card>
 

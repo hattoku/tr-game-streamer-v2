@@ -4,7 +4,8 @@
  * フェーズ6ステップ3の決定（operator/owner共通）により、以下を簡略化する:
  * - STEP1/STEP2の二段階審査フロー・審査者一覧・AI運営者表示は作らない（AI運営者・ジャンル別
  *   アサインが未実装のため）。現在ステータス＋「承認する」「却下する」の単一ステップとする。
- * 対象typeは通報（`review_report`）と提案（`playlist_register`・`game_title_register`、フェーズ7ステップ7-4）。
+ * 対象typeは通報（`review_report`）と提案（`playlist_register`・`game_title_register`、フェーズ7ステップ7-4）と、
+ * 詳細ページからの変更の提案（`game_title_edit`・`channel_report`・`playlist_report`、§16）。
  * ここではワークフローを購読して種別ごとの詳細（components/admin/workflows/）に振り分けるだけ。
  * 運営メモ・承認・却下はいずれも管理者の書き込みをAdmin SDK経由に寄せる既存方針
  * （app/api/admin/channels/[channelId]/route.ts と同じ）に合わせ、API Route（PATCH）で行う。
@@ -25,8 +26,10 @@ import { PlaylistProposalDetail } from '@/components/admin/workflows/PlaylistPro
 import { GameProposalDetail } from '@/components/admin/workflows/GameProposalDetail';
 import { ChannelApplicationDetail } from '@/components/admin/workflows/ChannelApplicationDetail';
 import { CHANNEL_APPLICATION_TYPE } from '@/lib/channel-application-shared';
+import { CHANGE_PROPOSAL_TYPES, isChangeProposalType } from '@/lib/change-proposal-shared';
+import { ChangeProposalDetail } from '@/components/admin/workflows/ChangeProposalDetail';
 
-const SUPPORTED_TYPES = new Set(['review_report', PLAYLIST_PROPOSAL_TYPE, GAME_PROPOSAL_TYPE, CHANNEL_APPLICATION_TYPE]);
+const SUPPORTED_TYPES = new Set(['review_report', PLAYLIST_PROPOSAL_TYPE, GAME_PROPOSAL_TYPE, CHANNEL_APPLICATION_TYPE, ...CHANGE_PROPOSAL_TYPES]);
 
 export default function AdminWorkflowDetailPage() {
   const { workflowId } = useParams<{ workflowId: string }>();
@@ -66,6 +69,8 @@ export default function AdminWorkflowDetailPage() {
         <PlaylistProposalDetail workflowId={workflowId} data={data} />
       ) : data.type === GAME_PROPOSAL_TYPE ? (
         <GameProposalDetail workflowId={workflowId} data={data} />
+      ) : isChangeProposalType(data.type) ? (
+        <ChangeProposalDetail workflowId={workflowId} data={data} />
       ) : data.type === CHANNEL_APPLICATION_TYPE ? (
         <ChannelApplicationDetail workflowId={workflowId} data={data} />
       ) : (

@@ -517,13 +517,13 @@ YouTubeチャンネルの情報。
 
 | フィールド | 型 | 必須 | 説明 |
 |-----------|-----|:---:|------|
-| `type` | string | ✅ | `"playlist_register"` / `"game_title_register"` / `"game_title_edit"` / `"playlist_report"` / `"review_report"` / `"channel_application"`（チャンネル申請、v2.0・段階6。審査ワークフロー仕様書 §15） |
+| `type` | string | ✅ | `"playlist_register"` / `"game_title_register"` / `"game_title_edit"` / `"playlist_report"` / `"review_report"` / `"channel_application"`（チャンネル申請、v2.0・段階6。審査ワークフロー仕様書 §15）／`"channel_report"`（チャンネルの報告、v3.0。審査ワークフロー仕様書 §16） |
 | `status` | string | ✅ | `"reviewing_lv1"` / `"reviewing_lv2"` / `"approved"` / `"rejected"` |
 | `submittedBy` | string | ✅ | 起票したユーザーのuserId |
 | `genreId` | string? | — | 関連ジャンルID（STEP1審査者特定に使用） |
 | `step1AssignedOperatorIds` | string[] | ✅ | STEP1にアサインされた運営者のuserIdリスト |
 | `proposalData` | map? | — | 提案データ（種別により異なる。下記「`proposalData` の構造」） |
-| `reportData` | map? | — | 通報データ（種別により異なる）。`review_report` は `targetType`・`reviewId`・`playlistId`・`reason`・`detail` を持ち、承認時に `hiddenReviewSnapshot`（承認時点のレビュー内容: `userId`・`userDisplayName`・`starRating`・`comment`・`hasSpoiler`・`postedAt`・`updatedAt`）を追記する（管理 審査ワークフロー仕様書 §3.1） |
+| `reportData` | map? | — | 通報データ（種別により異なる）。`review_report` は `targetType`・`reviewId`・`playlistId`・`reason`・`detail` を持ち、承認時に `hiddenReviewSnapshot`（承認時点のレビュー内容: `userId`・`userDisplayName`・`starRating`・`comment`・`hasSpoiler`・`postedAt`・`updatedAt`）を追記する（管理 審査ワークフロー仕様書 §3.1）。v3.0: 詳細ページからの変更の提案（`game_title_edit`・`channel_report`・`playlist_report`）は `targetType`（`game`／`channel`／`playlist`）・`targetId`・`targetKey`（`"{targetType}:{targetId}"`。同じ対象をまとめて引く）・`targetName`・`targetThumbnailUrl`（提案時点）・`reason`（チャンネル・再生リスト）・`fields`（ゲームの違う項目の配列）・`detail`・`duplicateGameId`／`duplicateGameName`・`proposedGameId`／`proposedGameName`／`proposedGameTitle`（再生リストの「ゲームが違う」）・`currentGameId`／`currentGameName` を持ち、審査で `decisionId`・`rejectReasonCode` を追記する（ページ 詳細ページからの変更提案 仕様書 §10.1、管理 審査ワークフロー仕様書 §16） |
 | `step1History` | map[] | ✅ | STEP1の審査履歴（配列） |
 | `step1Errors` | map[] | ✅ | AI審査エラー記録（配列） |
 | `step2History` | map[] | ✅ | STEP2の審査履歴（配列） |
@@ -1155,4 +1155,5 @@ ai_operators ──── (1) users
 | v2.7 | 2026-11-08 | 段階7 一覧のサーバー側検索化。§5.1 検索面の複合インデックスは検索面では使わなくなった旨を注記。フィールドの追加・変更はなし（v2.6 は段階6の PR #24 が使う） |
 | v2.2 | 2026-11-01 | 段階3の実装。§3.2 `playlists` の掲載状態（`listingStatus` ほか）と `source`・`explorationChannelId` を実装。管理者の登録・承認は `listed`（`listingReason: admin`）で作り、既存データは移行スクリプトで `listed`（`listingReason: migration`）または `channel_off` にする。`games.playlistCount`・`channels.playlistCount`・`tags.usagePlaylistCount` は掲載中の再生リストだけを数える（コンテンツ収集機能仕様書 §10.9）。フィールドの追加・変更はなし |
 | v2.9 | 2026-11-13 | §3.30 `notifications` に `channelName`・`channelIconUrl`・`newVideoTitles`・`newVideoCount` を追加（ユーザー通知機能仕様書 v1.4）。`videos.publishedAt` を動画の投稿日時に直し（これまでは再生リストに追加された日時だった）、`videos.addedToPlaylistAt` を追加 |
+| v3.0 | 2026-11-17 | `workflows` に詳細ページからの変更の提案（`channel_report` を追加、`game_title_edit`・`playlist_report` の `reportData` を定義）。`step2History` に `approveAction`・`gameId`・`gameName` |
 | v2.8 | 2026-11-08 | 段階5 人気のチャンネル。§3.4 `channels.popularity`、§3.32 `featuredOrder` をピン留めの順に、§3.21 `batch_logs` に `channel_popularity`、§3.35 `playlist_viewers`・§3.36 `batch_state` を追加。§7.1 退会時の削除に `playlist_viewers` を追加（共通 人気のチャンネル 集計 仕様書） |

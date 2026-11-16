@@ -51,7 +51,25 @@ async function cleanupCollectionData(): Promise<{ candidates: number; games: num
       ['mylist', 'reviews', 'watch_history', 'playlist_viewers'].map((c) => db().collection(c).where('userId', '>=', 'e2e-pop-').where('userId', '<', 'e2e-pop-\uf8ff').get()),
     )
   ).flatMap((s) => s.docs);
-  const refs = [...candidates.docs, ...games, ...playlists, ...channels, ...exploration, ...applications, ...explorationChannels.docs, ...popularity].map((d) => d.ref);
+  // 詳細ページからの変更の提案のテスト（e2e/change-proposals.spec.ts）が作った、対象の名前が E2E_MARK で始まる提案と、その審査結果の通知
+  const changeProposals = (await db().collection('workflows').where('type', 'in', ['game_title_edit', 'channel_report', 'playlist_report']).get()).docs.filter((d) =>
+    String(d.data().reportData?.targetName ?? '').startsWith(E2E_MARK),
+  );
+  const changeNotifications = (
+    await Promise.all(changeProposals.map((d) => db().collection('notifications').where('workflowId', '==', d.id).get()))
+  ).flatMap((s) => s.docs);
+  const refs = [
+    ...candidates.docs,
+    ...games,
+    ...playlists,
+    ...channels,
+    ...exploration,
+    ...applications,
+    ...explorationChannels.docs,
+    ...popularity,
+    ...changeProposals,
+    ...changeNotifications,
+  ].map((d) => d.ref);
   for (let i = 0; i < refs.length; i += 400) {
     const batch = db().batch();
     refs.slice(i, i + 400).forEach((ref) => batch.delete(ref));
