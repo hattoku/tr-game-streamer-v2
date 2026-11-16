@@ -4,6 +4,7 @@
  * 公開済み＝③／見送り＝②で止めて「見送り」）を出す。取得は本人専用の GET /api/playlists/proposals
  * （運営メモ・内部向けの自由記述を渡さないため Firestore を直接読まない）。
  * 公開済みは再生リストへのリンク、見送りは定型の理由（管理 審査ワークフロー仕様書 §14.4）を表示する。
+ * チャンネル申請のカードには、申請したチャンネルを確かめる「YouTubeで見る」を出す（ページ チャンネルを申請する 仕様書 §6）。
  * 表示はお問い合わせ履歴と同じくカードのリスト。
  * 審査結果の通知（review_result）は通知一覧に出さないため（ページ ユーザー通知機能仕様書 §4.3、v1.7）、未読のものを
  * ページ上部の「新しい審査結果」に並べ、該当する提案・申請のカードに未読の印を付ける。開いた時点で既読にする
@@ -18,12 +19,12 @@ import { collection, doc, getDocs, query, where, writeBatch } from 'firebase/fir
 import { auth, db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, SectionHeading } from '@/components/ui/Card';
-import { LinkButton } from '@/components/ui/Button';
+import { LinkButton, buttonClassName } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { SkeletonText } from '@/components/ui/Skeleton';
 import { Tag } from '@/components/ui/Tag';
 import { UnreadDot } from '@/components/ui/Badge';
-import { InventoryIcon } from '@/components/ui/icons';
+import { ExternalLinkIcon, InventoryIcon, YouTubeIcon } from '@/components/ui/icons';
 import { PlaylistSummary } from '@/components/playlists/PlaylistSummary';
 import { CHANNEL_APPLICATION_STEPS, ProposalSteps } from '@/components/playlists/ProposalSteps';
 import { CHANGE_TARGET_LABEL, describeChangeReason, type ChangeTargetType } from '@/lib/change-proposal-shared';
@@ -161,11 +162,9 @@ export default function ProposalHistoryPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <SectionHeading>提案履歴</SectionHeading>
         <div className="flex flex-wrap gap-2">
-          <LinkButton href="/channels/apply" variant="secondary" size="sm">
-            チャンネルを申請する
-          </LinkButton>
-          <LinkButton href="/playlists/new" variant="secondary" size="sm">
-            再生リストを提案する
+          {/* 提案の入口は1つ（ページ 提案する 仕様書 §4） */}
+          <LinkButton href="/propose" variant="secondary" size="sm">
+            提案する
           </LinkButton>
         </div>
       </div>
@@ -209,8 +208,8 @@ export default function ProposalHistoryPage() {
           title="提案・申請はまだありません"
           description="おすすめの再生リストの提案やチャンネルの申請をすると、運営の確認状況をここで確認できます"
           action={
-            <LinkButton href="/playlists/new" variant="secondary">
-              再生リストを提案する
+            <LinkButton href="/propose" variant="secondary">
+              提案する
             </LinkButton>
           }
         />
@@ -278,14 +277,32 @@ function ChannelApplicationCard({ item, unseen }: { item: ChannelApplicationItem
         </div>
         <span className="text-md text-text-muted">申請日時: {formatDate(item.submittedAt)}</span>
       </div>
-      <div className="flex items-center gap-3">
-        {item.channelIconUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={item.channelIconUrl} alt="" referrerPolicy="no-referrer" className="size-10 shrink-0 rounded-full bg-bg-btn object-cover" />
-        ) : (
-          <span className="block size-10 shrink-0 rounded-full bg-bg-btn" />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          {item.channelIconUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={item.channelIconUrl} alt="" referrerPolicy="no-referrer" className="size-10 shrink-0 rounded-full bg-bg-btn object-cover" />
+          ) : (
+            <span className="block size-10 shrink-0 rounded-full bg-bg-btn" />
+          )}
+          <p className="min-w-0 break-words text-base font-medium text-text-primary">{item.channelName}</p>
+        </div>
+        {/* 申請したチャンネルが合っているか本人が確かめる導線（ページ チャンネルを申請する 仕様書 §6、v1.3）。
+            見た目はチャンネル詳細の「YouTubeで見る」に合わせる。狭い画面では名前の下に回る */}
+        {item.youtubeChannelId && (
+          <a
+            href={`https://www.youtube.com/channel/${encodeURIComponent(item.youtubeChannelId)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={buttonClassName('secondary', 'sm', 'shrink-0')}
+            aria-label={`${item.channelName}のチャンネルをYouTubeで見る（新しいタブで開きます）`}
+            data-testid="channel-application-youtube-link"
+          >
+            <YouTubeIcon />
+            YouTubeで見る
+            <ExternalLinkIcon size={12} className="text-text-muted" />
+          </a>
         )}
-        <p className="text-base font-medium text-text-primary">{item.channelName}</p>
       </div>
       <ProposalSteps labels={CHANNEL_APPLICATION_STEPS} current={item.status === 'approved' ? 3 : 2} rejected={item.status === 'rejected'} hereLabel />
       {item.status === 'reviewing' && <p className="text-md text-text-muted">運営の確認待ちです。掲載が決まるとお知らせでお伝えします。</p>}

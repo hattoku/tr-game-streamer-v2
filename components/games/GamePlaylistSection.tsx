@@ -9,9 +9,9 @@
 import { PlaylistListSection, type PlaylistTotals } from '@/components/playlists/PlaylistListSection';
 
 export function GamePlaylistSection({ gameId, onTotals }: { gameId: string; onTotals?: (totals: PlaylistTotals) => void }) {
-  // 「再生リストを追加する」導線: 全ユーザー共通で /playlists/new へ（管理者は登録、一般ユーザーは提案。
+  // 「再生リストを追加する」導線: 全ユーザー共通で /propose へ（管理者は登録、一般ユーザーは提案。
   // gameIdを引き継いで事前選択する）
-  const addHref = `/playlists/new?gameId=${encodeURIComponent(gameId)}`;
+  const addHref = `/propose?gameId=${encodeURIComponent(gameId)}`;
 
   return <PlaylistListSection title="関連する再生リスト" filter={{ gameId }} addHref={addHref} onTotals={onTotals} />;
 }

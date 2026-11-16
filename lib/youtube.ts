@@ -408,6 +408,40 @@ export async function searchChannelsByName(name: string): Promise<ChannelDetail[
   return fetchChannelDetails(ids);
 }
 
+/**
+ * 動画のURLから動画IDを取り出す（チャンネル申請で「動画のURLでもよい」とするため。ページ 提案する 仕様書 §6.1）。
+ * 受け付ける形: youtube.com/watch?v=…、youtu.be/…、youtube.com/shorts/…、youtube.com/live/…（m.youtube.com も可）。
+ */
+export function extractVideoId(input: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(input.trim());
+  } catch {
+    return null;
+  }
+  const host = url.hostname.toLowerCase();
+  const id = /^[\w-]{11}$/;
+  if (host === 'youtu.be') {
+    const seg = url.pathname.split('/').filter(Boolean)[0] ?? '';
+    return id.test(seg) ? seg : null;
+  }
+  if (!/(^|\.)youtube\.com$/.test(host)) return null;
+  const v = url.searchParams.get('v');
+  if (url.pathname === '/watch' && v && id.test(v)) return v;
+  const segments = url.pathname.split('/').filter(Boolean);
+  if ((segments[0] === 'shorts' || segments[0] === 'live') && segments[1] && id.test(segments[1])) return segments[1];
+  return null;
+}
+
+/** 動画の投稿チャンネルのIDを返す（videos.list、1ユニット）。見つからなければ null */
+export async function fetchVideoChannelId(videoId: string): Promise<string | null> {
+  const data = await callApi<{ items?: Array<{ snippet: { channelId: string } }> }>('videos', {
+    part: 'snippet',
+    id: videoId,
+  });
+  return data.items?.[0]?.snippet.channelId ?? null;
+}
+
 export type ChannelRef = { kind: 'handle'; value: string } | { kind: 'id'; value: string };
 
 /**

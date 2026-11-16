@@ -42,7 +42,7 @@ export default function CreatorsPage() {
 
       <Section title="掲載を申請したいとき" id="apply">
         <p>まだ掲載していないご自身（または所属タレント）のチャンネルの掲載を申請できます。</p>
-        <LinkButton href="/channels/apply" variant="primary" className="w-fit">
+        <LinkButton href="/propose?type=channel&as=creator" variant="primary" className="w-fit">
           掲載を申請する
         </LinkButton>
         <p className="text-md text-text-muted">申請にはログインが必要です。アカウントを作らずに申請したい場合は、お問い合わせからでも受け付けます。</p>

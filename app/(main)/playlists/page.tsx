@@ -8,7 +8,7 @@
  * - タグ絞り込みの表示件数「実況スタイル系は全件、その他は上位5件+もっと見る」（§4.3）は、
  *   `tags`スキーマにカテゴリを表す情報が無いため`/games`と同じくフラットな一覧として実装する。
  *
- * 見出しの右に「再生リストを追加する」（/playlists/new。管理者は登録・一般ユーザーは提案）を置く（PCのみ。
+ * 見出しの右に「再生リストを追加する」（/propose。管理者は登録・一般ユーザーは提案）を置く（PCのみ。
  * モバイルは「さがす」4ページ共通の浮きボタン AddPlaylistFab）。
  *
  * TOPページからの流入（§1.3実装注記）: `?q=`（キーワード）・`?sort=`・`?tag=`を初回表示時にのみ
@@ -168,7 +168,7 @@ export default function PlaylistsPage() {
         <SectionHeading>再生リストを探す</SectionHeading>
         {/* モバイルは「さがす」共通の浮きボタン（components/layout/AddPlaylistFab.tsx）が担う */}
         <div className="hidden md:block">
-          <LinkButton href="/playlists/new" variant="secondary" size="sm">
+          <LinkButton href="/propose" variant="secondary" size="sm">
             再生リストを追加する
           </LinkButton>
         </div>

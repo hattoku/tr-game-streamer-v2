@@ -1,7 +1,8 @@
 rules_version = '2';
 
 // Cloud Storage のルール（技術スタック仕様書 2.12節）。
-// 現在の用途はお問い合わせの添付画像（inquiries/{inquiryId}/...）のみで、読み書きはすべて API Route（Admin SDK）が行う。
+// 用途はお問い合わせの添付画像（inquiries/{inquiryId}/...）とユーザーアイコン（avatars/{userId}/...）で、読み書きはすべて API Route（Admin SDK）が行う。
+// アイコンは誰でも見られるが、配信は GET /api/users/{userId}/avatar/{fileName} が現在のアイコンか確かめてから返す（ページ 設定 プロフィール仕様書 §9.5）。
 // 画像には個人情報が写りうるため、クライアントからは一切読み書きさせない（ページ お問い合わせフォーム仕様書 §9.6）。
 service firebase.storage {
   match /b/{bucket}/o {

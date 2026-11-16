@@ -1,32 +1,26 @@
-/**
- * チャンネルを申請する（/channels/apply）。ページ チャンネルを申請する 仕様書（リブランディング段階6）。
- * 実況者本人・事務所の申請と視聴者の推薦を1つのフォームで受け付ける。URL・@ハンドル・UC…・再生リストURL を入れると
- * YouTube からチャンネルを確認し（POST /api/channels/apply/preview）、受け付けないチャンネルでは送信を止める。
- * 送信は POST /api/channels/apply（`workflows` に `channel_application` を作る）。未ログインは /login へ（ログイン後に戻す）。
- * 「掲載チャンネル」「認定」という言葉は画面に出さない。
- */
 'use client';
 
-import { Suspense, useEffect, useRef, useState } from 'react';
+/**
+ * 提案ページのチャンネル側（ページ 提案する 仕様書 §6。フォームは ページ チャンネルを申請する 仕様書 §4・§5・§8 のまま）。
+ * チャンネルのURL・@ハンドル・UC…・再生リストのURL・動画のURLを入れると YouTube からチャンネルを確認し
+ * （POST /api/channels/apply/preview）、受け付けないチャンネルでは送信を止める。送信は POST /api/channels/apply。
+ * 申請の区分（本人・事務所／推薦）は画面で聞かず、記録もしない。実況者向けページから来たとき（`asCreator`）はボタンを「申請する」にするだけ。
+ * 既に掲載中のチャンネルなら、再生リスト側へ切り替えるボタンを出す（§7）。
+ * 「掲載チャンネル」「認定」という言葉は画面に出さない。管理者はこの部品を使わない（ページ側で案内を出す）。
+ */
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { auth } from '@/lib/firebase';
-import { useAuth } from '@/contexts/AuthContext';
 import { Button, LinkButton } from '@/components/ui/Button';
 import { Card, SectionHeading } from '@/components/ui/Card';
 import { Field, Input, Textarea } from '@/components/ui/Input';
-import { Skeleton, SkeletonText } from '@/components/ui/Skeleton';
+import { SkeletonText } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
-import { AlertIcon, CheckIcon } from '@/components/ui/icons';
+import { AlertIcon, CheckIcon, InfoIcon } from '@/components/ui/icons';
 import { CHANNEL_APPLICATION_STEPS, ProposalSteps } from '@/components/playlists/ProposalSteps';
+import { UrlCopyGuide } from '@/components/propose/UrlCopyGuide';
 import { formatSubscribers } from '@/lib/collection-admin';
-import {
-  APPLICANT_TYPES,
-  DAILY_APPLICATION_LIMIT,
-  MAX_APPLICATION_REASON_LENGTH,
-  type ApplicantType,
-  type ApplyChannelState,
-} from '@/lib/channel-application-shared';
+import { DAILY_APPLICATION_LIMIT, MAX_APPLICATION_REASON_LENGTH, type ApplyChannelState } from '@/lib/channel-application-shared';
 
 interface ChannelInfo {
   youtubeChannelId: string;
@@ -45,7 +39,7 @@ interface PreviewResult {
 
 const PREVIEW_ERRORS: Record<string, string> = {
   channel_not_found: 'チャンネルが見つかりませんでした。URLをご確認ください',
-  invalid_input: 'チャンネルのURL（https://www.youtube.com/@... など）を入力してください',
+  invalid_input: 'YouTubeのチャンネルや動画のURLを入力してください',
 };
 
 async function getIdToken(): Promise<string> {
@@ -53,40 +47,30 @@ async function getIdToken(): Promise<string> {
   return auth.currentUser.getIdToken();
 }
 
-export default function ChannelApplyPage() {
-  return (
-    <Suspense fallback={<ApplySkeleton />}>
-      <ChannelApplyForm />
-    </Suspense>
-  );
-}
-
-function ChannelApplyForm() {
-  const { user, role, loading } = useAuth();
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
+export function ChannelApplyPanel({
+  initialInput,
+  asCreator,
+  onSwitchToPlaylist,
+  onDoneChange,
+}: {
+  /** 入力欄に入れて開く値（`?channel=`、再生リスト側から移ってきたときの URL）。入っていれば最初に一度確認する */
+  initialInput: string;
+  /** 実況者向けページから来た（ボタンの文言を「申請する」にする。区分は記録しない） */
+  asCreator: boolean;
+  onSwitchToPlaylist: (youtubeChannelId: string) => void;
+  /** 完了画面を出しているか（ページ側の見出し・タブを隠すため） */
+  onDoneChange: (done: boolean) => void;
+}) {
   const { toast } = useToast();
-
-  const [input, setInput] = useState(() => searchParams.get('channel') ?? '');
+  const [input, setInput] = useState(initialInput);
   const [checkedInput, setCheckedInput] = useState('');
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [checking, setChecking] = useState(false);
   const [inputError, setInputError] = useState<string | null>(null);
-  const [applicantType, setApplicantType] = useState<ApplicantType | null>(null);
   const [reason, setReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [done, setDone] = useState<ChannelInfo | null>(null);
-
-  const isAdmin = role === 'owner' || role === 'operator';
-
-  // 未ログインはログインページへ。ログイン後にクエリ込みでこの画面へ戻す
-  useEffect(() => {
-    if (loading || user) return;
-    const query = searchParams.toString();
-    router.replace(`/login?next=${encodeURIComponent(query ? `${pathname}?${query}` : pathname)}`);
-  }, [loading, user, router, pathname, searchParams]);
 
   async function runCheck(value: string) {
     const text = value.trim();
@@ -121,31 +105,29 @@ function ChannelApplyForm() {
     }
   }
 
-  // `?channel=` で流入したときは、ログイン状態が分かってから一度だけ確認する
+  // 入力欄に値が入った状態で開いたときは、一度だけ確認する
   const autoCheckedRef = useRef(false);
   useEffect(() => {
-    const param = searchParams.get('channel');
-    if (!user || isAdmin || autoCheckedRef.current || !param) return;
+    if (autoCheckedRef.current || !initialInput.trim()) return;
     autoCheckedRef.current = true;
     (async () => {
-      await runCheck(param);
+      await runCheck(initialInput);
     })();
     // runCheck は描画ごとに作り直される関数のため依存に含めない（一度だけ走らせる）
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, isAdmin, searchParams]);
+  }, [initialInput]);
 
-  const canSubmit =
-    !!preview && preview.state === 'ok' && !preview.limitReached && !!applicantType && reason.trim().length <= MAX_APPLICATION_REASON_LENGTH && !submitting;
+  const canSubmit = !!preview && preview.state === 'ok' && !preview.limitReached && reason.trim().length <= MAX_APPLICATION_REASON_LENGTH && !submitting;
 
   async function handleSubmit() {
-    if (!canSubmit || !preview || !applicantType) return;
+    if (!canSubmit || !preview) return;
     setSubmitting(true);
     setSubmitError(null);
     try {
       const res = await fetch('/api/channels/apply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await getIdToken()}` },
-        body: JSON.stringify({ input: input.trim(), applicantType, reason: reason.trim() }),
+        body: JSON.stringify({ input: input.trim(), reason: reason.trim() }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -160,6 +142,7 @@ function ChannelApplyForm() {
         return;
       }
       setDone(body.channel as ChannelInfo);
+      onDoneChange(true);
       toast({ type: 'success', message: '申請を送信しました' });
     } catch {
       toast({ type: 'error', message: '送信に失敗しました。時間をおいて再試行してください' });
@@ -172,32 +155,16 @@ function ChannelApplyForm() {
     setInput('');
     setCheckedInput('');
     setPreview(null);
-    setApplicantType(null);
     setReason('');
     setSubmitError(null);
     setInputError(null);
     setDone(null);
-  }
-
-  if (loading || !user) return <ApplySkeleton />;
-
-  if (isAdmin) {
-    return (
-      <div className="mx-auto max-w-[720px]">
-        <SectionHeading className="mb-4">チャンネルを申請する</SectionHeading>
-        <Card className="flex flex-col gap-3">
-          <p className="text-base text-text-secondary">管理者は申請できません。掲載チャンネル画面から直接登録できます。</p>
-          <LinkButton href="/admin/collection/channels" variant="primary" className="w-fit">
-            掲載チャンネル画面へ
-          </LinkButton>
-        </Card>
-      </div>
-    );
+    onDoneChange(false);
   }
 
   if (done) {
     return (
-      <div className="mx-auto max-w-[720px]">
+      <div>
         <SectionHeading className="mb-4 flex items-center gap-2">
           <CheckIcon size={22} className="shrink-0 text-toast-success" />
           申請を送りました（確認待ち）
@@ -227,22 +194,23 @@ function ChannelApplyForm() {
   }
 
   return (
-    <div className="mx-auto max-w-[720px]">
-      <SectionHeading className="mb-4">チャンネルを申請する</SectionHeading>
+    <div>
       <Card className="mb-4">
         <ProposalSteps labels={CHANNEL_APPLICATION_STEPS} current={1} />
-        <p className="mt-3 text-md text-text-muted">運営が確認してから公開します。実況者本人・公式のチャンネルだけを掲載します（切り抜き・転載・まとめは掲載しません）。</p>
+        <p className="mt-3 text-md text-text-muted">
+          運営が確認してから公開します。実況者本人・公式のチャンネルだけを掲載します（切り抜き・転載・まとめは掲載しません）。
+        </p>
       </Card>
 
       <Card flush>
         <div className="flex flex-col gap-4 p-[18px]">
-          <Field label="チャンネルのURL" error={inputError}>
+          <Field label="推薦・申請するチャンネル" error={inputError}>
             {(props) => (
               <Input
                 {...props}
                 inputMode="url"
                 autoComplete="off"
-                placeholder="https://www.youtube.com/@..."
+                placeholder="YouTubeのチャンネルや動画のURL"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onBlur={() => runCheck(input)}
@@ -253,7 +221,8 @@ function ChannelApplyForm() {
               />
             )}
           </Field>
-          <p className="text-md text-text-muted">チャンネルのURL、@ハンドル、再生リストのURLのどれでも入力できます</p>
+          <p className="text-md text-text-muted">そのチャンネルの動画のURL、チャンネルのURL、@ハンドル、再生リストのURLのどれでも入力できます</p>
+          <UrlCopyGuide kind="channel" />
 
           {(checking || preview) && (
             <div aria-live="polite" className="flex flex-col gap-3 rounded-[8px] border border-border-card bg-bg-child p-3">
@@ -262,32 +231,14 @@ function ChannelApplyForm() {
               ) : (
                 <>
                   <ChannelPreviewRow channel={preview.channel} />
-                  <ApplyStateNote preview={preview} />
+                  <ApplyStateNote preview={preview} onSwitchToPlaylist={onSwitchToPlaylist} />
                 </>
               )}
             </div>
           )}
 
-          <fieldset className="flex flex-col gap-2">
-            <legend className="mb-1 text-md text-text-tertiary">どちらで申請しますか</legend>
-            {APPLICANT_TYPES.map((t) => (
-              <label key={t.value} className="flex cursor-pointer items-start gap-2 text-base text-text-secondary">
-                <input
-                  type="radio"
-                  name="applicant-type"
-                  value={t.value}
-                  checked={applicantType === t.value}
-                  onChange={() => setApplicantType(t.value)}
-                  disabled={submitting}
-                  className="mt-[3px]"
-                />
-                <span>{t.label}</span>
-              </label>
-            ))}
-          </fieldset>
-
           <Field
-            label={`申請の理由（任意・${reason.trim().length}/${MAX_APPLICATION_REASON_LENGTH}）`}
+            label={`推薦・申請の理由（任意・${reason.trim().length}/${MAX_APPLICATION_REASON_LENGTH}）`}
             error={reason.trim().length > MAX_APPLICATION_REASON_LENGTH ? `${MAX_APPLICATION_REASON_LENGTH}文字以内で入力してください` : null}
           >
             {(props) => <Textarea {...props} value={reason} onChange={(e) => setReason(e.target.value)} disabled={submitting} rows={3} />}
@@ -303,7 +254,7 @@ function ChannelApplyForm() {
           <div className="flex flex-col items-end gap-2">
             <p className="text-md text-text-muted">送信後、運営の確認が済むまで公開されません（1日{DAILY_APPLICATION_LIMIT}件まで）</p>
             <Button variant="primary" onClick={handleSubmit} disabled={!canSubmit} loading={submitting}>
-              申請する
+              {asCreator ? '申請する' : '推薦する'}
             </Button>
           </div>
         </div>
@@ -338,23 +289,29 @@ function ChannelPreviewRow({ channel }: { channel: ChannelInfo }) {
 }
 
 /** 受け付けないチャンネルの表示（仕様書 §4）。申請できるときは何も出さない（上限のときだけ案内） */
-function ApplyStateNote({ preview }: { preview: PreviewResult }) {
+function ApplyStateNote({ preview, onSwitchToPlaylist }: { preview: PreviewResult; onSwitchToPlaylist: (youtubeChannelId: string) => void }) {
   if (preview.state === 'listed') {
+    // 掲載中のチャンネルなら、そのチャンネルの再生リストの提案へ移れるようにする（ページ 提案する 仕様書 §6.2・§7）
     return (
-      <p className="flex items-start gap-[6px] text-base text-input-error">
-        <AlertIcon size={15} className="mt-[3px] shrink-0" />
-        <span>
-          このチャンネルはすでに掲載しています
-          {preview.channelPageId && (
-            <>
-              {' '}
-              <Link href={`/channels/${preview.channelPageId}`} className="underline underline-offset-[3px]">
-                チャンネルを見る
-              </Link>
-            </>
-          )}
-        </span>
-      </p>
+      <div className="flex flex-col gap-2" data-testid="channel-already-listed">
+        <p className="flex items-start gap-[6px] text-base text-text-secondary">
+          <InfoIcon size={15} className="mt-[3px] shrink-0 text-toast-info" />
+          <span>
+            このチャンネルはすでに掲載しています
+            {preview.channelPageId && (
+              <>
+                {' '}
+                <Link href={`/channels/${preview.channelPageId}`} className="underline underline-offset-[3px]">
+                  チャンネルを見る
+                </Link>
+              </>
+            )}
+          </span>
+        </p>
+        <Button variant="secondary" size="sm" className="w-fit" onClick={() => onSwitchToPlaylist(preview.channel.youtubeChannelId)}>
+          このチャンネルの再生リストを提案する
+        </Button>
+      </div>
     );
   }
   if (preview.state === 'opted_out') {
@@ -394,17 +351,3 @@ function ApplyStateNote({ preview }: { preview: PreviewResult }) {
   return null;
 }
 
-function ApplySkeleton() {
-  return (
-    <div className="mx-auto max-w-[720px]">
-      <Skeleton className="mb-5 h-6 w-[200px]" />
-      <div className="flex flex-col gap-4 rounded-[12px] border border-border-card bg-gradient-card p-[18px] shadow-card">
-        <Skeleton className="h-3 w-[90px]" />
-        <Skeleton className="h-10 w-full rounded-[7px]" />
-        <div className="flex justify-end">
-          <Skeleton className="h-10 w-[100px] rounded-[8px]" />
-        </div>
-      </div>
-    </div>
-  );
-}

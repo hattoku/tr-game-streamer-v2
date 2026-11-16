@@ -7,7 +7,7 @@
 // ID が PLE2E で始まる playlists を削除する。
 // 認証は GOOGLE_APPLICATION_CREDENTIALS（stg 用サービスアカウント。roles/datastore.user）。接続先は stg 固定。
 import { applicationDefault, getApps, initializeApp } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
+import { FieldPath, getFirestore } from 'firebase-admin/firestore';
 import { getStorage } from 'firebase-admin/storage';
 import { E2E_MARK, STG_PROJECT_ID } from './env';
 
@@ -51,6 +51,9 @@ async function cleanupCollectionData(): Promise<{ candidates: number; games: num
       ['mylist', 'reviews', 'watch_history', 'playlist_viewers'].map((c) => db().collection(c).where('userId', '>=', 'e2e-pop-').where('userId', '<', 'e2e-pop-\uf8ff').get()),
     )
   ).flatMap((s) => s.docs);
+  // プロフィールのレビュー履歴のテスト（e2e/profile-review-history.spec.ts）が作った架空の利用者（ID が e2e-prof- で始まる）とそのレビュー
+  const profileUsers = await db().collection('users').where(FieldPath.documentId(), '>=', 'e2e-prof-').where(FieldPath.documentId(), '<', 'e2e-prof-\uf8ff').get();
+  const profileReviews = await db().collection('reviews').where('userId', '>=', 'e2e-prof-').where('userId', '<', 'e2e-prof-\uf8ff').get();
   // 詳細ページからの変更の提案のテスト（e2e/change-proposals.spec.ts）が作った、対象の名前が E2E_MARK で始まる提案と、その審査結果の通知
   const changeProposals = (await db().collection('workflows').where('type', 'in', ['game_title_edit', 'channel_report', 'playlist_report']).get()).docs.filter((d) =>
     String(d.data().reportData?.targetName ?? '').startsWith(E2E_MARK),
@@ -69,6 +72,8 @@ async function cleanupCollectionData(): Promise<{ candidates: number; games: num
     ...popularity,
     ...changeProposals,
     ...changeNotifications,
+    ...profileUsers.docs,
+    ...profileReviews.docs,
   ].map((d) => d.ref);
   for (let i = 0; i < refs.length; i += 400) {
     const batch = db().batch();

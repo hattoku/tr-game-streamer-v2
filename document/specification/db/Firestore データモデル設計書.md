@@ -1,6 +1,6 @@
 # プレミテ Firestore データモデル設計書
 
-**バージョン**: v2.9  
+**バージョン**: v3.0  
 **作成日**: 2026年3月30日（更新）  
 **対象**: 開発チーム  
 **関連ドキュメント**: プレミテ企画書 / プレミテ_技術スタック仕様書 / 各機能仕様書
@@ -153,7 +153,7 @@ Firestoreはテーブル結合（JOIN）ができないため、一覧表示や�
 | `uid` | string | ✅ | Firebase Auth UID（ドキュメントIDと同一） |
 | `displayName` | string | ✅ | ユーザー名（1〜30文字） |
 | `email` | string | ✅ | メールアドレス（管理者のみ公開。一般ユーザーは非公開） |
-| `profileImageUrl` | string? | — | プロフィール画像のURL |
+| `profileImageUrl` | string? | — | アイコン（プロフィール画像）の URL。このサイトの配信 API の相対 URL `/api/users/{uid}/avatar/{20文字の英数字}.webp`（画像本体は Cloud Storage の `avatars/{uid}/` に1枚だけ置く）。未設定は null か無し。書き込みは `PUT`／`DELETE /api/users/{uid}/avatar`（Admin SDK）のみで、本人のクライアント更新の許可フィールドに含めない（v2.10。ページ 設定 プロフィール仕様書 §9.5） |
 | `bio` | string? | — | 自己紹介文（最大200文字） |
 | `role` | string | ✅ | `"user"` / `"operator"` / `"owner"` / `"ai_operator"` |
 | `isAI` | boolean | ✅ | AI運営者フラグ。`role = "ai_operator"` のとき `true` |
@@ -381,7 +381,7 @@ YouTubeチャンネルの情報。
 | `genreExpertiseScore` | number? | — | ジャンル専門性スコア（変数G、算出時点のスナップショット） |
 | `commentScore` | number? | — | コメント有無による乗数（変数C。あり: `1.0` / なし: `0.5`。共通 信頼度スコアリングシステム仕様書 §3.3に準拠） |
 | `userDisplayName` | string | ✅ | 投稿者の表示名の非正規化コピー（投稿・更新時点のスナップショット）。`users`は本人・管理者以外読めないルールのため、レビュー一覧での表示にはこちらを参照する（HANDOFF.md未解決事項1の対応）。プロフィールで表示名を変更すると `PATCH /api/users/[userId]/profile` が本人の全レビュー分を新しい名前に揃える |
-| `userProfileImageUrl` | string? | — | 投稿者のプロフィール画像URLの非正規化コピー（同上） |
+| `userProfileImageUrl` | string? | — | 投稿者のプロフィール画像URLの非正規化コピー（同上。アイコンを替える・外すと `PUT`／`DELETE /api/users/[userId]/avatar` が本人の全レビュー分を揃える） |
 | `isHidden` | boolean? | — | 通報承認による非表示（論理削除）フラグ。`true` のレビューは一覧・集計・スコアから除外する（管理 審査ワークフロー仕様書 §3.1）。未設定は `false` 扱い。書き込みは Admin SDK のみ（本人のクライアント更新の許可フィールドに含めない） |
 | `hiddenAt` | Timestamp? | — | 非表示にした日時 |
 | `hiddenByWorkflowId` | string? | — | 非表示の根拠となった `workflows` のドキュメントID |
@@ -538,8 +538,8 @@ YouTubeチャンネルの情報。
 | 種別 | フィールド |
 |------|-----------|
 | `playlist_register` | `playlistUrl`・`youtubePlaylistId`・`title`・`thumbnailUrl`・`itemCount`・`channelId`・`channelName`・`channelIconUrl`（提案時点の YouTube の情報）・`gameId`・`gameName`（新しいゲームタイトルとして提案した場合はどちらも null で、`newGameTitle`・`newGameNote`（null 可）を持つ）。承認時に `registeredPlaylistId`、ゲームタイトルを差し替えて承認した場合は `approvedGameId`・`approvedGameName` を追記。v1.23: 新しいゲームタイトルの場合は `newGamePlatforms`（string[]、任意）と `newGameRakuten`（楽天ブックスの候補から選んだ場合の `itemUrl`・`title`（元の商品名）・`imageUrl`・`hardware`・`booksGenreId`、それ以外は null）。却下時に `rejectReasonCode`（定型の見送り理由、管理 審査ワークフロー仕様書 §14.4） |
-| `playlist_register`（v2.0 の追記） | 提案できるのは掲載チャンネル（`exploration_channels.status == active`）の再生リストだけ（ページ 再生リストを追加する 仕様書 §10）。ゲームタイトルは任意: ゲームが分からない提案は `gameId`・`newGameTitle` がどちらも null で `noGame: true` を持つ（承認ではゲーム未設定で登録できる）。既に `playlists` にあるが掲載していない再生リスト（`listed` 以外）の掲載の提案は `existingListingStatus`（提案時点の掲載状態）を持ち、承認で `listed`（`listingSetBy: admin`）にする |
-| `channel_application`（v2.0・段階6） | `channelUrl`（入力されたURL・@ハンドル）・`youtubeChannelId`・`channelTitle`・`channelIconUrl`（申請時点の YouTube の情報）・`applicantType`（`"creator"`＝本人・事務所／`"viewer"`＝視聴者の推薦。自己申告）・`reason`（任意、200文字まで）。承認時に `explorationChannelId`（掲載した `exploration_channels` のID）を追記。却下時に `rejectReasonCode`（審査ワークフロー仕様書 §15.4）。同じチャンネルの審査中の申請があるときは新しい申請を受け付けない（2026-11-04 ユーザー決定、v2.6）。`channelUrl` には入力をそのまま入れる（再生リストURLから特定した場合も入力したURL）。`subscriberCount`（申請時点の登録者数、非公開は null）も持つ（v2.6） |
+| `playlist_register`（v2.0 の追記） | 提案できるのは掲載チャンネル（`exploration_channels.status == active`）の再生リストだけ（ページ 再生リストを追加する 仕様書 §10）。ゲームタイトルは任意: ゲームが分からない提案は `gameId`・`newGameTitle` がどちらも null で `noGame: true` を持つ（承認ではゲーム未設定で登録できる）。既に `playlists` にあるが掲載していない再生リスト（`listed` 以外）の掲載の提案は `existingListingStatus`（提案時点の掲載状態）を持ち、承認で `listed`（`listingSetBy: admin`）にする。2026-11-16（ページ 提案する 仕様書）: `existingListingReason`（提案時点の掲載の理由）、`proposeReason`（公開してほしい理由、任意・200文字。対象外を選んだときだけ）を追加。運営が手で外したもの（`listingSetBy: admin`）は提案できない |
+| `channel_application`（v2.0・段階6） | `channelUrl`（入力されたURL・@ハンドル）・`youtubeChannelId`・`channelTitle`・`channelIconUrl`（申請時点の YouTube の情報）・`applicantType`（`"creator"`＝本人・事務所／`"viewer"`＝視聴者の推薦。自己申告。**2026-11-15 までの申請だけが持つ。2026-11-16 以降は区分を聞かず記録もしない**（ユーザー決定。ページ 提案する 仕様書 §6.1）。残っている値も画面では使わない）・`reason`（任意、200文字まで）。承認時に `explorationChannelId`（掲載した `exploration_channels` のID）を追記。却下時に `rejectReasonCode`（審査ワークフロー仕様書 §15.4）。同じチャンネルの審査中の申請があるときは新しい申請を受け付けない（2026-11-04 ユーザー決定、v2.6）。`channelUrl` には入力をそのまま入れる（再生リストURLから特定した場合も入力したURL）。`subscriberCount`（申請時点の登録者数、非公開は null）も持つ（v2.6） |
 | `game_title_register` | `playlistUrl`・`gameTitle`・`note`（null 可）。承認時に `createdGameId`（登録したゲームタイトルのID）を追記。v1.22 の改訂（同日）以降は、再生リストの追加では新規作成しない（新しいゲームタイトルは `playlist_register` の `newGameTitle` で提案する）。**v2.4 から、登録済みでゲーム未設定の再生リストに付けたいゲームタイトルの提案としてのみ作る**: `gameTitle`・`note`（null 可）・`playlistId`（対象の再生リストID）・`playlistTitle`（`playlistUrl` は持たない）。承認時は `createdGameId` を追記し、その再生リストにゲームを付けて提案者に通知する |
 
 **`editHistory` 要素の構造**（v1.22 時点では再生リスト登録提案のゲームタイトル差し替えのみ）: `editedAt`（Timestamp）・`operatorId`・`field`（`"gameId"`）・`from`・`to`
@@ -964,7 +964,7 @@ AI運営者（審査AI）の設定。プラットフォーム共通で1体のみ
 | `lastFoundCount` | number? | — | 前回の探索で新しく保存した候補数 |
 | `publishMode` | string | ✅（段階4〜） | 掲載方法（v2.0）。`"confirm"`（確認してから掲載、**既定**）／`"auto"`（自動で掲載） |
 | `featuredOrder` | number? | — | 「人気のチャンネル」・チャンネル一覧の人気順で先頭に出すピン留めの順（v2.8・段階5。小さいほど先。null はピン留めしない＝人気の点数で並ぶ）。v2.0〜v2.7 では「仮の表示順（null は並べない）」だった |
-| `authorizedVia` | string? | — | 掲載の入口（v2.0）。`"admin"`（運営の直接登録）／`"creator_application"`（本人・事務所の申請）／`"viewer_recommendation"`（視聴者の推薦）／`"migration"`（段階3の移行） |
+| `authorizedVia` | string? | — | 掲載の入口（v2.0）。`"admin"`（運営の直接登録）／`"channel_application"`（チャンネルの申請・推薦の承認。2026-11-16 以降）／`"creator_application"`（本人・事務所の申請）・`"viewer_recommendation"`（視聴者の推薦）（どちらも 2026-11-15 までの承認）／`"migration"`（段階3の移行） |
 | `applicationWorkflowId` | string? | — | 申請から掲載した場合のワークフローID（v2.0・段階6） |
 | `authorizedAt` | Timestamp? | — | 掲載した日時（v2.0） |
 | `optedOutAt` | Timestamp? | — | 掲載を止めた日時（v2.0。`opted_out` のみ） |
@@ -1096,6 +1096,7 @@ ai_operators ──── (1) users
 
 ### 7.1 退会時の物理削除
 - `users`, `reviews`, `mylist`, `watch_history`, `watch_progress`, `helpful_votes`, `collections`, `playlist_viewers`（v2.8）を物理削除。
+- Cloud Storage の `avatars/{uid}/`（アイコン、v2.10）も削除する。
 - `saved_collections` は本人の保存記録に加え、削除される本人のまとめに対する他ユーザーの保存記録も物理削除する（3.14.1節）。
 
 ### 7.2 マスタ削除時の影響
@@ -1155,5 +1156,6 @@ ai_operators ──── (1) users
 | v2.7 | 2026-11-08 | 段階7 一覧のサーバー側検索化。§5.1 検索面の複合インデックスは検索面では使わなくなった旨を注記。フィールドの追加・変更はなし（v2.6 は段階6の PR #24 が使う） |
 | v2.2 | 2026-11-01 | 段階3の実装。§3.2 `playlists` の掲載状態（`listingStatus` ほか）と `source`・`explorationChannelId` を実装。管理者の登録・承認は `listed`（`listingReason: admin`）で作り、既存データは移行スクリプトで `listed`（`listingReason: migration`）または `channel_off` にする。`games.playlistCount`・`channels.playlistCount`・`tags.usagePlaylistCount` は掲載中の再生リストだけを数える（コンテンツ収集機能仕様書 §10.9）。フィールドの追加・変更はなし |
 | v2.9 | 2026-11-13 | §3.30 `notifications` に `channelName`・`channelIconUrl`・`newVideoTitles`・`newVideoCount` を追加（ユーザー通知機能仕様書 v1.4）。`videos.publishedAt` を動画の投稿日時に直し（これまでは再生リストに追加された日時だった）、`videos.addedToPlaylistAt` を追加 |
+| v2.10 | 2026-11-16 | §3.1 `users.profileImageUrl` をアイコンのアップロード実装に合わせて定義（配信 API の相対 URL、本体は Storage の `avatars/{uid}/`、書き込みは API のみ）。§7.1 退会時に `avatars/{uid}/` も消す（ページ 設定 プロフィール仕様書 v1.11） |
 | v3.0 | 2026-11-17 | `workflows` に詳細ページからの変更の提案（`channel_report` を追加、`game_title_edit`・`playlist_report` の `reportData` を定義）。`step2History` に `approveAction`・`gameId`・`gameName` |
 | v2.8 | 2026-11-08 | 段階5 人気のチャンネル。§3.4 `channels.popularity`、§3.32 `featuredOrder` をピン留めの順に、§3.21 `batch_logs` に `channel_popularity`、§3.35 `playlist_viewers`・§3.36 `batch_state` を追加。§7.1 退会時の削除に `playlist_viewers` を追加（共通 人気のチャンネル 集計 仕様書） |

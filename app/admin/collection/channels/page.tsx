@@ -58,6 +58,8 @@ const TAB_LABEL: Record<ExplorationChannelStatus, string> = {
 
 const AUTHORIZED_VIA_LABEL: Record<string, string> = {
   admin: '運営の登録',
+  channel_application: 'チャンネルの申請・推薦',
+  // 2026-11-16 より前の申請で承認したチャンネル（区分を記録していた頃）
   creator_application: '本人・事務所の申請',
   viewer_recommendation: '視聴者の推薦',
   migration: '移行',

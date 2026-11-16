@@ -4,6 +4,7 @@ import { adminDb } from '../../../../lib/firebase-admin';
 import { extractPlaylistId, fetchChannelSnippet, fetchPlaylistSnippet, YouTubeApiError } from '../../../../lib/youtube';
 import { hasPendingPlaylistProposal } from '../../../../lib/playlist-registration';
 import { getProposalChannelState } from '../../../../lib/channel-application-server';
+import { isHiddenByAdmin } from '../../../../lib/propose-server';
 
 // 「再生リストを追加する」フォームのURL入力(blur)で叩く、書き込みなしのプレビューAPI
 // （ページ 再生リストを追加する 仕様書.md 4.1節）。管理者の登録・一般ユーザーの提案（フェーズ7ステップ7-4）の
@@ -48,16 +49,30 @@ export async function POST(request: NextRequest) {
     getProposalChannelState(channel.youtubeChannelId),
   ]);
 
+  // すでにプレミテにあるが掲載していない再生リスト（巡回で取り込んだもの）は「登録済み」にせず、掲載の提案・管理者の公開にする
+  // （ページ 提案する 仕様書 §5.3・§9）。運営が手で外したものは一般ユーザーには提案させない
+  const existingData = playlistDoc.exists ? playlistDoc.data()! : null;
+  const existingUnlisted = !!existingData && (existingData.listingStatus ?? 'listed') !== 'listed';
+
   return NextResponse.json({
     playlist,
     channel,
     // 再生リストのchannelIdはfetchChannelSnippetの引数に使った値そのものなので、
     // この時点では構造的に一致する（4.1.5節「チャンネル一致」）。チャンネル詳細ページから
     // 流入した場合の「流入元チャンネル一致」（5.2節）は、レスポンスの channel.youtubeChannelId を
-    // クライアント側（/playlists/new）で比較し、本登録・提案の API でも再検証する。
+    // クライアント側（/propose）で比較し、本登録・提案の API でも再検証する。
     channelMatches: true,
     channelAlreadyRegistered: channelDoc.exists,
-    playlistAlreadyRegistered: playlistDoc.exists,
+    playlistAlreadyRegistered: playlistDoc.exists && !existingUnlisted,
+    existingPlaylist: existingUnlisted
+      ? {
+          listingStatus: existingData!.listingStatus as string,
+          listingReason: (existingData!.listingReason as string | null) ?? null,
+          hiddenByAdmin: isHiddenByAdmin(existingData!),
+          gameId: (existingData!.gameId as string | null) ?? null,
+          gameName: (existingData!.gameName as string | null) || null,
+        }
+      : null,
     // 審査中の提案がある（§7.2）。一般ユーザーは提案不可、管理者は案内のみ（直接登録はできる）
     pendingProposal,
     /** `listed`＝掲載中のチャンネル／`not_listed`＝掲載していない（チャンネル申請へ誘導）／`opted_out`＝掲載を止めている */

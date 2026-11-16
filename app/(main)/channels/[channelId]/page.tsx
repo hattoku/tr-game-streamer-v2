@@ -5,7 +5,7 @@
  * （ゲームタイトル詳細と共用の components/playlists/PlaylistListSection.tsx）。
  *
  * - 「再生リストを追加する」ボタンは GamePlaylistSection と同じく全ユーザー共通で
- *   `/playlists/new?channelId=` へ遷移させる（未ログインは登録ページ側で /login へ。管理者は登録、
+ *   `/propose?channelId=` へ遷移させる（未ログインは登録ページ側で /login へ。管理者は登録、
  *   一般ユーザーは同ページで提案する。フェーズ7ステップ7-4）。ボタン文言は全ユーザー共通。
  * - 説明文の編集（§3.3、管理者のみ）はインライン編集。仕様は「説明文がある場合のみ編集ボタン」だが、
  *   説明文なしで登録済みのチャンネルに後から付ける手段が無くなるため、未設定時も「説明文を追加する」を出す。
@@ -95,7 +95,7 @@ export default function ChannelDetailPage() {
   }
 
   const videoCount = totals?.totalVideoCount ?? 0;
-  const addHref = `/playlists/new?channelId=${encodeURIComponent(channelId)}`;
+  const addHref = `/propose?channelId=${encodeURIComponent(channelId)}`;
 
   return (
     <div className="flex flex-col gap-6">

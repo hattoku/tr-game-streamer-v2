@@ -10,6 +10,7 @@ import { CHANNEL_APPLICATION_TYPE } from '@/lib/channel-application-shared';
 import { decideChannelApplication, getProposalChannelState } from '@/lib/channel-application-server';
 import { isChangeProposalType } from '@/lib/change-proposal-shared';
 import { decideChangeProposal } from '@/lib/change-proposal-server';
+import { publishExistingPlaylist } from '@/lib/propose-server';
 
 // 審査ワークフローの承認・却下・運営メモ更新API（管理_審査ワークフロー仕様書 §9, §11）。
 // 対象typeは`review_report`（通報、フェーズ6ステップ3）と、提案系の`playlist_register`・`game_title_register`
@@ -119,10 +120,11 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const updates: Record<string, unknown> = {};
     if (action === 'approve' && workflow.type === PLAYLIST_PROPOSAL_TYPE) {
       const proposal = workflow.proposalData ?? {};
-      // 新しいゲームタイトル付きの提案（§14.3 v10.1）は gameId が null。管理者が先にゲームタイトルを登録（または選択）して gameId を渡す
+      // 新しいゲームタイトル付きの提案（§14.3 v10.1）は gameId が null。管理者が先にゲームタイトルを登録（または選択）して gameId を渡す。
+      // ゲームが分からない提案（noGame、§15.3）は、ゲームを決めずに承認できる（ゲーム未設定、すでにある再生リストは今のゲームのまま）
       const originalGameId = (proposal.gameId as string | null) ?? null;
-      const gameId = typeof body.gameId === 'string' && body.gameId ? body.gameId : originalGameId;
-      if (!gameId) {
+      const gameId: string | null = typeof body.gameId === 'string' && body.gameId ? body.gameId : originalGameId;
+      if (!gameId && proposal.newGameTitle) {
         return NextResponse.json({ error: 'game_required' }, { status: 400 });
       }
 
@@ -147,13 +149,25 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         return NextResponse.json({ error: 'already_processed' }, { status: 409 });
       }
 
-      const result = await registerPlaylist({
-        playlistUrl: proposal.playlistUrl as string,
-        gameId,
-        channelDescription: body.channelDescription,
-        registeredBy: uid,
-        proposedBy: workflow.submittedBy as string,
-      });
+      // すでに `playlists` にある掲載していない再生リストの提案（巡回で取り込んだもの、§15.3）は、掲載にする（運営が手で外したものは承認できない）
+      const existingSnap = proposal.youtubePlaylistId
+        ? await adminDb.collection('playlists').doc(proposal.youtubePlaylistId as string).get()
+        : null;
+      const existingData = existingSnap?.exists ? existingSnap.data()! : null;
+      const publishExisting = !!existingData && (existingData.listingStatus ?? 'listed') !== 'listed';
+      // 提案で掲載になったことを再生リストにも残す（提案者）。掲載のあとにワークフローの更新だけ失敗しても、
+      // 次の承認で「この提案者の提案として登録済み」と分かるよう、掲載より先に書く
+      const previousProposedBy = (existingData?.proposedBy as string | null | undefined) ?? null;
+      if (publishExisting) await existingSnap!.ref.update({ proposedBy: workflow.submittedBy ?? null });
+      const result = publishExisting
+        ? await publishExistingPlaylist({ playlistId: existingSnap!.id, gameId, uid, allowHidden: false })
+        : await registerPlaylist({
+            playlistUrl: proposal.playlistUrl as string,
+            gameId,
+            channelDescription: body.channelDescription,
+            registeredBy: uid,
+            proposedBy: workflow.submittedBy as string,
+          });
       let registered: { playlistId: string; gameName: string } | null = 'error' in result ? null : result;
       // 前回の承認で登録まで済み、ワークフローの更新だけ失敗していた場合（この提案者の提案として登録済み）は承認として扱う
       if ('error' in result && result.error === 'already_registered' && proposal.youtubePlaylistId) {
@@ -163,8 +177,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         }
       }
       if (!registered) {
+        // 掲載できなかったときは、先に書いた提案者を元に戻す（掲載していない再生リストに提案者を残さない）
+        if (publishExisting) await existingSnap!.ref.update({ proposedBy: previousProposedBy }).catch(() => {});
         await workflowRef.update({ approvingAt: FieldValue.delete() });
-        const error = result as PlaylistApiError;
+        const error = result as PlaylistApiError | { error: string; status: number; message?: string };
         return NextResponse.json({ error: error.error, message: error.message }, { status: error.status });
       }
       updates.approvingAt = FieldValue.delete();
