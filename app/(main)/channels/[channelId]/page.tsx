@@ -12,6 +12,7 @@
  * - channels ドキュメントは onSnapshot で購読し、編集保存後に即座に反映する（ゲームタイトル詳細と同じ方針）。
  * - 「N レビュー」「N マイリスト」は掲載中の再生リストのレビュー数・マイリスト登録数の合計（§8.2、段階5）。
  *   チャンネル自体の点数（スコアの平均）は出さない。
+ * - 「YouTubeで見る」は YouTube のチャンネルページを新しいタブで開く（§3.3）。
  */
 'use client';
 
@@ -22,11 +23,11 @@ import { auth, db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { PlaylistListSection, type PlaylistTotals } from '@/components/playlists/PlaylistListSection';
 import { Card } from '@/components/ui/Card';
-import { Button, LinkButton } from '@/components/ui/Button';
+import { Button, LinkButton, buttonClassName } from '@/components/ui/Button';
 import { Checkbox, Field, Textarea } from '@/components/ui/Input';
 import { Skeleton, SkeletonText } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
-import { CommentIcon, InventoryIcon, PencilIcon, PlayIcon, UserIcon, UsersIcon } from '@/components/ui/icons';
+import { CommentIcon, ExternalLinkIcon, InventoryIcon, PencilIcon, PlayIcon, UserIcon, UsersIcon, YouTubeIcon } from '@/components/ui/icons';
 
 interface ChannelDetail {
   name: string;
@@ -131,9 +132,24 @@ export default function ChannelDetailPage() {
                 {(totals?.totalMylistCount ?? 0).toLocaleString()} マイリスト
               </span>
             </div>
-            <LinkButton href={addHref} variant="secondary" size="sm" className="self-start">
-              再生リストを追加する
-            </LinkButton>
+            <div className="flex flex-wrap items-center gap-2">
+              <LinkButton href={addHref} variant="secondary" size="sm">
+                再生リストを追加する
+              </LinkButton>
+              {/* YouTube のチャンネルでプロフィールなどを確かめる導線（§3.3）。channelId は YouTube のチャンネルIDそのもの */}
+              <a
+                href={`https://www.youtube.com/channel/${encodeURIComponent(channelId)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={buttonClassName('secondary', 'sm')}
+                aria-label={`${channel.name}のチャンネルをYouTubeで見る（新しいタブで開きます）`}
+                data-testid="channel-youtube-link"
+              >
+                <YouTubeIcon />
+                YouTubeで見る
+                <ExternalLinkIcon size={12} className="text-text-muted" />
+              </a>
+            </div>
           </div>
         </div>
 
