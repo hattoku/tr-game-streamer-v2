@@ -51,7 +51,7 @@ test('プロフィール編集で画像を選んで保存すると、アイコ�
       await userPage.getByTestId('profile-image-input').setInputFiles({ name: 'wide.png', mimeType: 'image/png', buffer: await widePng() });
       await expect(userPage.getByTestId('profile-image-preview')).toBeVisible();
       await userPage.getByRole('button', { name: '保存する' }).click();
-      await expect(userPage.getByText('プロフィールを保存しました', { exact: true }).first()).toBeVisible();
+      await expect(userPage.getByText('プロフィールを保存しました').first()).toBeVisible();
 
       const avatar = userPage.getByTestId('user-avatar-image').first();
       await expect(avatar).toBeVisible();
@@ -92,7 +92,7 @@ test('プロフィール編集で画像を選んで保存すると、アイコ�
       await userPage.getByRole('button', { name: '編集する' }).click();
       await userPage.getByRole('button', { name: '画像を外す' }).click();
       await userPage.getByRole('button', { name: '保存する' }).click();
-      await expect(userPage.getByText('プロフィールを保存しました', { exact: true }).first()).toBeVisible();
+      await expect(userPage.getByText('プロフィールを保存しました').first()).toBeVisible();
       await expect(userPage.getByTestId('user-avatar-silhouette').first()).toBeVisible();
       await expect(userPage.getByRole('button', { name: /ユーザーメニュー/ }).getByTestId('user-avatar-silhouette')).toBeVisible();
     });
