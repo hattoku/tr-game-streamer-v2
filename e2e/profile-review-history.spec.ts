@@ -90,9 +90,11 @@ test.describe('レビュー履歴は星評価かコメントがある投稿だ�
     await guestPage.goto(`/profile/${userId}`);
     const section = guestPage.locator('section').filter({ has: guestPage.getByRole('heading', { name: /^レビュー履歴/ }) });
     await expect(section.getByRole('heading', { name: /^レビュー履歴/ })).toContainText('2件');
-    await expect(section.getByText(/\[E2E\] 星だけ/)).toBeVisible();
-    await expect(section.getByText(/\[E2E\] コメントだけ/)).toBeVisible();
-    await expect(section.getByText(/\[E2E\] 視聴ステータスだけ/)).toHaveCount(0);
+    // カードのタイトルのリンクで見る（コメント本文にも「[E2E] コメントだけ」が入るため本文では探さない）
+    await expect(section.getByRole('link', { name: /\[E2E\] 星だけ/ })).toBeVisible();
+    await expect(section.getByRole('link', { name: /\[E2E\] コメントだけ/ })).toBeVisible();
+    await expect(section.getByText('[E2E] コメントだけのレビュー')).toBeVisible();
+    await expect(section.getByRole('link', { name: /\[E2E\] 視聴ステータスだけ/ })).toHaveCount(0);
     // 統計のレビュー投稿数も2件
     const stat = guestPage.locator('section[aria-label="統計情報"]').getByText('レビュー投稿数').locator('..');
     await expect(stat).toContainText('2');
