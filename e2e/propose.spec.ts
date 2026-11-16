@@ -67,7 +67,8 @@ test('§2 旧URLは /propose へ転送し、クエリを引き継ぐ。未ログ
   await expect(userPage.getByRole('tab', { name: '再生リスト' })).toHaveAttribute('aria-selected', 'true');
 
   await userPage.goto('/channels/apply?channel=UCzzzzzzzzzzzzzzzzzzzzzz');
-  await expect(userPage).toHaveURL(/\/propose\?type=channel&channel=UCz+/);
+  // 転送先のクエリの並びは決まっていないので、パスとクエリを分けて確かめる
+  await expect(userPage).toHaveURL((url) => url.pathname === '/propose' && url.searchParams.get('type') === 'channel' && url.searchParams.get('channel') === 'UCzzzzzzzzzzzzzzzzzzzzzz');
   await expect(userPage.getByRole('tab', { name: 'チャンネル' })).toHaveAttribute('aria-selected', 'true');
   await expect(userPage.getByLabel('推薦・申請するチャンネル')).toHaveValue('UCzzzzzzzzzzzzzzzzzzzzzz');
 
