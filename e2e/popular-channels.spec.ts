@@ -1,5 +1,5 @@
 // 人気のチャンネル（リブランディング段階5）の確認項目。共通 人気のチャンネル 集計 仕様書の各節と、
-// ページ top 仕様書 v2.2 §4.2・§6A、ページ チャンネル 探す 仕様書 v2.2 §9.2・§9.3、ページ チャンネル 詳細 仕様書 v1.10 §8.2、
+// ページ top 仕様書 v2.2 §4.2・§6A、ページ チャンネル 探す 仕様書 v2.2 §9.2・§9.3、ページ チャンネル 詳細 仕様書 v1.10 §8.2・v1.11 §3.3（YouTubeで見る）、
 // 共通 uiコンポーネント フロント 仕様書 v2.1 §2.4・§2.7・§3.3、管理 AI運営者向け収集候補レビューUI仕様書 v3.4 §9.2。
 // 再生リスト・チャンネル・マイリスト・レビュー・視聴履歴は Admin SDK で直接作り、終了時に自分で消す（名前は [E2E] で始まる）。
 // 集計は stg 全体に効くため、集計するテストは desktop だけで順番に実行する。
@@ -308,6 +308,26 @@ test('チャンネル §9.3・詳細 §8.2: カードにレビュー合計、詳
     await guestPage.goto(`/channels/${id}`);
     await expect(guestPage.getByTestId('channel-review-total')).toHaveText('5 レビュー', { timeout: 30_000 });
     await expect(guestPage.getByTestId('channel-mylist-total')).toHaveText('5 マイリスト');
+  } finally {
+    await seed.cleanup();
+  }
+});
+
+test('チャンネル詳細 §3.3: 「YouTubeで見る」で YouTube のチャンネルを新しいタブで開ける', async ({ guestPage }) => {
+  const t = token();
+  const seed = new Seed();
+  try {
+    const name = `[E2E] YouTube導線 ${t}`;
+    const id = await seed.channel(name);
+    await seed.playlist(id, name);
+
+    await guestPage.goto(`/channels/${id}`);
+    const link = guestPage.getByRole('link', { name: `${name}のチャンネルをYouTubeで見る（新しいタブで開きます）` });
+    await expect(link).toBeVisible({ timeout: 30_000 });
+    await expect(link).toHaveText('YouTubeで見る');
+    await expect(link).toHaveAttribute('href', `https://www.youtube.com/channel/${id}`);
+    await expect(link).toHaveAttribute('target', '_blank');
+    await expect(link).toHaveAttribute('rel', /noopener/);
   } finally {
     await seed.cleanup();
   }
