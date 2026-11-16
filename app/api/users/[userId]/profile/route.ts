@@ -41,12 +41,13 @@ export async function GET(request: NextRequest, { params }: Params) {
       : null,
   ]);
 
-  // 星評価・視聴ステータス・コメントのいずれかがある投稿をレビューとして数える（§5.3）。
+  // 星評価かコメントがある投稿をレビューとして数える（§5.3・§8.1）。視聴ステータスだけの投稿は
+  // レビュー履歴・レビュー投稿数・ジャンル分布のどれにも入れない（2026-11-16 ユーザー決定）。
   // 通報で非表示のレビューは本人のプロフィールでも数えない（管理 審査ワークフロー仕様書 §3.1）
   const reviewDocs = reviewSnap.docs
     .map((d) => ({ id: d.id, data: d.data() }))
     .filter(({ data }) => data.isHidden !== true)
-    .filter(({ data }) => data.starRating != null || normalizeWatchStatus(data.watchStatus) != null || !!(data.comment as string | null)?.trim());
+    .filter(({ data }) => data.starRating != null || !!(data.comment as string | null)?.trim());
   const mylistDocs = mylistSnap.docs.map((d) => d.data());
   const collections = (collectionSnap?.docs ?? [])
     .map((d) => toCollectionJson(d.id, d.data()))
