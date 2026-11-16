@@ -14,6 +14,10 @@
 // iOS の PWA 起動スプラッシュ（apple-touch-startup-image）も書き出す。iOS は manifest からスプラッシュを
 // 作らず、画面サイズに完全一致する画像が無いと白画面になるため、lib/apple-splash-screens.json の端末ごとに
 // 「元画像の背景色のキャンバス中央に通常用アイコン」を置いた縦向き画像を作る（指定は app/layout.tsx）。
+//
+// ヘッダー・ドロワー・フッター・認証画面のロゴマーク（components/ui/Logo.tsx）も、同じ元画像から背景を
+// 透過して書き出す（public/icons/logo-mark.png）。置く場所ごとに背景色が違う（#0f0f0f〜#202020）ため、
+// 元画像の背景（#121212）を四角く残さず、赤い三角と光彩だけを透明背景に載せる。
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -31,6 +35,13 @@ const CROP_FAVICON = 1320;
 const SPLASH_BACKGROUND = '#0f0f0f';
 // スプラッシュ上のアイコン（通常用切り出し）の一辺。画面短辺に対する比率
 const SPLASH_ICON_RATIO = 0.35;
+// ロゴマークの切り出し範囲（元画像の座標）。赤い三角（x 612〜1496・y 528〜1520）と光彩が収まる正方形
+const LOGO_CROP = { left: 474, top: 444, width: 1160, height: 1160 };
+// ロゴマークの書き出しサイズ。表示は 28px なので、高精細画面（3倍）でも粗くならない大きさにする
+const LOGO_SIZE = 96;
+// 元画像の背景色（R=G=B）と三角の赤の R 値。背景からの R の増え方を不透明度とみなして背景を抜く
+const SOURCE_BACKGROUND = 18;
+const LOGO_RED_R = 226;
 const SPLASH_SCREENS = JSON.parse(readFileSync(join(root, 'lib/apple-splash-screens.json'), 'utf8'));
 
 // 元画像の中心から cropSize 四方を切り出して outSize px に縮小した PNG バッファを返す。
@@ -69,6 +80,28 @@ function buildIco(images) {
   return Buffer.concat([header, ...entries, ...images.map((i) => i.data)]);
 }
 
+// 元画像から背景を抜いたロゴマーク（透過PNG）を作る。各画素を「背景色と赤を不透明度 a で混ぜた色」とみなし、
+// R から a を求めて、背景の分を差し引いた色（＝赤や光彩そのものの色）に戻す。三角の内側の暗い部分は透明になる
+async function renderLogoMark(outSize) {
+  const { data, info } = await sharp(SOURCE)
+    .extract(LOGO_CROP)
+    .resize(outSize, outSize, { kernel: 'lanczos3' })
+    .removeAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const out = Buffer.alloc(info.width * info.height * 4);
+  for (let i = 0, j = 0; i < data.length; i += 3, j += 4) {
+    const a = Math.min(1, Math.max(0, (data[i] - SOURCE_BACKGROUND) / (LOGO_RED_R - SOURCE_BACKGROUND)));
+    for (let c = 0; c < 3; c++) {
+      out[j + c] = a > 0 ? Math.min(255, Math.max(0, Math.round((data[i + c] - SOURCE_BACKGROUND * (1 - a)) / a))) : 0;
+    }
+    out[j + 3] = Math.round(a * 255);
+  }
+  return sharp(out, { raw: { width: info.width, height: info.height, channels: 4 } })
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+}
+
 function write(relPath, data) {
   const abs = join(root, relPath);
   mkdirSync(dirname(abs), { recursive: true });
@@ -80,6 +113,7 @@ write('public/icons/icon-192x192.png', await render(CROP_ANY, 192));
 write('public/icons/icon-512x512.png', await render(CROP_ANY, 512));
 write('public/icons/icon-maskable-512x512.png', await render(SOURCE_SIZE, 512));
 write('app/apple-icon.png', await render(CROP_ANY, 180));
+write('public/icons/logo-mark.png', await renderLogoMark(LOGO_SIZE));
 
 const faviconSizes = [16, 32, 48];
 const faviconImages = await Promise.all(
