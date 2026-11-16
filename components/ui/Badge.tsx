@@ -2,7 +2,8 @@
  * バッジ類（共通 デザイントークン仕様書 v2.0）。
  * - TrendingBadge: 「↑ 注目上昇中」（§5.2）
  * - PlayingBadge:  「再生中」。サムネイル左上に重ねる赤いラベル（§5.3）
- * - CountLabel:    サムネイル右下の話数「N話」（§6.5。「全N話」とはしない）
+ * - CountLabel:    サムネイル右下に重ねる再生時間（§6.5。サムネイルに重ねるのは再生時間だけ）
+ * - EpisodeCount:  再生リストの話数「N話」。サムネイルには重ねず、カードの文字の並びに置く（§6.5。「全N話」とはしない）
  * - NewBadge:      「🔔 NEW」（ページ マイリスト機能仕様書 §5.4）。刺し色を増やさないため
  *                  未読ドット（§15.1）と同じ赤ドット＋白文字で表現する
  * - UnreadDot:     未読インジケーター（§15.1）
@@ -44,11 +45,23 @@ export function StatusBadge({ icon, className, children }: { icon?: ReactNode; c
   );
 }
 
-/** サムネイル右下の話数・尺などの半透明ラベル（§6.5） */
+/** サムネイル右下に重ねる再生時間の半透明ラベル（§6.5） */
 export function CountLabel({ className, children, ...rest }: { className?: string; children: ReactNode; 'data-testid'?: string }) {
   return (
     <span {...rest} className={cn('inline-flex items-center rounded-[4px] bg-black/72 px-[7px] py-[2px] text-sm leading-[1.5] text-text-primary', className)}>
       {children}
+    </span>
+  );
+}
+
+/**
+ * 再生リストの話数「N話」（§6.5）。再生リストの表紙（詳細ページ）へ遷移するサムネイルには重ねず、
+ * サムネイルの周辺（カードの文字の並び）に置く。current を渡すと「現在の話 / 総話数」（例: 16 / 93話）
+ */
+export function EpisodeCount({ count, current, className }: { count: number; current?: number | null; className?: string }) {
+  return (
+    <span data-testid="episode-count" className={cn('shrink-0 whitespace-nowrap', className)}>
+      {current != null ? `${current} / ${count}話` : `${count}話`}
     </span>
   );
 }

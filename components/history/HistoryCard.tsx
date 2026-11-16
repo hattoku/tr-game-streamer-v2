@@ -1,13 +1,14 @@
 /**
  * 視聴履歴カード（ページ 視聴履歴 仕様書 §4.2・§4.3）。
- * サムネイル＋進捗バー・動画タイトル・配信者・再生時間・三点リーダー（この動画の履歴を削除）。
- * 再生時間は動画リスト（VideoList）と同じ表記。尺が取れない動画は行ごと出さない。
+ * サムネイル（右下に再生時間）＋進捗バー・動画タイトル・配信者・三点リーダー（この動画の履歴を削除）。
+ * 再生時間は動画リスト（VideoList）と同じ表記・同じくサムネイルの右下に重ねる。尺が取れない動画は出さない。
  * サムネイル・タイトルのクリックで該当再生リストの動画プレーヤーページへ遷移する（§4.2）。
  * 実際の再開位置は遷移先が watch_progress の最新値から決めるため、ここでは playlistId のみ渡す。
  */
 'use client';
 
 import Link from 'next/link';
+import { CountLabel } from '@/components/ui/Badge';
 import { Card } from '@/components/ui/Card';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/DropdownMenu';
 import { ProgressBar } from '@/components/ui/ProgressBar';
@@ -40,6 +41,11 @@ export function HistoryCard({ entry, onDelete }: HistoryCardProps) {
               // eslint-disable-next-line @next/next/no-img-element
               <img src={entry.video.thumbnailUrl} alt="" className="absolute inset-0 size-full object-cover" loading="lazy" />
             )}
+            {entry.video?.durationSeconds != null && (
+              <CountLabel className="absolute bottom-1 right-1 px-[5px] py-0 text-xs" data-testid="history-duration">
+                {formatDuration(entry.video.durationSeconds)}
+              </CountLabel>
+            )}
           </span>
           <ProgressBar value={entry.progressPercent} size="md" className="rounded-t-none rounded-b-[8px]" label="視聴進捗" />
         </div>
@@ -59,9 +65,6 @@ export function HistoryCard({ entry, onDelete }: HistoryCardProps) {
               )}
               <span className="truncate text-sm text-text-tertiary">{entry.playlist.channelName}</span>
             </div>
-          )}
-          {entry.video?.durationSeconds != null && (
-            <span className="text-sm text-text-faint">{formatDuration(entry.video.durationSeconds)}</span>
           )}
         </div>
       </Link>

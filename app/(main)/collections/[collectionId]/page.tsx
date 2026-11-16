@@ -22,7 +22,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { UserAvatar } from '@/components/layout/UserDropdown';
 import { Card, THUMBNAIL_HOVER_IMG_CLASS } from '@/components/ui/Card';
 import { LinkButton } from '@/components/ui/Button';
-import { CountLabel } from '@/components/ui/Badge';
+import { EpisodeCount } from '@/components/ui/Badge';
 import { StatusChip } from '@/components/ui/Chip';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Skeleton, SkeletonText } from '@/components/ui/Skeleton';
@@ -203,8 +203,6 @@ function CollectionPlaylistCard({
               <img src={p.thumbnailUrl} alt="" className={cn('absolute inset-0 size-full object-cover', THUMBNAIL_HOVER_IMG_CLASS)} loading="lazy" />
             )}
           </span>
-          <span aria-hidden className="absolute inset-x-0 bottom-0 h-[46%] bg-thumb-overlay" />
-          <CountLabel className="absolute bottom-2 right-2">{p.videoCount}話</CountLabel>
         </Link>
         <div className="flex min-w-0 flex-1 flex-col gap-[6px] md:gap-[10px]">
           <Link href={href} className="line-clamp-2 text-base font-semibold leading-snug text-text-primary hover:text-text-secondary md:text-xl">
@@ -223,6 +221,7 @@ function CollectionPlaylistCard({
               <StarIcon size={13} className="text-brand-score" />
               {p.score == null ? <span className="text-text-muted">評価なし</span> : <span className="font-semibold text-text-primary">{p.score.toFixed(1)}</span>}
             </span>
+            <EpisodeCount count={p.videoCount} className="text-md text-text-tertiary" />
             {review?.watchStatus && <StatusChip status={review.watchStatus} readOnly />}
           </div>
         </div>

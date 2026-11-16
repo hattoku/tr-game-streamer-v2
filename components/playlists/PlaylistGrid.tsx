@@ -8,8 +8,8 @@
  * - 一覧のデータは、サーバー側で絞り込み・並べ替え・ページングした1ページ分を API から受け取る
  *   （リブランディング段階7、共通 一覧のサーバー側検索 仕様書。呼び出しは lib/catalog.ts）。
  * - `fetchPublicPlaylists`: 公開再生リスト全件のクライアント取得。取り下げ中のまとめ機能（COLLECTIONS_ENABLED）でだけ使う。
- * 見た目: 共通 デザイントークン仕様書 v2.0 §6.1（カード・ホバーの浮き上がり）・§6.5（サムネイル: 下部オーバーレイ・
- * 話数「N話」）。クリックは詳細ページへの遷移でその場では再生しないため、サムネイルにボタンは重ねず
+ * 見た目: 共通 デザイントークン仕様書 v2.0 §6.1（カード・ホバーの浮き上がり）・§6.5（サムネイル。再生リストの表紙へ
+ * 遷移するためサムネイルには何も重ねず、話数「N話」はスコアの行のスコアの次に置く）。クリックは詳細ページへの遷移でその場では再生しないため、サムネイルにボタンは重ねず
  * カード全体の浮き上がり（§6.1）のみでホバーを示す（ゲームタイトルカードと同じ方針）。
  */
 'use client';
@@ -18,7 +18,7 @@ import Link from 'next/link';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Card } from '@/components/ui/Card';
-import { CountLabel } from '@/components/ui/Badge';
+import { EpisodeCount } from '@/components/ui/Badge';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Tag } from '@/components/ui/Tag';
 import { CommentIcon, InventoryIcon, StarIcon, UsersIcon } from '@/components/ui/icons';
@@ -74,15 +74,13 @@ export function PlaylistCard({
   return (
     <Link href={`/playlists/${p.id}`} className={cn('block h-full', className)}>
       <Card interactive flush className="flex h-full flex-col">
-        {/* サムネイル（§6.5）: 下部オーバーレイ・話数。ホバー表現はカード全体の浮き上がり（§6.1）のみ */}
+        {/* サムネイル（§6.5）: 再生リストの表紙へ遷移するため何も重ねない（話数は下のスコアの行）。ホバー表現はカード全体の浮き上がり（§6.1）のみ */}
         <div className="relative aspect-video w-full bg-bg-player">
           {p.thumbnailUrl && (
             // absolute化: 通常フローの子だと画像自身の縦横比がaspect-videoコンテナの高さに影響してしまうため
             // eslint-disable-next-line @next/next/no-img-element
             <img src={p.thumbnailUrl} alt="" className="absolute inset-0 size-full object-cover" loading="lazy" />
           )}
-          <div aria-hidden className="absolute inset-x-0 bottom-0 h-[46%] bg-thumb-overlay" />
-          <CountLabel className="absolute bottom-2 right-2">{p.videoCount}話</CountLabel>
         </div>
         <div className="flex flex-1 flex-col gap-2 px-[14px] pb-[14px] pt-3">
           <p className="line-clamp-2 text-lg font-medium leading-snug text-text-primary">{p.title}</p>
@@ -96,12 +94,13 @@ export function PlaylistCard({
             )}
             <span className="truncate text-md text-text-tertiary">{p.channelName}</span>
           </div>
-          {/* スコア・マイリスト数・レビュー数（探す仕様書 §3.3）。レビュー0件は「評価なし」 */}
+          {/* スコア・話数・マイリスト数・レビュー数（探す仕様書 §3.3）。レビュー0件は「評価なし」 */}
           <div className="mt-auto flex items-center gap-3 text-md text-text-tertiary">
             <span className="inline-flex items-center gap-1">
               <StarIcon size={13} className="text-brand-score" />
               {p.score == null ? <span className="text-text-muted">評価なし</span> : <span className="font-semibold text-text-primary">{p.score.toFixed(1)}</span>}
             </span>
+            <EpisodeCount count={p.videoCount} />
             <span className="inline-flex items-center gap-1">
               <UsersIcon size={13} />
               {p.mylistCount.toLocaleString()}
