@@ -7,6 +7,7 @@
  * このカードは表示専用（ページ マイリスト機能仕様書 §1.3）。
  */
 import { Card } from '@/components/ui/Card';
+import { cn } from '@/components/ui/cn';
 import { StarRating } from '@/components/ui/StarRating';
 import { TagRow } from '@/components/tags/TagRow';
 import type { ResolvedTag } from '@/lib/tags';
@@ -20,14 +21,15 @@ interface PlaylistInfoCardProps {
   tags: ResolvedTag[];
   /** ログイン済みのときのみ渡す（タグ編集アイコンの表示条件。ゲームタイトル詳細仕様書 §8.2準拠） */
   onEditTags?: () => void;
-  /** カードの右下に置く操作（「変更を提案する」。ページ 詳細ページからの変更提案 仕様書 §6.1） */
-  footer?: ReactNode;
+  /** カードの右上に置く操作（「情報の更新を提案する」の「⋯」メニュー。タグの操作と離す。ページ 詳細ページからの変更提案 仕様書 §6.1） */
+  cornerAction?: ReactNode;
 }
 
-export function PlaylistInfoCard({ title, score, mylistCount, reviewCount, tags, onEditTags, footer }: PlaylistInfoCardProps) {
+export function PlaylistInfoCard({ title, score, mylistCount, reviewCount, tags, onEditTags, cornerAction }: PlaylistInfoCardProps) {
   return (
-    <Card className="flex flex-col gap-3">
-      <h1 className="break-words text-2xl font-medium text-text-primary">
+    <Card className="relative flex flex-col gap-3">
+      {cornerAction && <div className="absolute right-2 top-2">{cornerAction}</div>}
+      <h1 className={cn('break-words text-2xl font-medium text-text-primary', !!!!cornerAction && 'pr-8')}>
         {title}
       </h1>
 
@@ -50,7 +52,6 @@ export function PlaylistInfoCard({ title, score, mylistCount, reviewCount, tags,
       </div>
 
       <TagRow tags={tags} hrefForTag={(id) => `/playlists?tag=${encodeURIComponent(id)}`} onEdit={onEditTags} />
-      {footer && <div className="-mt-1 flex justify-end">{footer}</div>}
     </Card>
   );
 }

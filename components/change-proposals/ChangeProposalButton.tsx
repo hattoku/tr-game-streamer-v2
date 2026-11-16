@@ -1,5 +1,5 @@
 /**
- * 詳細ページ（ゲーム・チャンネル・再生リスト）の「変更を提案する」ボタンとモーダル（ページ 詳細ページからの変更提案 仕様書 §3〜§6）。
+ * 詳細ページ（ゲーム・チャンネル・再生リスト）の「情報の更新を提案する」ボタンとモーダル（ページ 詳細ページからの変更提案 仕様書 §3〜§6）。
  * 運営が確認してから反映する（審査ワークフロー）。送信は POST /api/change-proposals（回数・重複・対象の状態はサーバーで確かめる）。
  * - 管理者には出さない（直接直せるため）。未ログインで押すとログイン案内を出す
  * - モーダルを開いたとき、自分の審査中の提案があれば入力の代わりに「確認待ちです」と提案履歴へのリンクを出す
@@ -16,7 +16,8 @@ import { Button, LinkButton } from '@/components/ui/Button';
 import { Field, Input, Textarea } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { useToast } from '@/components/ui/Toast';
-import { FlagIcon, UserIcon } from '@/components/ui/icons';
+import { MoreIcon, UserIcon } from '@/components/ui/icons';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/DropdownMenu';
 import { cn } from '@/components/ui/cn';
 import { LoginRequiredModal } from '@/components/layout/LoginRequiredModal';
 import { GameSelectModal, type GameOption } from '@/components/playlists/GameSelectModal';
@@ -30,6 +31,9 @@ import {
   changeTargetKey,
   type ChangeTargetType,
 } from '@/lib/change-proposal-shared';
+
+/** メニューとモーダルの見出しに使う文言。間違いがある前提に聞こえないやわらかい言い方（2026-11-17 ユーザー決定） */
+export const CHANGE_PROPOSAL_MENU_LABEL = '情報の更新を提案する';
 
 const ERROR_MESSAGE: Record<string, string> = {
   daily_limit: '提案は1日5件までです。時間をおいてお試しください',
@@ -193,15 +197,30 @@ export function ChangeProposalButton({ targetType, targetId, targetName, thumbna
 
   return (
     <>
-      <Button variant="ghost" size="sm" onClick={handleOpen} className={className} data-testid="change-proposal-button">
-        <FlagIcon size={13} />
-        変更を提案する
-      </Button>
+      {/* 本当に間違いがあったときの逃げ道なので、カード右上の「⋯」の中にしまって目立たせない（仕様書 §3.1） */}
+      <DropdownMenu modal={false}>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            aria-label="その他のメニュー"
+            title="その他のメニュー"
+            className={cn('rounded-[6px] p-1 text-text-muted hover:bg-bg-hover hover:text-text-primary', className)}
+            data-testid="change-proposal-menu"
+          >
+            <MoreIcon size={18} />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onSelect={handleOpen} data-testid="change-proposal-button">
+            {CHANGE_PROPOSAL_MENU_LABEL}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
 
       <LoginRequiredModal
         open={loginOpen}
         onOpenChange={setLoginOpen}
-        title="変更を提案するにはアカウントが必要です"
+        title={`${CHANGE_PROPOSAL_MENU_LABEL}にはアカウントが必要です`}
         note={targetType === 'channel' ? <CreatorNote /> : undefined}
       />
 
@@ -211,7 +230,7 @@ export function ChangeProposalButton({ targetType, targetId, targetName, thumbna
           if (!next && submitting) return;
           setOpen(next);
         }}
-        title={`この${label}への変更を提案`}
+        title={CHANGE_PROPOSAL_MENU_LABEL}
       >
         <div className="flex flex-col gap-4" data-testid="change-proposal-modal">
           <div className="flex items-center gap-3">

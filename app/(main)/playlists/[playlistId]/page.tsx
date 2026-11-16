@@ -1136,7 +1136,7 @@ export default function PlaylistDetailPage() {
       reviewCount={playlist.reviewCount}
       tags={tags}
       onEditTags={user ? () => setTagModalOpen(true) : undefined}
-      footer={
+      cornerAction={
         <ChangeProposalButton
           targetType="playlist"
           targetId={playlistId}

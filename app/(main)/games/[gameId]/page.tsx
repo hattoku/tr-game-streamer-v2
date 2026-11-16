@@ -5,7 +5,7 @@
  *
  * 「情報を編集ボタン」（第3.3節）は管理者（owner/operator）向けの「ゲームタイトル情報を編集する」のみ
  * 表示し、登録フォーム（components/games/GameCreateModal.tsx）を編集モードで開く（第7章の暫定版、
- * 2026-09-21）。一般ユーザーには「変更を提案する」（components/change-proposals/ChangeProposalButton.tsx、
+ * 2026-09-21）。一般ユーザーには「情報の更新を提案する」（components/change-proposals/ChangeProposalButton.tsx、
  * ページ 詳細ページからの変更提案 仕様書 §4）を出す。運営が審査ワークフローで確認してから直す。
  * ゲーム基本情報は games ドキュメントを onSnapshot で購読して表示するため、編集保存後は即座に反映される。
  */
@@ -149,8 +149,16 @@ export default function GameDetailPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <Card className="flex flex-col gap-4">
-        <h1 className="text-2xl font-medium text-text-primary">{game.title}</h1>
+      <Card className="relative flex flex-col gap-4">
+        {/* 一般ユーザー向けの変更の提案（ページ 詳細ページからの変更提案 仕様書 §4。管理者には出さない）。タグの操作と取り違えないようカードの右上に置く */}
+        <ChangeProposalButton
+          targetType="game"
+          targetId={gameId}
+          targetName={game.title}
+          thumbnailUrl={game.packageImageUrl}
+          className="absolute right-2 top-2"
+        />
+        <h1 className="pr-8 text-2xl font-medium text-text-primary">{game.title}</h1>
         <div className="grid grid-cols-[112px_minmax(0,1fr)] gap-x-4 gap-y-3 border-t border-border-divider pt-4 sm:grid-cols-[200px_minmax(0,1fr)] sm:grid-rows-[auto_1fr_auto] sm:gap-x-6">
           {packageImage}
           <div className="col-start-2 row-start-1 flex flex-col gap-2">
@@ -208,10 +216,6 @@ export default function GameDetailPage() {
               </Button>
             )}
           </div>
-        </div>
-        {/* 一般ユーザー向けの変更の提案（ページ 詳細ページからの変更提案 仕様書 §4。管理者には出さない） */}
-        <div className="-mt-2 flex justify-end">
-          <ChangeProposalButton targetType="game" targetId={gameId} targetName={game.title} thumbnailUrl={game.packageImageUrl} />
         </div>
       </Card>
 

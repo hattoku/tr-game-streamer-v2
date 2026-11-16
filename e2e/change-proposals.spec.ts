@@ -74,9 +74,22 @@ async function deleteChannel(id: string) {
   await Promise.all([...ex.docs.map((d) => d.ref.delete()), e2eDb().collection('channels').doc(id).delete()]);
 }
 
-/** 見えている方の「変更を提案する」（再生リスト詳細は基本情報カードを PC・モバイル用に2つ描くため） */
+/**
+ * 見えている方のカード右上の「⋯」を開き、「情報の更新を提案する」を押せるようにする（仕様書 §3.1。
+ * 再生リスト詳細は基本情報カードを PC・モバイル用に2つ描くため、見えている方を使う）
+ */
 function proposeButton(page: Page) {
-  return page.getByTestId('change-proposal-button').filter({ visible: true });
+  return {
+    async click() {
+      const menu = page.getByTestId('change-proposal-menu').filter({ visible: true });
+      await expect(menu).toHaveAccessibleName('その他のメニュー');
+      // ボタン自体は文言を出さないアイコンだけ
+      await expect(menu).toHaveText('');
+      await menu.click();
+      const item = page.getByRole('menuitem', { name: '情報の更新を提案する' });
+      await item.click();
+    },
+  };
 }
 
 test('§3.1 未ログインでは3つの詳細ページにボタンが出て、押すとログイン案内。チャンネルは本人・事務所向けの案内も出す（§5.3）', async ({ guestPage }) => {
@@ -87,7 +100,7 @@ test('§3.1 未ログインでは3つの詳細ページにボタンが出て、�
     for (const path of [`/games/${game.id}`, `/playlists/${playlist.id}`]) {
       await guestPage.goto(path);
       await proposeButton(guestPage).click();
-      await expect(guestPage.getByRole('dialog')).toContainText('変更を提案するにはアカウントが必要です');
+      await expect(guestPage.getByRole('dialog')).toContainText('情報の更新を提案するにはアカウントが必要です');
       await expect(guestPage.getByTestId('change-proposal-creator-note')).toHaveCount(0);
       await guestPage.keyboard.press('Escape');
     }
@@ -110,7 +123,7 @@ test('§3.1 管理者にはボタンを出さない', async ({ adminPage }) => {
   try {
     await adminPage.goto(`/games/${game.id}`);
     await expect(adminPage.getByRole('button', { name: /ゲームタイトル情報を編集する/ })).toBeVisible();
-    await expect(adminPage.getByTestId('change-proposal-button')).toHaveCount(0);
+    await expect(adminPage.getByTestId('change-proposal-menu')).toHaveCount(0);
   } finally {
     await e2eDb().collection('games').doc(game.id).delete();
   }
