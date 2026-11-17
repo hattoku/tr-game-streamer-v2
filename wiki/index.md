@@ -101,6 +101,7 @@ tr-game-streamer-v2 の**コーディング支援用**Wiki（実装の変更履�
 - [[2026-11-17-channel-profile-refresh]] — 配信者の名前・アイコンを毎日の再取得の最初に `channels.list` で取り直し、違うものだけ書き換える（30日ルール対応）。読めないアイコンは代わりの表示に（`FallbackImage`）（PR #59）
 - [[2026-11-17-unit-tests-and-collections-code-removal]] — 単体テスト（Vitest、`npm test`、`tests/unit/`、DB を使わない処理だけ）を入れ、取り下げたまとめ機能のコードを削除。`/collections*` はファイルが無いので 404、proxy の書き換えを外した。データとルールは残す（PR #60）
 - [[2026-11-17-collection-flow-refactoring]] — 収集フローの整理。件数の増減を `lib/listing-counts*.ts` の1か所に寄せ、巡回の入口を `sweepChannels` に揃え、「探索」を「掲載チャンネル」に改名（`channel-sweep-run`・`/api/admin/collection/sweep`・`playlist-title-rules`）。DB 名は変えない（PR #61）
+- [[2026-11-17-workflow-api-split-and-spec-cleanup]] — 提案・審査フローの整理。審査 API を種別ごとのファイルに分け（`workflow-decisions`・`workflow-shared`・`workflow-server`）、管理画面の fetch を `lib/admin-api.ts` に、Firestore の直接読み込みを ESLint で禁止。審査ワークフロー仕様書 v14.0、仕様書を `構想/`・`取り下げ/` に分けた（PR #62）
 
 ## Entities
 - [[proxy]] — proxy.ts（旧middleware.ts、Next.js 16のproxy規約対応）。stgゲート。`/collections*` の 404 書き換えは 2026-11-17 にまとめのコード削除で外した
