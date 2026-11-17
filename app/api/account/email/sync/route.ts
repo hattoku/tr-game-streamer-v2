@@ -10,13 +10,18 @@ export async function POST(request: NextRequest) {
   const verified = await requireUser(request);
   if ('errorResponse' in verified) return verified.errorResponse;
 
-  const record = await adminAuth.getUser(verified.uid);
-  const email = record.email ?? null;
-  const ref = adminDb.collection('users').doc(verified.uid);
-  const snap = await ref.get();
-  if (!snap.exists) return NextResponse.json({ updated: false });
-  if (snap.get('email') === email) return NextResponse.json({ updated: false, email });
+  try {
+    const record = await adminAuth.getUser(verified.uid);
+    const email = record.email ?? null;
+    const ref = adminDb.collection('users').doc(verified.uid);
+    const snap = await ref.get();
+    if (!snap.exists) return NextResponse.json({ updated: false });
+    if (snap.get('email') === email) return NextResponse.json({ updated: false, email });
 
-  await ref.update({ email });
-  return NextResponse.json({ updated: true, email });
+    await ref.update({ email });
+    return NextResponse.json({ updated: true, email });
+  } catch (e) {
+    console.error('[account/email/sync] failed', e);
+    return NextResponse.json({ error: 'internal' }, { status: 500 });
+  }
 }
