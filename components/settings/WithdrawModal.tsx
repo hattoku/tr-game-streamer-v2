@@ -18,17 +18,19 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   user: User;
+  /** ログアウトする直前に呼ぶ（設定ページが「未ログインはログインページへ」の転送をしないようにするため） */
+  onLeaving?: () => void;
 }
 
-export function WithdrawModal({ open, onOpenChange, user }: Props) {
+export function WithdrawModal({ open, onOpenChange, user, onLeaving }: Props) {
   return (
     <Modal open={open} onOpenChange={onOpenChange} title="退会しますか？">
-      {open && <WithdrawForm user={user} onClose={() => onOpenChange(false)} />}
+      {open && <WithdrawForm user={user} onClose={() => onOpenChange(false)} onLeaving={onLeaving} />}
     </Modal>
   );
 }
 
-function WithdrawForm({ user, onClose }: { user: User; onClose: () => void }) {
+function WithdrawForm({ user, onClose, onLeaving }: { user: User; onClose: () => void; onLeaving?: () => void }) {
   const router = useRouter();
   const { toast } = useToast();
   const [choice, setChoice] = useState<string>('');
@@ -53,6 +55,7 @@ function WithdrawForm({ user, onClose }: { user: User; onClose: () => void }) {
         body: JSON.stringify({ reason }),
       });
       if (!res.ok) throw new Error(`withdraw ${res.status}`);
+      onLeaving?.();
       await signOut(auth);
       toast({ type: 'success', message: '退会しました' });
       router.push('/');

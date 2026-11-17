@@ -190,7 +190,8 @@ test.describe('管理画面のユーザー管理（ユーザー管理 §3）', (
     await expect(blocked.getByRole('button', { name: '利用を再開する' })).toHaveCount(0);
     const token = await idTokenOf(account);
     expect((await guestPage.request.post('/api/account/resume', { headers: { Authorization: `Bearer ${token}` } })).status()).toBe(403);
-    await blocked.getByRole('button', { name: '閉じる' }).click();
+    // 右上の×（aria-label「閉じる」）と区別するため、ボタンの並びの中から選ぶ
+    await blocked.getByTestId('withdrawn-by-admin').getByRole('button', { name: '閉じる' }).click();
     await expect(guestPage.getByRole('button', { name: 'ログインする' })).toBeVisible();
 
     // 一覧の状態の絞り込み

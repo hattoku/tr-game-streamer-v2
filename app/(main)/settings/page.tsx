@@ -22,7 +22,7 @@
  */
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
@@ -53,6 +53,8 @@ export default function SettingsPage() {
   const [signingOut, setSigningOut] = useState(false);
   const [emailModalOpen, setEmailModalOpen] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
+  /** ログアウト・退会で自分から TOP へ移るところ。未ログインの転送（/login）をしない */
+  const leavingRef = useRef(false);
   /** テスト用会員は退会できない（管理 ユーザー管理仕様書 §5.3） */
   const [isTestUser, setIsTestUser] = useState(false);
   /** users/{uid}.email（ミラー）。Auth のアドレスとずれていれば合わせる（§4.3。変更は確認メールのリンクで完了するため） */
@@ -60,7 +62,7 @@ export default function SettingsPage() {
 
   // 未ログインはログインページへ（§2.1）
   useEffect(() => {
-    if (!loading && !user) router.replace('/login');
+    if (!loading && !user && !leavingRef.current) router.replace('/login');
   }, [loading, user, router]);
 
   useEffect(() => {
@@ -112,10 +114,12 @@ export default function SettingsPage() {
   // 確認ダイアログなし、クリック即時実行（§7.2）
   async function handleSignOut() {
     setSigningOut(true);
+    leavingRef.current = true;
     try {
       await signOut(auth);
       router.push('/');
     } catch {
+      leavingRef.current = false;
       toast({ type: 'error', message: 'ログアウトに失敗しました' });
       setSigningOut(false);
     }
@@ -231,7 +235,14 @@ export default function SettingsPage() {
               </Button>
             </div>
             {isTestUser && <p className="mt-2 text-md text-text-muted">テスト用会員は退会できません</p>}
-            <WithdrawModal open={withdrawOpen} onOpenChange={setWithdrawOpen} user={user} />
+            <WithdrawModal
+              open={withdrawOpen}
+              onOpenChange={setWithdrawOpen}
+              user={user}
+              onLeaving={() => {
+                leavingRef.current = true;
+              }}
+            />
           </Card>
         )}
 
