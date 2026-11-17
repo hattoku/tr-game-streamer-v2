@@ -11,7 +11,9 @@
  * フェーズ6ステップ5-2で追加）／ログアウト。表示名は以前ここで変更していたが、5-2でプロフィールページのインライン編集
  * （プロフィール仕様書§9）へ移し、ここには「プロフィールを編集」への導線だけを置く（§1.2 の非スコープどおり）。
  *
- * 入れなかったもの（未解決事項・後続フェーズへ）: メールアドレス・パスワード・パスキー変更（§4）、
+ * メールアドレス変更（§4.3）は 2026-11-17 に追加（「アカウント」カード内。モーダルは components/settings/EmailChangeModal.tsx）。
+ *
+ * 入れなかったもの（未解決事項・後続フェーズへ）: パスワード・パスキー変更（§4.4・§4.5）、
  * プッシュ通知の許可状態・種別トグル（§6、FCM基盤が未実装）、退会（§8、削除ポリシー未設計）。
  * お問い合わせ導線（§9）はフェーズ7ステップ7-3-1で /contact と同時に追加した。
  */
@@ -23,7 +25,8 @@ import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
-import { Button, Card, CardTitle, Checkbox, LinkButton, SectionHeading, Skeleton, SkeletonText, useToast } from '@/components/ui';
+import { Button, Card, CardDivider, CardTitle, Checkbox, LinkButton, SectionHeading, Skeleton, SkeletonText, useToast } from '@/components/ui';
+import { EmailChangeModal } from '@/components/settings/EmailChangeModal';
 
 interface SettingsFields {
   isContinuousPlayEnabled: boolean;
@@ -44,6 +47,9 @@ export default function SettingsPage() {
 
   const [fields, setFields] = useState<SettingsFields | null>(null);
   const [signingOut, setSigningOut] = useState(false);
+  const [emailModalOpen, setEmailModalOpen] = useState(false);
+  /** users/{uid}.email（ミラー）。Auth のアドレスとずれていれば合わせる（§4.3。変更は確認メールのリンクで完了するため） */
+  const [mirroredEmail, setMirroredEmail] = useState<string | null | undefined>(undefined);
 
   // 未ログインはログインページへ（§2.1）
   useEffect(() => {
@@ -54,6 +60,7 @@ export default function SettingsPage() {
     if (!user) return;
     return onSnapshot(doc(db, 'users', user.uid), (snap) => {
       const data = snap.data();
+      setMirroredEmail(typeof data?.email === 'string' ? data.email : null);
       setFields({
         isContinuousPlayEnabled: typeof data?.isContinuousPlayEnabled === 'boolean' ? data.isContinuousPlayEnabled : true,
         hideUpcomingThumbnails: data?.hideUpcomingThumbnails === true,
@@ -65,6 +72,23 @@ export default function SettingsPage() {
       });
     });
   }, [user]);
+
+  useEffect(() => {
+    if (!user || mirroredEmail === undefined || !user.email || mirroredEmail === user.email) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const idToken = await user.getIdToken();
+        if (cancelled) return;
+        await fetch('/api/account/email/sync', { method: 'POST', headers: { Authorization: `Bearer ${idToken}` } });
+      } catch {
+        // 次に開いたときにまた合わせる
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, mirroredEmail]);
 
   async function toggleField(key: keyof SettingsFields, value: boolean) {
     setFields((prev) => (prev ? { ...prev, [key]: value } : prev));
@@ -106,6 +130,24 @@ export default function SettingsPage() {
               プロフィールを編集
             </LinkButton>
           </div>
+          {/* メールアドレス（§4.3）。マスクせず全文を表示する */}
+          {user.email && (
+            <>
+              <CardDivider className="my-4" />
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-md text-text-tertiary">メールアドレス</p>
+                  <p className="mt-1 break-all text-base text-text-primary" data-testid="settings-email">
+                    {user.email}
+                  </p>
+                </div>
+                <Button variant="secondary" size="sm" className="shrink-0" onClick={() => setEmailModalOpen(true)}>
+                  変更する
+                </Button>
+              </div>
+              <EmailChangeModal open={emailModalOpen} onOpenChange={setEmailModalOpen} user={user} />
+            </>
+          )}
         </Card>
 
         <Card>
