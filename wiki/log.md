@@ -1,5 +1,9 @@
 # 操作ログ
 
+## [2026-11-17] ingest | 収集フローを整理する（PR #61）
+リファクタリング②。件数の増減を `lib/listing-counts.ts`（計算）・`listing-counts-server.ts`（書き込み）に寄せ、登録・掲載切り替え・ゲーム付け外し・タグ・ジャンル件数がここを通る。巡回の入口を `sweepChannels` に揃え、`exploration-server`→`channel-sweep-run`、API `explore`→`sweep`、`exploration-rules`→`playlist-title-rules` に改名。`collection_candidates` の読み込みを削除。コンテンツ収集機能仕様書 v4.7。
+→ [[2026-11-17-collection-flow-refactoring]]
+
 ## [2026-11-17] ingest | 単体テスト（Vitest）を入れ、まとめ機能のコードを消す（PR #60）
 リファクタリング①。Vitest 5.1.0 を入れ `npm test`（`tests/unit/`、DB を使わない処理だけ、最初は91件）。取り下げ済みのまとめ機能のページ・API・部品・lib と `COLLECTIONS_ENABLED` を削除し、`/collections*` はファイルが無いので 404（proxy の書き換えを外した）。データとルールは残す。まとめ機能 v2.2 ほか。
 → [[2026-11-17-unit-tests-and-collections-code-removal]]

@@ -100,6 +100,7 @@ tr-game-streamer-v2 の**コーディング支援用**Wiki（実装の変更履�
 - [[2026-11-17-email-change]] — 設定ページからメールアドレスを変更（新しいアドレス＋確認用＋現在のパスワード、再認証→サーバーで使用中か確認→`verifyBeforeUpdateEmail` で確認メール）。`users.email` のミラーは sync API で Auth に合わせる（PR #58）
 - [[2026-11-17-channel-profile-refresh]] — 配信者の名前・アイコンを毎日の再取得の最初に `channels.list` で取り直し、違うものだけ書き換える（30日ルール対応）。読めないアイコンは代わりの表示に（`FallbackImage`）（PR #59）
 - [[2026-11-17-unit-tests-and-collections-code-removal]] — 単体テスト（Vitest、`npm test`、`tests/unit/`、DB を使わない処理だけ）を入れ、取り下げたまとめ機能のコードを削除。`/collections*` はファイルが無いので 404、proxy の書き換えを外した。データとルールは残す（PR #60）
+- [[2026-11-17-collection-flow-refactoring]] — 収集フローの整理。件数の増減を `lib/listing-counts*.ts` の1か所に寄せ、巡回の入口を `sweepChannels` に揃え、「探索」を「掲載チャンネル」に改名（`channel-sweep-run`・`/api/admin/collection/sweep`・`playlist-title-rules`）。DB 名は変えない（PR #61）
 
 ## Entities
 - [[proxy]] — proxy.ts（旧middleware.ts、Next.js 16のproxy規約対応）。stgゲート。`/collections*` の 404 書き換えは 2026-11-17 にまとめのコード削除で外した
