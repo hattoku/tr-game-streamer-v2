@@ -20,6 +20,7 @@ import { MoreIcon, UserIcon } from '@/components/ui/icons';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/DropdownMenu';
 import { cn } from '@/components/ui/cn';
 import { LoginRequiredModal } from '@/components/layout/LoginRequiredModal';
+import { LOGIN_PROMPTS } from '@/components/layout/login-prompts';
 import { GameSelectModal, type GameOption } from '@/components/playlists/GameSelectModal';
 import { MAX_GAME_TITLE_LENGTH } from '@/lib/proposal-shared';
 import {
@@ -220,7 +221,7 @@ export function ChangeProposalButton({ targetType, targetId, targetName, thumbna
       <LoginRequiredModal
         open={loginOpen}
         onOpenChange={setLoginOpen}
-        title={`${CHANGE_PROPOSAL_MENU_LABEL}にはアカウントが必要です`}
+        prompt={LOGIN_PROMPTS.changeProposal}
         note={targetType === 'channel' ? <CreatorNote /> : undefined}
       />
 

@@ -39,6 +39,7 @@ import {
   DropdownMenuRadioItem,
 } from '@/components/ui/DropdownMenu';
 import { LoginRequiredModal } from '@/components/layout/LoginRequiredModal';
+import { LOGIN_PROMPTS, type LoginPromptKey } from '@/components/layout/login-prompts';
 import { MAX_COMMENT_LENGTH, getIdToken, upsertReview, useOwnReview, type MylistState } from './useOwnReview';
 
 export type { MylistState } from './useOwnReview';
@@ -68,7 +69,10 @@ export function ReviewForm({ playlistId, user, mylist, onMylistChange, writeRequ
   const [hasSpoiler, setHasSpoiler] = useState(false);
   const [ngWordError, setNgWordError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [loginOpen, setLoginOpen] = useState(false);
+  // 未ログインで押した操作。押した操作に合わせた見出しでログイン要求モーダルを出す（null で閉じる）
+  const [loginPrompt, setLoginPrompt] = useState<LoginPromptKey | null>(null);
+  // 閉じるアニメーション中に見出しが消えないよう、最後に出した操作を覚えておく
+  const [lastLoginPrompt, setLastLoginPrompt] = useState<LoginPromptKey>('review');
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [handledWriteRequest, setHandledWriteRequest] = useState(writeRequest);
 
@@ -154,14 +158,15 @@ export function ReviewForm({ playlistId, user, mylist, onMylistChange, writeRequ
     }
   }
 
-  function requireLogin(): boolean {
+  function requireLogin(action: LoginPromptKey): boolean {
     if (user) return true;
-    setLoginOpen(true);
+    setLoginPrompt(action);
+    setLastLoginPrompt(action);
     return false;
   }
 
   async function handlePickStar(v: number | null) {
-    if (!requireLogin()) return;
+    if (!requireLogin('starRating')) return;
     const previous = starRating;
     setStarRating(v);
     const result = await persist({ starRating: v });
@@ -174,7 +179,7 @@ export function ReviewForm({ playlistId, user, mylist, onMylistChange, writeRequ
   }
 
   async function handlePickStatus(s: WatchStatus) {
-    if (!requireLogin()) return;
+    if (!requireLogin('watchStatus')) return;
     const previousMylist = mylist;
     const desired = mylist?.status === s ? null : s;
     const result = await persist({ watchStatus: desired });
@@ -190,7 +195,7 @@ export function ReviewForm({ playlistId, user, mylist, onMylistChange, writeRequ
   }
 
   function handleOpenComment() {
-    if (!requireLogin()) return;
+    if (!requireLogin('review')) return;
     setCommentOpen(true);
   }
 
@@ -203,7 +208,7 @@ export function ReviewForm({ playlistId, user, mylist, onMylistChange, writeRequ
   }
 
   async function handleSubmitComment() {
-    if (!requireLogin()) return;
+    if (!requireLogin('review')) return;
     if (urlError || ngWordDisplayError) return;
     const result = await persist({ comment, hasSpoiler });
     if (result) {
@@ -365,7 +370,13 @@ export function ReviewForm({ playlistId, user, mylist, onMylistChange, writeRequ
         )}
       </div>
 
-      <LoginRequiredModal open={loginOpen} onOpenChange={setLoginOpen} title="レビューを投稿するにはアカウントが必要です" />
+      <LoginRequiredModal
+        open={loginPrompt !== null}
+        onOpenChange={(open) => {
+          if (!open) setLoginPrompt(null);
+        }}
+        prompt={LOGIN_PROMPTS[loginPrompt ?? lastLoginPrompt]}
+      />
 
       <Modal open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen} title="このレビューを削除しますか？" description="この操作は取り消せません。">
         <div className="flex justify-end gap-2">

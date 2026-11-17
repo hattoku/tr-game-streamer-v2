@@ -21,6 +21,7 @@ import { MoreIcon, CommentIcon, FavoriteIcon } from '@/components/ui/icons';
 import { StatusBadge } from '@/components/ui/Badge';
 import { UserAvatar } from '@/components/layout/UserDropdown';
 import { LoginRequiredModal } from '@/components/layout/LoginRequiredModal';
+import { LOGIN_PROMPTS } from '@/components/layout/login-prompts';
 import { ReportModal } from './ReportModal';
 import { SpoilerRevealButton, useHideSpoilers } from './spoiler';
 import { StatusChip, normalizeWatchStatus, WATCH_STATUS_LABEL, WATCH_STATUS_ORDER, type WatchStatus } from '@/components/ui/Chip';
@@ -66,7 +67,9 @@ export function ReviewList({
   const [hideSpoilers, toggleHideSpoilers] = useHideSpoilers(user);
   const [starFilter, setStarFilter] = useState<'all' | '5' | '4' | '3' | '2' | '1'>('all');
   const [revealedSpoilers, setRevealedSpoilers] = useState<Set<string>>(new Set());
+  // 未ログインで押した操作（「参考になった」か「通報する」）。押した操作に合わせた見出しでログイン要求モーダルを出す
   const [loginOpen, setLoginOpen] = useState(false);
+  const [loginAction, setLoginAction] = useState<'helpful' | 'report'>('helpful');
   const [reportTarget, setReportTarget] = useState<ReviewItem | null>(null);
   const [busyVote, setBusyVote] = useState<string | null>(null);
 
@@ -112,6 +115,7 @@ export function ReviewList({
 
   async function handleHelpful(review: ReviewItem) {
     if (!user) {
+      setLoginAction('helpful');
       setLoginOpen(true);
       return;
     }
@@ -130,6 +134,7 @@ export function ReviewList({
 
   function handleReport(review: ReviewItem) {
     if (!user) {
+      setLoginAction('report');
       setLoginOpen(true);
       return;
     }
@@ -279,7 +284,7 @@ export function ReviewList({
         </div>
       )}
 
-      <LoginRequiredModal open={loginOpen} onOpenChange={setLoginOpen} title="この操作にはアカウントが必要です" />
+      <LoginRequiredModal open={loginOpen} onOpenChange={setLoginOpen} prompt={LOGIN_PROMPTS[loginAction]} />
       {reportTarget && user && (
         <ReportModal
           open={!!reportTarget}

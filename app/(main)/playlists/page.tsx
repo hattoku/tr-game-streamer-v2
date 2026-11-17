@@ -24,7 +24,7 @@ import { fetchPlaylistPage, useCatalogQuery, useDebouncedValue } from '@/lib/cat
 import { PLAYLIST_SORTS, type PlaylistSort } from '@/lib/catalog-shared';
 import { fetchTagsMap, isListedTag, type TagInfo } from '@/lib/tags';
 import { Card, SectionHeading } from '@/components/ui/Card';
-import { Button, LinkButton } from '@/components/ui/Button';
+import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Pagination } from '@/components/ui/Pagination';
@@ -32,6 +32,8 @@ import { Skeleton, SkeletonText } from '@/components/ui/Skeleton';
 import { SelectMenu } from '@/components/ui/DropdownMenu';
 import { CheckIcon, ChevronDownIcon, ChevronUpIcon, InventoryIcon, SearchIcon, XIcon } from '@/components/ui/icons';
 import { cn } from '@/components/ui/cn';
+import { LoginGateLink } from '@/components/layout/LoginGateLink';
+import { LOGIN_PROMPTS } from '@/components/layout/login-prompts';
 
 const SORT_OPTIONS: Array<{ value: PlaylistSort; label: string }> = [
   { value: 'score', label: 'スコアが高い順' },
@@ -168,9 +170,9 @@ export default function PlaylistsPage() {
         <SectionHeading>再生リストを探す</SectionHeading>
         {/* モバイルは「さがす」共通の浮きボタン（components/layout/AddPlaylistFab.tsx）が担う */}
         <div className="hidden md:block">
-          <LinkButton href="/propose" variant="secondary" size="sm">
+          <LoginGateLink href="/propose" variant="secondary" size="sm" prompt={LOGIN_PROMPTS.addPlaylist}>
             再生リストを追加する
-          </LinkButton>
+          </LoginGateLink>
         </div>
       </div>
 

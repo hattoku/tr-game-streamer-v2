@@ -5,7 +5,7 @@
  * （ゲームタイトル詳細と共用の components/playlists/PlaylistListSection.tsx）。
  *
  * - 「再生リストを追加する」ボタンは GamePlaylistSection と同じく全ユーザー共通で
- *   `/propose?channelId=` へ遷移させる（未ログインは登録ページ側で /login へ。管理者は登録、
+ *   `/propose?channelId=` へ遷移させる（未ログインはその場でログイン要求モーダルを出す。管理者は登録、
  *   一般ユーザーは同ページで提案する。フェーズ7ステップ7-4）。ボタン文言は全ユーザー共通。
  * - 説明文の編集（§3.3、管理者のみ）はインライン編集。仕様は「説明文がある場合のみ編集ボタン」だが、
  *   説明文なしで登録済みのチャンネルに後から付ける手段が無くなるため、未設定時も「説明文を追加する」を出す。
@@ -23,12 +23,14 @@ import { auth, db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { PlaylistListSection, type PlaylistTotals } from '@/components/playlists/PlaylistListSection';
 import { Card } from '@/components/ui/Card';
-import { Button, LinkButton, buttonClassName } from '@/components/ui/Button';
+import { Button, buttonClassName } from '@/components/ui/Button';
 import { Checkbox, Field, Textarea } from '@/components/ui/Input';
 import { Skeleton, SkeletonText } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 import { CommentIcon, ExternalLinkIcon, InventoryIcon, PencilIcon, PlayIcon, UserIcon, UsersIcon, YouTubeIcon } from '@/components/ui/icons';
 import { ChangeProposalButton } from '@/components/change-proposals/ChangeProposalButton';
+import { LoginGateLink } from '@/components/layout/LoginGateLink';
+import { LOGIN_PROMPTS } from '@/components/layout/login-prompts';
 import { FallbackImage } from '@/components/ui/FallbackImage';
 
 interface ChannelDetail {
@@ -143,9 +145,9 @@ export default function ChannelDetailPage() {
               </span>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <LinkButton href={addHref} variant="secondary" size="sm">
+              <LoginGateLink href={addHref} variant="secondary" size="sm" prompt={LOGIN_PROMPTS.addPlaylist}>
                 再生リストを追加する
-              </LinkButton>
+              </LoginGateLink>
               {/* YouTube のチャンネルでプロフィールなどを確かめる導線（§3.3）。channelId は YouTube のチャンネルIDそのもの */}
               <a
                 href={`https://www.youtube.com/channel/${encodeURIComponent(channelId)}`}

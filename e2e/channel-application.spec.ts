@@ -101,7 +101,11 @@ test('§3 チャンネルから探すの下に、申請への入口が出る', a
   await guestPage.goto('/channels');
   const hint = guestPage.getByTestId('channel-apply-hint');
   await expect(hint).toContainText('探しているチャンネルが見つからないときは');
+  // 未ログインはその場でログイン要求モーダル（共通 uiコンポーネント フロント 仕様書 §5.2 v2.9）。ログイン後は申請ページへ戻る
   await hint.getByRole('link', { name: 'チャンネルを申請する' }).click();
+  const dialog = guestPage.getByRole('dialog');
+  await expect(dialog).toContainText('チャンネルを申請するにはアカウントが必要です');
+  await dialog.getByRole('link', { name: 'ログイン', exact: true }).click();
   await expect(guestPage).toHaveURL(/\/login\?next=%2Fpropose%3Ftype%3Dchannel/);
 });
 
