@@ -170,7 +170,7 @@ export function ChannelApplyPanel({
           申請を送りました（確認待ち）
         </SectionHeading>
         <Card className="mb-4">
-          <ProposalSteps labels={CHANNEL_APPLICATION_STEPS} current={2} hereLabel />
+          <ProposalSteps labels={CHANNEL_APPLICATION_STEPS} current={2} />
           <p className="mt-4 text-base text-text-secondary">
             運営が確認し、掲載が決まるとお知らせでお伝えします。掲載が決まったチャンネルの再生リストは、運営の確認のあと順に公開します。
           </p>
