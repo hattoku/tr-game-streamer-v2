@@ -12,6 +12,7 @@ import { signOut, type User } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { Button, Field, Modal, Textarea, useToast } from '@/components/ui';
 import { SELF_WITHDRAW_REASONS, WITHDRAW_REASON_MAX } from '@/lib/account-status-shared';
+import { suppressWithdrawnGateFor } from '@/components/layout/WithdrawnAccountGate';
 
 interface Props {
   open: boolean;
@@ -42,6 +43,8 @@ function WithdrawForm({ user, onClose }: { user: User; onClose: () => void }) {
     if (tooLong) return;
     setBusy(true);
     setError(null);
+    // 退会が users に反映されてからログアウトするまでの間、「再開しますか？」を出さない
+    suppressWithdrawnGateFor(user.uid);
     try {
       const idToken = await user.getIdToken();
       const res = await fetch('/api/account/withdraw', {
@@ -54,6 +57,7 @@ function WithdrawForm({ user, onClose }: { user: User; onClose: () => void }) {
       toast({ type: 'success', message: '退会しました' });
       router.push('/');
     } catch {
+      suppressWithdrawnGateFor(null);
       setError('退会できませんでした。時間をおいて再試行してください');
       setBusy(false);
     }

@@ -28,6 +28,7 @@ import { Modal } from '@/components/ui/Modal';
 import { SkeletonText } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 import { ChevronLeftIcon } from '@/components/ui/icons';
+import { FallbackImage } from '@/components/ui/FallbackImage';
 import { RoleBadge, StatusTag, formatDateTime } from '@/components/admin/users/labels';
 
 const GENERIC_ERROR = '通信エラーが発生しました。時間をおいて再試行してください';
@@ -195,13 +196,13 @@ function ProfileEditor({ user, onSaved }: { user: AdminUserDetailJson; onSaved: 
       <CardDivider className="my-4" />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          {/* 退会中のアイコンは配信 API が返さないため、枠だけになることがある */}
-          {user.profileImageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element -- 配信 API の相対 URL をそのまま出す（プロフィールと同じ）
-            <img src={user.profileImageUrl} alt="" className="size-10 shrink-0 rounded-full bg-bg-hover object-cover" />
-          ) : (
-            <span className="size-10 shrink-0 rounded-full bg-bg-hover" />
-          )}
+          {/* 退会中のアイコンは配信 API が返さない（404）ため、読めなければ枠だけ出す */}
+          <FallbackImage
+            src={user.profileImageUrl}
+            alt=""
+            className="size-10 shrink-0 rounded-full bg-bg-hover object-cover"
+            fallback={<span className="size-10 shrink-0 rounded-full bg-bg-hover" />}
+          />
           <p className="text-md text-text-secondary">{user.profileImageUrl ? 'アイコンが設定されています' : 'アイコンは未設定です'}</p>
         </div>
         <Button variant="secondary" size="sm" onClick={() => setAvatarConfirm(true)} disabled={!user.profileImageUrl || busy !== null}>

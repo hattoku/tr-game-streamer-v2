@@ -8,7 +8,7 @@
  */
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
@@ -17,10 +17,22 @@ import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { useToast } from '@/components/ui/Toast';
 
+/**
+ * 設定ページで本人が退会した直後（ログアウトするまでの一瞬）に、この確認が出ないようにする。
+ * components/settings/WithdrawModal.tsx が退会の API を呼ぶ前に、そのユーザーの UID を入れる。ログアウトで消す
+ */
+let suppressedUid: string | null = null;
+export function suppressWithdrawnGateFor(uid: string | null): void {
+  suppressedUid = uid;
+}
+
 export function WithdrawnAccountGate() {
   const { user, role, accountStatus, withdrawnBy } = useAuth();
   const isAdmin = role === 'owner' || role === 'operator';
-  const open = !!user && !isAdmin && accountStatus === 'withdrawn';
+  useEffect(() => {
+    if (!user) suppressedUid = null;
+  }, [user]);
+  const open = !!user && !isAdmin && accountStatus === 'withdrawn' && suppressedUid !== user.uid;
   // ユーザーが替わったら中身を作り直す（busy などを持ち越さない）
   return open ? <WithdrawnDialog key={user.uid} byAdmin={withdrawnBy === 'admin'} /> : null;
 }
