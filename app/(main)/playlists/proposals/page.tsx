@@ -1,6 +1,6 @@
 /**
  * 提案履歴（/playlists/proposals）。ページ 再生リストを追加する 仕様書 §9.4。
- * 自分が送った再生リスト登録提案を提案日時の新しい順に並べ、提案ごとにステップ表示（確認待ち＝②いまここ／
+ * 自分が送った再生リスト登録提案を提案日時の新しい順に並べ、提案ごとにステップ表示（確認待ち＝②／
  * 公開済み＝③／見送り＝②で止めて「見送り」）を出す。取得は本人専用の GET /api/playlists/proposals
  * （運営メモ・内部向けの自由記述を渡さないため Firestore を直接読まない）。
  * 公開済みは再生リストへのリンク、見送りは定型の理由（管理 審査ワークフロー仕様書 §14.4）を表示する。
@@ -242,7 +242,7 @@ export default function ProposalHistoryPage() {
                   videoCount={p.videoCount}
                   gameName={p.isNewGame && p.status !== 'approved' ? `${p.gameName}（新しいゲームタイトル）` : p.gameName}
                 />
-                <ProposalSteps current={p.status === 'approved' ? 3 : 2} rejected={p.status === 'rejected'} hereLabel />
+                <ProposalSteps current={p.status === 'approved' ? 3 : 2} rejected={p.status === 'rejected'} />
                 {p.status === 'reviewing' && <p className="text-md text-text-muted">運営の確認待ちです。確認が済むとさがすに表示されます。</p>}
                 {p.status === 'rejected' && (
                   <p className="text-base text-text-secondary">
@@ -304,7 +304,7 @@ function ChannelApplicationCard({ item, unseen }: { item: ChannelApplicationItem
           </a>
         )}
       </div>
-      <ProposalSteps labels={CHANNEL_APPLICATION_STEPS} current={item.status === 'approved' ? 3 : 2} rejected={item.status === 'rejected'} hereLabel />
+      <ProposalSteps labels={CHANNEL_APPLICATION_STEPS} current={item.status === 'approved' ? 3 : 2} rejected={item.status === 'rejected'} />
       {item.status === 'reviewing' && <p className="text-md text-text-muted">運営の確認待ちです。掲載が決まるとお知らせでお伝えします。</p>}
       {item.status === 'approved' && (
         <p className="text-md text-text-muted">掲載が決まりました。このチャンネルの再生リストは、運営の確認のあと順に公開します。</p>
