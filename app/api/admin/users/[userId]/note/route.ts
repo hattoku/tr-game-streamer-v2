@@ -8,7 +8,7 @@ import { ADMIN_NOTE_MAX } from '@/lib/account-status-shared';
 // 運営用の備考（管理 ユーザー管理仕様書 §3.6）。管理者だけが読み書きする（admin_user_records。本人には見えない）
 type Params = { params: Promise<{ userId: string }> };
 
-export async function PUT(request: NextRequest, { params }: Params) {
+export async function POST(request: NextRequest, { params }: Params) {
   const auth = await requireAdmin(request);
   if ('errorResponse' in auth) return auth.errorResponse;
   const { userId } = await params;

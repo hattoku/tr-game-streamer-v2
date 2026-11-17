@@ -1,6 +1,6 @@
 # プレミテ Firestore データモデル設計書
 
-**バージョン**: v3.2  
+**バージョン**: v3.3  
 **作成日**: 2026年3月30日（更新）  
 **対象**: 開発チーム  
 **関連ドキュメント**: プレミテ企画書 / プレミテ_技術スタック仕様書 / 各機能仕様書
@@ -47,6 +47,7 @@
    - 3.32 [exploration_channels](#332-exploration_channels)
    - 3.35 [playlist_viewers](#335-playlist_viewers)
    - 3.36 [batch_state](#336-batch_state)
+   - 3.37 [admin_user_records](#337-admin_user_records)
 4. [リレーション図](#4-リレーション図)
 5. [インデックス設計](#5-インデックス設計)
 6. [セキュリティルール方針](#6-セキュリティルール方針)
@@ -122,6 +123,7 @@ Firestoreはテーブル結合（JOIN）ができないため、一覧表示や�
 | 31 | `exploration_channels` | 掲載チャンネル（v2.0。旧称: 探索対象チャンネル） | AI運営者コンテンツ収集仕様書 §3.1・§10.2 |
 | 32 | `playlist_viewers` | 再生リストを見始めた人の記録（1ユーザー×1再生リストで1件、v2.8） | 共通 人気のチャンネル 集計 仕様書 §2.3 |
 | 33 | `batch_state` | 定期処理の続きの位置（前回の集計時刻など、v2.8） | 共通 人気のチャンネル 集計 仕様書 §3 |
+| 34 | `admin_user_records` | ユーザーごとの運営用の記録（備考・管理者が退会させた理由。管理者のみR、v3.3） | 管理 ユーザー管理仕様書 §3.4・§3.6 |
 
 ---
 
@@ -157,9 +159,14 @@ Firestoreはテーブル結合（JOIN）ができないため、一覧表示や�
 | `bio` | string? | — | 自己紹介文（最大200文字） |
 | `role` | string | ✅ | `"user"` / `"operator"` / `"owner"` / `"ai_operator"` |
 | `isAI` | boolean | ✅ | AI運営者フラグ。`role = "ai_operator"` のとき `true` |
-| `isBanned` | boolean | ✅ | BANフラグ（デフォルト：`false`） |
-| `banReason` | string? | — | BAN理由（任意） |
-| `bannedAt` | Timestamp? | — | BAN設定日時 |
+| `isBanned` | boolean | ✅ | BANフラグ（デフォルト：`false`）。**v3.3 で BAN は退会（`accountStatus`）にまとめた**。新しく立てる操作は無いが、`true` のアカウントは退会中と同じく他の人から隠す |
+| `banReason` | string? | — | BAN理由（任意。v3.3 以降は使わない） |
+| `bannedAt` | Timestamp? | — | BAN設定日時（v3.3 以降は使わない） |
+| `accountStatus` | string? | — | `"active"`（利用中）／`"withdrawn"`（退会中）。未設定は利用中（v3.3）。退会はアカウントを残してログインできなくする（管理 ユーザー管理仕様書 §3.0）。書き込みは API（Admin SDK）のみ |
+| `withdrawnAt` | Timestamp? | — | 退会した日時（退会中だけ。v3.3） |
+| `withdrawnBy` | string? | — | 退会させた者。`"self"`（本人。自分で再開できる）／`"admin"`（管理者。本人では再開できない）（退会中だけ。v3.3） |
+| `withdrawReason` | string? | — | 本人が退会時に選んだ・書いた理由（任意。500文字以内。本人の退会のときだけ。v3.3）。管理者が書いた理由は `admin_user_records` に置く |
+| `restoredAt` | Timestamp? | — | 最後に退会を解除（再開）した日時（v3.3） |
 | `isTestUser` | boolean | ✅ | テストモード用会員フラグ（デフォルト：`false`） |
 | `fcmTokens` | string[] | ✅ | FCMプッシュ通知トークン一覧（複数デバイス対応） |
 | `isMylistPublic` | boolean | ✅ | マイリストの公開設定（デフォルト：`true`。`init-user` で作成。未設定の古いアカウントも公開扱い。設定ページ「プライバシー設定」で変更） |
@@ -171,7 +178,7 @@ Firestoreはテーブル結合（JOIN）ができないため、一覧表示や�
 | `reviewCount` | number | ✅ | レビュー投稿数（集計キャッシュ、デフォルト：0） |
 | `helpfulReceivedCount` | number | ✅ | 「参考になった」被獲得数合計（集計キャッシュ、デフォルト：0） |
 | `accountCreatedAt` | Timestamp | ✅ | アカウント作成日時 |
-| `lastLoginAt` | Timestamp? | — | 最終ログイン日時 |
+| `lastLoginAt` | Timestamp? | — | 最終ログイン日時。**どこからも書かれていない**（v3.3 注記）。管理画面の最終ログインは Firebase Auth の記録（最後のトークン更新日時）を使う |
 
 > **設計注記**  
 > - `role` はFirebase Custom Claimsにも同値を設定し、セキュリティルールの判定に使用する。Firestoreの `role` フィールドは管理画面の一覧表示用。  
@@ -382,6 +389,7 @@ YouTubeチャンネルの情報。
 | `commentScore` | number? | — | コメント有無による乗数（変数C。あり: `1.0` / なし: `0.5`。共通 信頼度スコアリングシステム仕様書 §3.3に準拠） |
 | `userDisplayName` | string | ✅ | 投稿者の表示名の非正規化コピー（投稿・更新時点のスナップショット）。`users`は本人・管理者以外読めないルールのため、レビュー一覧での表示にはこちらを参照する（HANDOFF.md未解決事項1の対応）。プロフィールで表示名を変更すると `PATCH /api/users/[userId]/profile` が本人の全レビュー分を新しい名前に揃える |
 | `userProfileImageUrl` | string? | — | 投稿者のプロフィール画像URLの非正規化コピー（同上。アイコンを替える・外すと `PUT`／`DELETE /api/users/[userId]/avatar` が本人の全レビュー分を揃える） |
+| `isAuthorWithdrawn` | boolean? | — | 投稿者が退会中（v3.3）。`true` のレビューは他の人の一覧・スコア・件数・人気の集計から除外する。`isHidden` とは別の印にし、再開・解除で外しても通報の非表示は戻らないようにする。書き込みは Admin SDK のみ |
 | `isHidden` | boolean? | — | 通報承認による非表示（論理削除）フラグ。`true` のレビューは一覧・集計・スコアから除外する（管理 審査ワークフロー仕様書 §4.1）。未設定は `false` 扱い。書き込みは Admin SDK のみ（本人のクライアント更新の許可フィールドに含めない） |
 | `hiddenAt` | Timestamp? | — | 非表示にした日時 |
 | `hiddenByWorkflowId` | string? | — | 非表示の根拠となった `workflows` のドキュメントID |
@@ -1024,6 +1032,19 @@ AI運営者（審査AI）の設定。プラットフォーム共通で1体のみ
 |---|---|---|
 | `channel_popularity` | `lastRunAt`（Timestamp） | 最後に終わった人気の集計を始めた日時（集計中の視聴を読み逃さないよう、始めた時刻を残す）。次の集計はこれより5分前以降の `watch_history` だけを読む |
 
+### 3.37 `admin_user_records`
+
+ユーザーごとの運営用の記録（v3.3）。ドキュメントIDはユーザーの UID。`users` は本人が読めるため、本人に見せない項目をここに分けて置く。
+管理者のみR可、書き込みは API（Admin SDK）のみ（管理 ユーザー管理仕様書 §3.4・§3.6）。
+
+| フィールド | 型 | 必須 | 説明 |
+|-----------|-----|:---:|------|
+| `note` | string? | — | 備考（運営用メモ。2000文字以内） |
+| `noteUpdatedAt` | Timestamp? | — | 備考を最後に保存した日時 |
+| `noteUpdatedBy` | string? | — | 備考を最後に保存した管理者の UID |
+| `noteUpdatedByName` | string? | — | 同じ管理者の表示名（保存時点） |
+| `adminWithdrawReason` | string? | — | 管理者が退会させたときの理由（任意。解除で消す） |
+
 ---
 
 ## 4. リレーション図
@@ -1093,15 +1114,19 @@ ai_operators ──── (1) users
   `inquiry_upload_counters` はクライアントから読み書き不可（3.31節）。添付画像の Cloud Storage は `storage.rules` でクライアントの読み書きを全て拒否する（v1.24）。
 - **管理データ**: `workflows`, `ai_operators`, `app_settings` は管理者のみRW可。
 - **不変ログ**: `operation_logs` はシステムのみW、管理者はRのみ。
+- **運営用の記録**: `admin_user_records` は管理者のみR、書き込みは API のみ（v3.3）。
+- **退会中のアカウント（v3.3）**: 本人のデータの書き込み（`users` の本人更新、`reviews`・`helpful_votes`・`mylist`・`watch_progress`・`watch_history` の作成・更新）はルールの `isActiveAccount()`（`users.accountStatus != "withdrawn"`）で拒否する。読み取り・本人の削除は止めない。
 
 ---
 
 ## 7. データ整合性・削除ポリシー
 
-### 7.1 退会時の物理削除
-- `users`, `reviews`, `mylist`, `watch_history`, `watch_progress`, `helpful_votes`, `collections`, `playlist_viewers`（v2.8）を物理削除。
-- Cloud Storage の `avatars/{uid}/`（アイコン、v2.10）も削除する。
-- `saved_collections` は本人の保存記録に加え、削除される本人のまとめに対する他ユーザーの保存記録も物理削除する（3.14.1節）。
+### 7.1 退会時の扱い（v3.3 で物理削除をやめた）
+- **v3.3（2026-11-17）**: 退会はアカウントとデータを残し、ログインできなくする（ユーザー決定。管理 ユーザー管理仕様書 §3.0、ページ 設定 仕様書 §8.3）。どのコレクションも消さない。
+  - `users` に `accountStatus: "withdrawn"` ほか（3.1節）。Firebase Auth のアカウントは消さず無効化もしない（トークンは失効させる）。
+  - `reviews` に `isAuthorWithdrawn: true` を付け、関係する再生リストのスコア・件数を計算し直す。公開プロフィール・アイコンの配信は 404 にする。
+  - 再開・解除で上記をすべて戻す。
+- 旧版（〜v3.2）の物理削除（`users`, `reviews`, `mylist`, `watch_history`, `watch_progress`, `helpful_votes`, `collections`, `playlist_viewers`、Storage の `avatars/{uid}/`、`saved_collections`）は実装されないまま廃止した。
 
 ### 7.2 マスタ削除時の影響
 - `genres` 物理削除時: `games.genreId` を null 化。AI運営者への影響なし。
@@ -1164,5 +1189,6 @@ ai_operators ──── (1) users
 | v3.1 | 2026-11-17 | §3.14 まとめ機能のコード削除を注記（API Route・作成者名の揃え直しが無くなった。データとルールは残す） |
 | v3.0 | 2026-11-17 | `workflows` に詳細ページからの変更の提案（`channel_report` を追加、`game_title_edit`・`playlist_report` の `reportData` を定義）。`step2History` に `approveAction`・`gameId`・`gameName` |
 | v3.1 | 2026-11-17 | §3.21 `batch_logs` に `channelProfiles`・`channelProfileError` を追加。`channels.name`・`channels.iconUrl`、`exploration_channels.channelTitle`・`channelIconUrl`、`playlists.channelName`・`channelIconUrl` は毎日の再取得で YouTube の今の値に合わせる（YouTube定期取得仕様書 v1.11 §4.4） |
+| v3.3 | 2026-11-17 | 退会を締め出し方式に（チケット「ユーザー一覧ページ作成」）。`users` に `accountStatus`・`withdrawnAt`・`withdrawnBy`・`withdrawReason`・`restoredAt` を追加し、BAN をこれにまとめた。`reviews.isAuthorWithdrawn` を追加。§3.37 `admin_user_records`（備考・管理者が退会させた理由）を追加。§6 に退会中の書き込み拒否、§7.1 を物理削除から書き換え。`users.lastLoginAt` が書かれていないことを注記 |
 | v3.2 | 2026-11-17 | リファクタリング②。`games.playlistCount`・`tags.usagePlaylistCount` が掲載中の再生リストだけを数えることを明記。一般ユーザーのタグの付け外しも、掲載中の再生リストのときだけ `usagePlaylistCount` を動かすように揃えた（これまでは掲載状態を見ずに数えていたため、掲載していない再生リストにタグを付けてから掲載すると二重に数えていた） |
 | v2.8 | 2026-11-08 | 段階5 人気のチャンネル。§3.4 `channels.popularity`、§3.32 `featuredOrder` をピン留めの順に、§3.21 `batch_logs` に `channel_popularity`、§3.35 `playlist_viewers`・§3.36 `batch_state` を追加。§7.1 退会時の削除に `playlist_viewers` を追加（共通 人気のチャンネル 集計 仕様書） |
