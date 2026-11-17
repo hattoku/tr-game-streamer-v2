@@ -442,7 +442,7 @@ function ResetPassword({ params }: { params: AuthActionParams }) {
         </p>
       )}
       {/* パスワード管理ツールがどのアカウントのパスワードか分かるように、メールアドレスを隠し項目で置く */}
-      <input type="email" name="username" autoComplete="username" value={state.email} readOnly hidden />
+      <input type="email" name="username" autoComplete="username" value={state.email} readOnly tabIndex={-1} aria-hidden className="sr-only" />
       <Field label="新しいパスワード" error={errors.password} hint={`${MIN_PASSWORD_LENGTH}文字以上`}>
         {(a11y) => (
           <PasswordInput
