@@ -102,7 +102,7 @@ export const BOTTOM_TABS: BottomTab[] = [
   { key: 'mylist', label: 'マイリスト', href: '/mylist', guestPrompt: 'mylist', prefixes: ['/mylist', '/history'] },
   // 遷移先はチャンネル（UI仕様書 v2.0 §2.7、段階5で実装）
   { key: 'search', label: 'さがす', href: '/channels', prefixes: ['/channels', '/playlists', '/games'] },
-  // 未ログイン時はログイン要求モーダルを出す（§2.7。v2.9 までは押すとすぐアカウント作成フローへ移っていた）
+  // 未ログイン時はログイン要求モーダルを出す（§2.7。v2.8 までは押すとすぐアカウント作成フローへ移っていた）
   // 遷移先は項目一覧のマイページ（2026-11-14 ユーザー決定、ページ マイページ 仕様書）。そこから辿る先のページを開いている間もアクティブにする
   {
     key: 'mypage',

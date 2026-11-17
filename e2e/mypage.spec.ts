@@ -1,6 +1,7 @@
 // マイページ（/mypage、ページ マイページ 仕様書）。§3 項目一覧・§4 ボトムタブの遷移先とアクティブ表示・§2 アクセス条件を確認する。
 // ボトムタブはモバイル幅（767px以下）だけに出るため、タブの確認は mobile プロジェクトだけで行う。
 import { expect, hasHorizontalScroll, test } from './support/fixtures';
+import { waitForGuest } from './support/guest';
 
 const USER_ITEMS = [
   { name: '視聴履歴', href: '/history' },
@@ -75,6 +76,7 @@ test.describe('ボトムタブ（§4）', () => {
   // 未ログインはその場でログイン要求モーダル（UI仕様書 §2.7・§5.2 v2.9、アカウント作成導線の改善）。アカウント作成後はマイページへ戻る
   test('未ログインの「マイページ」タブはログイン要求モーダルを出す', async ({ guestPage }) => {
     await guestPage.goto('/');
+    await waitForGuest(guestPage);
     const nav = guestPage.getByRole('navigation', { name: 'メインナビゲーション' });
     await nav.getByRole('link', { name: 'マイページ' }).click();
     const dialog = guestPage.getByRole('dialog');

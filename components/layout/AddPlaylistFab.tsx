@@ -28,6 +28,7 @@ export function AddPlaylistFab() {
       <LoginGateLink
         href="/propose"
         prompt={LOGIN_PROMPTS.addPlaylist}
+        data-testid="add-playlist-fab"
         aria-label="再生リストを追加する"
         title="再生リストを追加する"
         className={cn(

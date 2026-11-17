@@ -44,7 +44,7 @@ export function LoginRequiredModal({ open, onOpenChange, prompt, next, note }: L
         </LinkButton>
         <p className="text-base text-text-muted">
           すでにアカウントをお持ちの方は{' '}
-          <Link href={loginHref('login', back)} className="text-text-primary underline underline-offset-[3px] hover:text-text-secondary">
+          <Link href={loginHref('login', back)} className="whitespace-nowrap text-text-primary underline underline-offset-[3px] hover:text-text-secondary">
             ログイン
           </Link>
         </p>

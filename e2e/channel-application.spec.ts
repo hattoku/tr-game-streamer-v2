@@ -7,6 +7,7 @@
 // 作ったデータ（workflows・exploration_channels・notifications）はテストの最後に自分で消す。
 import type { Page } from '@playwright/test';
 import { captureIdToken, expect, hasHorizontalScroll, test } from './support/fixtures';
+import { waitForGuest } from './support/guest';
 import { TEST_USER_EMAILS, uniqueText } from './support/env';
 import { db as e2eDb } from './support/cleanup';
 import { randomId } from './support/collection';
@@ -99,6 +100,7 @@ test('§2 管理者には申請ではなく掲載チャンネル画面への案�
 
 test('§3 チャンネルから探すの下に、申請への入口が出る', async ({ guestPage }) => {
   await guestPage.goto('/channels');
+  await waitForGuest(guestPage);
   const hint = guestPage.getByTestId('channel-apply-hint');
   await expect(hint).toContainText('探しているチャンネルが見つからないときは');
   // 未ログインはその場でログイン要求モーダル（共通 uiコンポーネント フロント 仕様書 §5.2 v2.9）。ログイン後は申請ページへ戻る

@@ -8,6 +8,7 @@ import { expect, hasHorizontalScroll, test } from './support/fixtures';
 import { uniqueText } from './support/env';
 import { db as e2eDb } from './support/cleanup';
 import { randomId } from './support/collection';
+import { waitForGuest } from './support/guest';
 
 async function seed() {
   const gameRef = e2eDb().collection('games').doc();
@@ -73,6 +74,7 @@ test.describe('ボトムタブ（UI仕様書 §2.7）', () => {
 
   test('未ログインで「マイリスト」「マイページ」を押すと、その場で何ができるかの案内が出る', async ({ guestPage }) => {
     await guestPage.goto('/');
+    await waitForGuest(guestPage);
     const nav = guestPage.getByRole('navigation', { name: 'メインナビゲーション' });
     await nav.getByRole('link', { name: 'マイリスト' }).click();
     await expect(guestPage).toHaveURL(/\/$/);
@@ -128,6 +130,7 @@ test('「再生リストを追加する」: 未ログインは遷移せずに案
 
   await test.step('チャンネル詳細（上のボタンと一覧のボタン）', async () => {
     await guestPage.goto(`/channels/${data.channelId}`);
+    await waitForGuest(guestPage);
     const href = `/propose?channelId=${data.channelId}`;
     const buttons = guestPage.locator('main').getByRole('link', { name: '再生リストを追加する' }).filter({ visible: true });
     await expect(buttons).toHaveCount(2, { timeout: 30_000 });
@@ -140,6 +143,7 @@ test('「再生リストを追加する」: 未ログインは遷移せずに案
 
   await test.step('ゲームタイトル詳細', async () => {
     await guestPage.goto(`/games/${data.gameId}`);
+    await waitForGuest(guestPage);
     const button = guestPage.locator('main').getByRole('link', { name: '再生リストを追加する' }).filter({ visible: true }).first();
     await button.click();
     await expectLoginPrompt(guestPage, { ...prompt, next: `/propose?gameId=${data.gameId}` });
@@ -147,9 +151,10 @@ test('「再生リストを追加する」: 未ログインは遷移せずに案
 
   await test.step('再生リストを探す（PCは見出しのボタン、モバイルは「＋」の浮きボタン）', async () => {
     await guestPage.goto('/playlists');
+    await waitForGuest(guestPage);
     const button =
       testInfo.project.name === 'mobile'
-        ? guestPage.getByRole('link', { name: '再生リストを追加する' }).filter({ visible: true }).last()
+        ? guestPage.getByTestId('add-playlist-fab')
         : guestPage.locator('main').getByRole('link', { name: '再生リストを追加する' }).filter({ visible: true }).first();
     await button.click();
     await expect(guestPage).toHaveURL(/\/playlists$/);
@@ -173,9 +178,11 @@ test('ログイン中の「再生リストを追加する」は案内を出さ�
 test('「チャンネルを申請する」「掲載を申請する」も、未ログインは申請の案内を出す', async ({ guestPage }) => {
   const prompt = { title: 'チャンネルを申請するにはアカウントが必要です', description: 'まだ載っていないゲーム実況のチャンネルを申請できます' };
   await guestPage.goto('/channels');
+  await waitForGuest(guestPage);
   await guestPage.getByTestId('channel-apply-hint').getByRole('link', { name: 'チャンネルを申請する' }).click();
   await expectLoginPrompt(guestPage, { ...prompt, next: '/propose?type=channel' });
   await guestPage.goto('/creators');
+  await waitForGuest(guestPage);
   await guestPage.getByRole('link', { name: '掲載を申請する' }).click();
   await expect(guestPage).toHaveURL(/\/creators$/);
   await expectLoginPrompt(guestPage, { ...prompt, next: '/propose?type=channel&as=creator' });
