@@ -99,9 +99,10 @@ tr-game-streamer-v2 の**コーディング支援用**Wiki（実装の変更履�
 - [[2026-11-17-proposal-steps-no-here-label]] — 提案のステップ表示から「いまここ」の文字をなくし、丸と線の塗り（済み＝赤のチェック、今＝赤い丸と光の輪、見送り＝×と点線）で今の段を示す（PR #57）
 - [[2026-11-17-email-change]] — 設定ページからメールアドレスを変更（新しいアドレス＋確認用＋現在のパスワード、再認証→サーバーで使用中か確認→`verifyBeforeUpdateEmail` で確認メール）。`users.email` のミラーは sync API で Auth に合わせる（PR #58）
 - [[2026-11-17-channel-profile-refresh]] — 配信者の名前・アイコンを毎日の再取得の最初に `channels.list` で取り直し、違うものだけ書き換える（30日ルール対応）。読めないアイコンは代わりの表示に（`FallbackImage`）（PR #59）
+- [[2026-11-17-unit-tests-and-collections-code-removal]] — 単体テスト（Vitest、`npm test`、`tests/unit/`、DB を使わない処理だけ）を入れ、取り下げたまとめ機能のコードを削除。`/collections*` はファイルが無いので 404、proxy の書き換えを外した。データとルールは残す（PR #60）
 
 ## Entities
-- [[proxy]] — proxy.ts（旧middleware.ts、Next.js 16のproxy規約対応）。まとめ取り下げ後は `/collections*` を 404 に書き換える
+- [[proxy]] — proxy.ts（旧middleware.ts、Next.js 16のproxy規約対応）。stgゲート。`/collections*` の 404 書き換えは 2026-11-17 にまとめのコード削除で外した
 - [[stg-gate]] — lib/stg-gate.ts（Cookieゲートのトークン導出ロジック）
 - [[catalog-server]] — lib/catalog-server.ts（一覧のサーバー側検索。メモリ索引＋onSnapshot）
 
