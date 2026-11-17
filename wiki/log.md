@@ -1,5 +1,9 @@
 # 操作ログ
 
+## [2026-11-17] ingest | 提案・審査フローと仕様書を整理する（PR #62）
+リファクタリング③。`PATCH /api/admin/workflows/[workflowId]` は共通の確認だけにし、承認・却下は `lib/workflow-decisions.ts` から種別ごとの `*-server.ts` へ。管理画面の Bearer fetch を `lib/admin-api.ts` に寄せ、Firestore の直接 import を ESLint で禁止。審査ワークフロー仕様書を v14.0（今の実装だけ）に書き直し、未実装は `構想/`、取り下げは `取り下げ/` へ。
+→ [[2026-11-17-workflow-api-split-and-spec-cleanup]]
+
 ## [2026-11-17] ingest | 収集フローを整理する（PR #61）
 リファクタリング②。件数の増減を `lib/listing-counts.ts`（計算）・`listing-counts-server.ts`（書き込み）に寄せ、登録・掲載切り替え・ゲーム付け外し・タグ・ジャンル件数がここを通る。巡回の入口を `sweepChannels` に揃え、`exploration-server`→`channel-sweep-run`、API `explore`→`sweep`、`exploration-rules`→`playlist-title-rules` に改名。`collection_candidates` の読み込みを削除。コンテンツ収集機能仕様書 v4.7。
 → [[2026-11-17-collection-flow-refactoring]]

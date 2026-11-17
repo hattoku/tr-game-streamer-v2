@@ -26,8 +26,8 @@
 'use client';
 
 import { useEffect, useState, type ReactNode } from 'react';
-import { collection, getDocs } from 'firebase/firestore';
-import { db, auth } from '@/lib/firebase';
+import { adminFetch } from '@/lib/admin-api';
+import { fetchGenreAndThemeOptions } from '@/lib/admin-reads';
 import { Modal } from '@/components/ui/Modal';
 import { Field, Input, Textarea } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
@@ -72,7 +72,7 @@ interface GameCreateModalProps {
   onCreated?: (game: GameOption) => void;
   /**
    * 新規登録モードで最初から入れておく機種と楽天ブックスの商品（再生リスト登録提案の承認から開くとき。
-   * 管理 審査ワークフロー仕様書 §14.4）。楽天の商品は検索で選んだときと同じく画像・商品ページURL・機種・ジャンル・テーマを自動セットする
+   * 管理 審査ワークフロー仕様書 §4.2）。楽天の商品は検索で選んだときと同じく画像・商品ページURL・機種・ジャンル・テーマを自動セットする
    */
   prefill?: { platforms?: string[]; rakuten?: RakutenGameSearchResult | null };
   /** 新規登録モードの見出し・送信ボタン・冒頭の案内を差し替える（提案の承認から開き、登録後に続けて承認するとき） */
@@ -95,19 +95,11 @@ function compareMasterOption(a: MasterOption, b: MasterOption): number {
   return a.name.localeCompare(b.name, 'ja');
 }
 
-async function getIdToken(): Promise<string> {
-  if (!auth.currentUser) throw new Error('not signed in');
-  return auth.currentUser.getIdToken();
-}
-
 type RakutenSearchOutcome = { results: RakutenGameSearchResult[] } | { error: string };
 
 async function searchRakuten(q: string): Promise<RakutenSearchOutcome> {
   try {
-    const idToken = await getIdToken();
-    const res = await fetch(`/api/admin/games/rakuten-search?title=${encodeURIComponent(q)}`, {
-      headers: { Authorization: `Bearer ${idToken}` },
-    });
+    const res = await adminFetch(`/api/admin/games/rakuten-search?title=${encodeURIComponent(q)}`);
     const body = await res.json();
     if (!res.ok) {
       return { error: '検索に失敗しました。時間をおいて再試行するか、楽天ブックス商品ページURLを貼って取得してください' };
@@ -209,10 +201,7 @@ export function GameCreateModal({
     let cancelled = false;
     (async () => {
       try {
-        const idToken = await getIdToken();
-        const res = await fetch(`/api/admin/games/rakuten-genre?booksGenreId=${encodeURIComponent(prefillBooksGenreId)}`, {
-          headers: { Authorization: `Bearer ${idToken}` },
-        });
+        const res = await adminFetch(`/api/admin/games/rakuten-genre?booksGenreId=${encodeURIComponent(prefillBooksGenreId)}`);
         if (!res.ok) return;
         const body = await res.json();
         // 解決を待つ間にモーダルを閉じた・開き直した場合は反映しない
@@ -230,10 +219,10 @@ export function GameCreateModal({
 
   useEffect(() => {
     if (!open || genres.length > 0) return;
-    Promise.all([getDocs(collection(db, 'genres')), getDocs(collection(db, 'themes'))])
-      .then(([genresSnap, themesSnap]) => {
-        setGenres(genresSnap.docs.map((d) => ({ id: d.id, name: (d.data().name as string) ?? '' })).sort(compareMasterOption));
-        setThemes(themesSnap.docs.map((d) => ({ id: d.id, name: (d.data().name as string) ?? '' })).sort(compareMasterOption));
+    fetchGenreAndThemeOptions()
+      .then(({ genres: genreOptions, themes: themeOptions }) => {
+        setGenres(genreOptions.sort(compareMasterOption));
+        setThemes(themeOptions.sort(compareMasterOption));
       })
       .catch((e) => console.error('genres/themes の読み込みに失敗', e));
   }, [open, genres.length]);
@@ -324,10 +313,7 @@ export function GameCreateModal({
     // 掛かる）ため、選択した1件だけ後追いで解決する。失敗しても自動セットを諦めるだけ
     if (!result.booksGenreId) return;
     try {
-      const idToken = await getIdToken();
-      const res = await fetch(`/api/admin/games/rakuten-genre?booksGenreId=${encodeURIComponent(result.booksGenreId)}`, {
-        headers: { Authorization: `Bearer ${idToken}` },
-      });
+      const res = await adminFetch(`/api/admin/games/rakuten-genre?booksGenreId=${encodeURIComponent(result.booksGenreId)}`);
       if (!res.ok) return;
       const body = await res.json();
       applyRakutenGenre(body.genre ?? null);
@@ -350,10 +336,7 @@ export function GameCreateModal({
     setRakutenItemFetching(true);
     setRakutenItemError(null);
     try {
-      const idToken = await getIdToken();
-      const res = await fetch(`/api/admin/games/rakuten-item?url=${encodeURIComponent(normalized)}`, {
-        headers: { Authorization: `Bearer ${idToken}` },
-      });
+      const res = await adminFetch(`/api/admin/games/rakuten-item?url=${encodeURIComponent(normalized)}`);
       const body = await res.json();
       if (!res.ok) {
         setRakutenItemError(
@@ -385,10 +368,9 @@ export function GameCreateModal({
     setTitleError(null);
     setSubmitting(true);
     try {
-      const idToken = await getIdToken();
-      const res = await fetch(initial ? `/api/admin/games/${encodeURIComponent(initial.id)}` : '/api/admin/games', {
+      const res = await adminFetch(initial ? `/api/admin/games/${encodeURIComponent(initial.id)}` : '/api/admin/games', {
         method: initial ? 'PATCH' : 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title: trimmedTitle,
           aliases: parseAliases(aliasesText),

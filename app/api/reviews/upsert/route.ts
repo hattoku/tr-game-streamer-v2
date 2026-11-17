@@ -21,7 +21,7 @@ import { WATCH_STATUS_ORDER, normalizeWatchStatus, type WatchStatus } from '@/co
 // （回避策を助長しないため）、最終送信時のサーバー側チェックはここで行う。入力中の
 // リアルタイムチェックは app/api/reviews/validate-comment/route.ts（デバウンス呼び出し）。
 //
-// 通報承認で非表示（isHidden）になったレビュー（管理 審査ワークフロー仕様書 §3.1）: 本人が編集しても
+// 通報承認で非表示（isHidden）になったレビュー（管理 審査ワークフロー仕様書 §4.1）: 本人が編集しても
 // 非表示のまま引き継ぐ。星評価・コメントを消したとき（削除）だけ非表示を解く。users.reviewCount は
 // 表示中のレビューだけを数えるため、非表示のレビューの削除では減らさず、非表示を解いたときに戻す。
 

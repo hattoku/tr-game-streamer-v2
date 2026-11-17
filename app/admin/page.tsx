@@ -9,38 +9,21 @@
  * 未実装のため今回は置かない。オーナー限定表示の出し分けも行わない（operator/owner共通）。
  * お問い合わせサマリーはフェーズ7ステップ7-3-1で「未対応件数」だけを追加した（種別別内訳・24時間超過アラートは無し）。
  * 審査ワークフローのサマリーはフェーズ7ステップ7-4で提案（再生リスト・ゲームタイトル登録提案）の未処理件数も並べた。
+ * 2026-11-17（リファクタリング③）から、未処理の件数は一覧・ナビのバッジと同じ数え方（lib/workflow-admin.ts の fetchPendingWorkflowCounts。
+ * 通報には詳細ページからの変更の提案を対象ごとに1件として含める）。読み込みは lib/admin-dashboard.ts。
  */
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { collection, getDocs, orderBy, limit, query, where } from 'firebase/firestore';
-import { auth, db } from '@/lib/firebase';
-import { PROPOSAL_TYPES } from '@/lib/proposal-shared';
+import { fetchInquiryCounts, fetchLastBatchLog, runRefreshNewVideos, type BatchLogSummary } from '@/lib/admin-dashboard';
+import { fetchPendingWorkflowCounts } from '@/lib/workflow-admin';
+import { AdminApiError } from '@/lib/admin-api';
 import { Card, SectionHeading } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 import { AlertIcon, CheckIcon } from '@/components/ui/icons';
-
-interface PlaylistRef {
-  playlistId: string;
-  title: string;
-}
-
-interface BatchLogSummary {
-  status: string;
-  executedAt: number;
-  /** 以下は差分取得（共通 YouTube定期取得仕様書 §7）以降のログにだけある */
-  processedCount?: number;
-  refetchedCount?: number;
-  newVideoCount?: number;
-  deferredCount?: number;
-  quotaExceeded?: boolean;
-  newVideoDetails?: Array<PlaylistRef & { newVideos: number }>;
-  notFoundPlaylists?: PlaylistRef[];
-  errorPlaylists?: Array<PlaylistRef & { message: string }>;
-}
 
 export default function AdminDashboardPage() {
   const { toast } = useToast();
@@ -56,63 +39,31 @@ export default function AdminDashboardPage() {
   // 画面を開いたときの読み込みが、再取得の後の読み込みより遅れて返ってきても古い結果で上書きしないための通し番号
   const lastBatchRequestRef = useRef(0);
 
-  async function loadPendingReportCount() {
-    const snap = await getDocs(
-      query(collection(db, 'workflows'), where('type', '==', 'review_report'), where('status', '==', 'reviewing_lv1')),
-    );
-    setPendingReportCount(snap.size);
-  }
-
-  async function loadPendingProposalCount() {
-    // 提案（再生リスト登録提案・ゲームタイトル登録提案、フェーズ7ステップ7-4）も通報と同じく type＋status の等価条件で数える
-    const snaps = await Promise.all(
-      PROPOSAL_TYPES.map((type) =>
-        getDocs(query(collection(db, 'workflows'), where('type', '==', type), where('status', '==', 'reviewing_lv1'))),
-      ),
-    );
-    setPendingProposalCount(snaps.reduce((sum, snap) => sum + snap.size, 0));
+  async function loadPendingWorkflowCounts() {
+    // 通報（レビューコメント通報と、詳細ページからの変更の提案を対象ごとに1件）と提案。一覧の行の数・ナビのバッジと同じ数え方
+    const counts = await fetchPendingWorkflowCounts();
+    setPendingReportCount(counts.reports);
+    setPendingProposalCount(counts.proposals);
   }
 
   async function loadOpenInquiryCount() {
     // 「ユーザー返信あり」（ユーザーが返信して運営がまだ返していない）も並べて出す（7-3-2、ユーザー決定）
-    const [openSnap, awaitingSnap] = await Promise.all([
-      getDocs(query(collection(db, 'inquiries'), where('status', '==', 'open'))),
-      getDocs(query(collection(db, 'inquiries'), where('awaitingAdminReply', '==', true))),
-    ]);
-    setOpenInquiryCount(openSnap.size);
-    setAwaitingReplyCount(awaitingSnap.size);
+    const counts = await fetchInquiryCounts();
+    setOpenInquiryCount(counts.open);
+    setAwaitingReplyCount(counts.awaitingReply);
   }
 
   async function loadLastBatch() {
-    // functionNameでの絞り込みは行わず直近1件のみ見る（orderByと別フィールドのequalityを
-    // 組み合わせると複合インデックスが必要になるため。現状batch_logsへの書き込みはvideo_updateのみ）
     const requestId = ++lastBatchRequestRef.current;
-    const snap = await getDocs(query(collection(db, 'batch_logs'), orderBy('executedAt', 'desc'), limit(1)));
+    const log = await fetchLastBatchLog();
     if (requestId !== lastBatchRequestRef.current) return;
-    const doc = snap.docs[0];
-    if (!doc) {
-      setLastBatch(null);
-      return;
-    }
-    const d = doc.data();
-    setLastBatch({
-      status: (d.status as string) ?? 'unknown',
-      executedAt: d.executedAt?.toMillis?.() ?? 0,
-      processedCount: d.processedCount,
-      refetchedCount: d.refetchedCount,
-      newVideoCount: d.newVideoCount,
-      deferredCount: d.deferredCount,
-      quotaExceeded: d.quotaExceeded,
-      newVideoDetails: d.newVideoDetails,
-      notFoundPlaylists: d.notFoundPlaylists,
-      errorPlaylists: d.errorPlaylists,
-    });
+    setLastBatch(log);
   }
 
   useEffect(() => {
     // 非同期 IIFE にして、effect 本体で同期的に setState しない形にする（react-hooks/set-state-in-effect）
     (async () => {
-      await Promise.all([loadPendingReportCount(), loadPendingProposalCount(), loadOpenInquiryCount(), loadLastBatch()]);
+      await Promise.all([loadPendingWorkflowCounts(), loadOpenInquiryCount(), loadLastBatch()]);
     })();
   }, []);
 
@@ -120,20 +71,14 @@ export default function AdminDashboardPage() {
     setRefreshBusy(true);
     setRefreshResult(null);
     try {
-      const idToken = await auth.currentUser?.getIdToken();
-      const res = await fetch('/api/admin/refresh-new-videos', { method: 'POST', headers: { Authorization: `Bearer ${idToken}` } });
-      const body = await res.json();
-      if (!res.ok) {
-        setRefreshResult('再取得に失敗しました');
-        toast({ type: 'error', message: '再取得に失敗しました' });
-        return;
-      }
+      const body = await runRefreshNewVideos();
       setRefreshResult(`完了しました（通知 ${body.notificationsCreated} 件生成、消費 ${body.quotaConsumed} ユニット）`);
       toast({ type: 'success', message: '新着動画の再取得が完了しました' });
       loadLastBatch();
-    } catch {
+    } catch (e) {
+      // API がエラーを返した（AdminApiError）か、通信できなかった
       setRefreshResult('再取得に失敗しました');
-      toast({ type: 'error', message: '通信エラーが発生しました。時間をおいて再試行してください' });
+      toast({ type: 'error', message: e instanceof AdminApiError ? '再取得に失敗しました' : '通信エラーが発生しました。時間をおいて再試行してください' });
     } finally {
       setRefreshBusy(false);
     }

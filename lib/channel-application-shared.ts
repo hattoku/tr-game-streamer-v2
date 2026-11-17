@@ -1,5 +1,5 @@
 // チャンネル申請（`workflows.type: channel_application`）でクライアントとサーバーが共有する定数。
-// ページ チャンネルを申請する 仕様書、管理 審査ワークフロー仕様書 §15.2・§15.4（リブランディング段階6）。
+// ページ チャンネルを申請する 仕様書、管理 審査ワークフロー仕様書 §4.4（リブランディング段階6）。
 // firebase-admin を import しないこと（クライアントからも読むため）。
 
 /** `workflows.type`: チャンネル申請 */
@@ -23,7 +23,7 @@ export const DAILY_APPLICATION_LIMIT = 5;
  */
 export type ApplyChannelState = 'ok' | 'listed' | 'opted_out' | 'pending';
 
-/** チャンネル申請の見送り理由（定型。審査ワークフロー仕様書 §15.4）。選んだ文言を申請者への通知と提案履歴に出す */
+/** チャンネル申請の見送り理由（定型。審査ワークフロー仕様書 §4.4）。選んだ文言を申請者への通知と提案履歴に出す */
 export const CHANNEL_APPLICATION_REJECT_REASONS = [
   { code: 'not_official', label: '実況者本人・公式のチャンネルではない（切り抜き・転載・まとめなど）' },
   { code: 'few_game_playlists', label: 'ゲーム実況の再生リストがほとんどない' },
@@ -34,6 +34,13 @@ export const CHANNEL_APPLICATION_REJECT_REASONS = [
 
 export function channelApplicationRejectReasonLabel(code: unknown): string | null {
   return CHANNEL_APPLICATION_REJECT_REASONS.find((r) => r.code === code)?.label ?? null;
+}
+
+/** チャンネル申請の審査結果の通知文（審査ワークフロー仕様書 §4.4）。却下は定型の見送り理由を添える */
+export function channelApplicationResultMessage(channelTitle: string, action: 'approve' | 'reject', rejectReasonLabel: string | null): string {
+  return action === 'approve'
+    ? `チャンネル「${channelTitle}」の申請が承認されました。再生リストは運営の確認のあと順に公開します`
+    : `チャンネル「${channelTitle}」の申請は見送りになりました（${rejectReasonLabel}）`;
 }
 
 /** 掲載チャンネル（`exploration_channels.status`）の管理画面での表示名 */

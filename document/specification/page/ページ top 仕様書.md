@@ -11,7 +11,7 @@
 - /document/specification/common/共通 人気のチャンネル 集計 仕様書.md
 - /document/specification/page/ページ top 初めての方へ 仕様書.md
 - /document/specification/page/ページ マイリスト機能仕様書.md
-- /document/specification/page/ページ 再生リスト まとめ機能仕様書.md
+- /document/specification/取り下げ/ページ 再生リスト まとめ機能仕様書.md
 - /document/specification/page/ページ チャンネル 探す 仕様書.md
 - /document/plan/プレミテ企画書.md
 - /document/specification/仕様書トレーサビリティ・マトリクス.md

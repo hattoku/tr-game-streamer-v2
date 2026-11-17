@@ -1,26 +1,27 @@
 /**
  * 審査ワークフロー詳細のうち、再生リスト登録提案（type: "playlist_register"、フェーズ7ステップ7-4）。
  * 承認すると PATCH /api/admin/workflows/[workflowId] が /api/playlists/register と同じ登録処理を行い、
- * 再生リストが公開される（管理_審査ワークフロー仕様書 §3）。YouTube の状態は承認時にサーバー側で取り直すため、
+ * 再生リストが公開される（管理 審査ワークフロー仕様書 §4.2）。YouTube の状態は承認時にサーバー側で取り直すため、
  * 提案後に非公開化・別経路で登録済み、などになっていれば承認はエラーになり審査中のまま残る。
- * - ゲームタイトルは承認前に差し替えられる（§10.1 の最小版、2026-10-25 ユーザー決定）。差し替えは承認時に
+ * - ゲームタイトルは承認前に差し替えられる（審査ワークフロー仕様書 §4.2、2026-10-25 ユーザー決定）。差し替えは承認時に
  *   `gameId` として送り、サーバーが editHistory に記録する（提案内容そのものは書き換えない）。
  * - チャンネルが未登録なら、管理者の直接登録と同じく説明文（任意・手入力）を書ける。
- * - 提案者がゲームタイトルを候補から選べず新しいゲームタイトル名を入力した提案（proposalData.gameId が null、§14.3 v10.1）は、
+ * - 提案者がゲームタイトルを候補から選べず新しいゲームタイトル名を入力した提案（proposalData.gameId が null、審査ワークフロー仕様書 §4.2）は、
  *   審査は「① ゲームタイトルを決める → ② 承認・却下」の2段で見せる（2026-10-26 ユーザー指摘で、登録と承認を一度に行う
  *   ボタンをやめた）。①で「新しく登録する」（GameCreateModal、タイトル名入り）か「既存のゲームタイトルから選ぶ」を選び、
  *   決まるまで承認ボタンは押せない（却下はいつでも押せる）。登録しただけでは承認しない。
  *   ゲームタイトルの登録後に再生リストの登録だけ失敗して画面を開き直した場合は、同じ名前のゲームタイトルを自動で選ぶ
  *   （ゲームタイトルを二重に登録させない）。
- * - 動画一覧（GET /api/admin/workflows/[id]/videos）を画面内に出し、YouTube へ移らずに中身を確かめられる（§14.4 v11.0）。
- * - 却下は定型の見送り理由（PROPOSAL_REJECT_REASONS）が必須で、自由記述は内部メモ（§14.4）。提案者には API が審査結果を通知する。
- * - 提案に楽天ブックスの商品（proposalData.newGameRakuten）や機種（newGamePlatforms）があれば、登録モーダルにそれを入れて開く（§14.4）。
+ * - 動画一覧（GET /api/admin/workflows/[id]/videos）を画面内に出し、YouTube へ移らずに中身を確かめられる（審査ワークフロー仕様書 §4.2）。
+ * - 却下は定型の見送り理由（PROPOSAL_REJECT_REASONS）が必須で、自由記述は内部メモ（審査ワークフロー仕様書 §4.2）。提案者には API が審査結果を通知する。
+ * - 提案に楽天ブックスの商品（proposalData.newGameRakuten）や機種（newGamePlatforms）があれば、登録モーダルにそれを入れて開く（審査ワークフロー仕様書 §4.2）。
  */
 'use client';
 
 import { useEffect, useState } from 'react';
-import { collection, doc, getDoc, getDocs, limit, query, where, type DocumentData } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { fetchGameOptions } from '@/lib/admin-reads';
+import { callWorkflowApi, channelPageExists, fetchPlaylistGameName, findGameByTitle, type WorkflowDoc } from '@/lib/workflow-admin';
+import { isPendingStatus, type DecisionAction, type WorkflowStatus } from '@/lib/workflow-shared';
 import { Button, LinkButton } from '@/components/ui/Button';
 import { Card, CardDivider } from '@/components/ui/Card';
 import { Field, Textarea } from '@/components/ui/Input';
@@ -31,16 +32,12 @@ import { GameSelectModal, type GameOption } from '@/components/playlists/GameSel
 import { GameCreateModal } from '@/components/games/GameCreateModal';
 import { ProposalVideoList } from './ProposalVideoList';
 import {
-  callWorkflowApi,
-  isPendingStatus,
-  WorkflowApiError,
+  workflowErrorMessage,
   WorkflowDecisionButtons,
   WorkflowDecisionModal,
   WorkflowDecisionNote,
   WorkflowHeader,
   WorkflowMemo,
-  type DecisionAction,
-  type WorkflowStatus,
 } from './shared';
 import { PROPOSAL_REJECT_REASONS, proposalRejectReasonLabel, type ProposalRakutenItem } from '@/lib/proposal-shared';
 
@@ -56,7 +53,7 @@ const APPROVE_ERRORS: Record<string, string> = {
   quota_exceeded: 'YouTubeの取得上限に達しました。時間をおいて再試行してください',
 };
 
-/** 提案時点の掲載状態の表示（審査ワークフロー仕様書 §15.3） */
+/** 提案時点の掲載状態の表示（審査ワークフロー仕様書 §4.2） */
 const LISTING_STATUS_LABEL: Record<string, string> = {
   unconfirmed: '未確認',
   non_game: 'ゲーム以外と判定',
@@ -64,7 +61,7 @@ const LISTING_STATUS_LABEL: Record<string, string> = {
   excluded: '除外',
 };
 
-export function PlaylistProposalDetail({ workflowId, data }: { workflowId: string; data: DocumentData }) {
+export function PlaylistProposalDetail({ workflowId, data }: { workflowId: string; data: WorkflowDoc }) {
   const { toast } = useToast();
   const status = (data.status as WorkflowStatus) ?? 'reviewing_lv1';
   const pending = isPendingStatus(status);
@@ -91,7 +88,7 @@ export function PlaylistProposalDetail({ workflowId, data }: { workflowId: strin
 
   /** ゲームが分からないとして送られた提案（ページ 提案する 仕様書 §5.4）。ゲームを決めずに承認できる */
   const noGame = proposal.noGame === true;
-  /** すでにプレミテにある、掲載していない再生リストの提案（審査ワークフロー仕様書 §15.3） */
+  /** すでにプレミテにある、掲載していない再生リストの提案（審査ワークフロー仕様書 §4.2） */
   const existingListingStatus = (proposal.existingListingStatus as string | undefined) ?? null;
   const proposeReason = (proposal.proposeReason as string | null | undefined) ?? null;
   /** すでにある再生リストに今付いているゲーム（巡回の推定など）。ゲームを選ばずに承認するとこのまま */
@@ -103,15 +100,15 @@ export function PlaylistProposalDetail({ workflowId, data }: { workflowId: strin
 
   useEffect(() => {
     if (!pending || !existingListingStatus || !proposal.youtubePlaylistId) return;
-    getDoc(doc(db, 'playlists', proposal.youtubePlaylistId as string))
-      .then((snap) => setCurrentGameName((snap.data()?.gameName as string | undefined) || null))
+    fetchPlaylistGameName(proposal.youtubePlaylistId as string)
+      .then(setCurrentGameName)
       .catch(() => setCurrentGameName(null));
   }, [pending, existingListingStatus, proposal.youtubePlaylistId]);
 
   useEffect(() => {
     if (!pending || !proposal.channelId) return;
-    getDoc(doc(db, 'channels', proposal.channelId as string))
-      .then((snap) => setChannelRegistered(snap.exists()))
+    channelPageExists(proposal.channelId as string)
+      .then(setChannelRegistered)
       .catch(() => setChannelRegistered(true));
   }, [pending, proposal.channelId]);
 
@@ -119,11 +116,10 @@ export function PlaylistProposalDetail({ workflowId, data }: { workflowId: strin
   const proposedGameId = proposal.gameId as string | null | undefined;
   useEffect(() => {
     if (!pending || proposedGameId || !newGameTitle) return;
-    getDocs(query(collection(db, 'games'), where('title', '==', newGameTitle), limit(1)))
-      .then((snap) => {
-        const existing = snap.docs[0];
+    findGameByTitle(newGameTitle)
+      .then((existing) => {
         if (!existing) return;
-        setSelectedGame((prev) => prev ?? { id: existing.id, title: (existing.data().title as string) ?? newGameTitle });
+        setSelectedGame((prev) => prev ?? existing);
         setAutoSelectedExisting(true);
       })
       .catch((e) => console.error('games の読み込みに失敗', e));
@@ -132,19 +128,8 @@ export function PlaylistProposalDetail({ workflowId, data }: { workflowId: strin
   function openGameModal() {
     setGameModalOpen(true);
     if (games.length > 0) return;
-    getDocs(collection(db, 'games'))
-      .then((snapshot) =>
-        setGames(
-          snapshot.docs
-            .map((d) => ({
-              id: d.id,
-              title: (d.data().title as string) ?? '',
-              packageImageUrl: (d.data().packageImageUrl as string | undefined) ?? null,
-              aliases: (d.data().aliases as string[] | undefined) ?? [],
-            }))
-            .sort((a, b) => a.title.localeCompare(b.title, 'ja')),
-        ),
-      )
+    fetchGameOptions()
+      .then(setGames)
       .catch((e) => console.error('games の読み込みに失敗', e));
   }
 
@@ -166,7 +151,7 @@ export function PlaylistProposalDetail({ workflowId, data }: { workflowId: strin
       toast({ type: 'success', message: action === 'approve' ? '承認し、再生リストを登録しました' : '却下しました' });
       return true;
     } catch (e) {
-      const message = e instanceof WorkflowApiError && e.code ? APPROVE_ERRORS[e.code] : undefined;
+      const message = workflowErrorMessage(e, APPROVE_ERRORS);
       if (message) {
         setApproveError(message);
         toast({ type: 'error', message });

@@ -500,7 +500,7 @@ export async function resolveChannelRef(ref: ChannelRef): Promise<ChannelDetail 
 
 /**
  * チャンネルの再生リストを先頭の1ページだけ取得する（playlists.list、1ユニット）。
- * チャンネル申請の審査詳細（管理 審査ワークフロー仕様書 §15.2「最大20件、YouTube から都度取得」）で使う。
+ * チャンネル申請の審査詳細（管理 審査ワークフロー仕様書 §4.4「最大20件、YouTube から都度取得」）で使う。
  * 全件を取る fetchChannelPlaylists と違い、ページをたどらない。
  */
 export async function fetchChannelPlaylistsFirstPage(channelId: string, max = 20): Promise<{ playlists: ChannelPlaylist[]; totalResults: number }> {

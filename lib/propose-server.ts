@@ -148,7 +148,7 @@ async function setGameBeforeListing(playlistId: string, gameId: string | null, u
 }
 
 /**
- * すでに `playlists` にある掲載していない再生リストを掲載する（ページ 提案する 仕様書 §9 の「公開する」、審査ワークフロー仕様書 §15.3 の承認）。
+ * すでに `playlists` にある掲載していない再生リストを掲載する（ページ 提案する 仕様書 §9 の「公開する」、審査ワークフロー仕様書 §4.2 の承認）。
  * チャンネルが掲載中であること、運営が手で外したものは `allowHidden`（管理者の直接操作）のときだけ、を確かめる。
  * まだ動画一覧を取っていなければ YouTube から取る（listPlaylist）。
  */

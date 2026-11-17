@@ -1,19 +1,15 @@
 /**
- * 再生リスト登録提案の審査詳細に出す動画一覧（管理 審査ワークフロー仕様書 §14.4）。
+ * 再生リスト登録提案の審査詳細に出す動画一覧（管理 審査ワークフロー仕様書 §4.2）。
  * YouTube へ移らずに、ゲームが混ざっていないか・ゲーム実況か等を確かめるためのもの。
  * GET /api/admin/workflows/[workflowId]/videos で都度取得する（YouTube API の割り当てを使うため、審査中の提案でだけ出す）。
  */
 'use client';
 
 import { useEffect, useState } from 'react';
-import { auth } from '@/lib/firebase';
+import { fetchProposalVideos, type ProposalVideo } from '@/lib/workflow-admin';
 import { SkeletonText } from '@/components/ui/Skeleton';
 
-interface VideoRow {
-  youtubeVideoId: string;
-  title: string;
-  thumbnailUrl: string;
-}
+type VideoRow = ProposalVideo;
 
 export function ProposalVideoList({ workflowId }: { workflowId: string }) {
   const [videos, setVideos] = useState<VideoRow[] | null>(null);
@@ -22,14 +18,7 @@ export function ProposalVideoList({ workflowId }: { workflowId: string }) {
   useEffect(() => {
     (async () => {
       try {
-        if (!auth.currentUser) throw new Error('not signed in');
-        const idToken = await auth.currentUser.getIdToken();
-        const res = await fetch(`/api/admin/workflows/${encodeURIComponent(workflowId)}/videos`, {
-          headers: { Authorization: `Bearer ${idToken}` },
-        });
-        if (!res.ok) throw new Error(`status ${res.status}`);
-        const body = await res.json();
-        setVideos(body.videos ?? []);
+        setVideos(await fetchProposalVideos(workflowId));
       } catch {
         setError(true);
       }

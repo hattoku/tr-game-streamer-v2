@@ -1,7 +1,7 @@
 // チャンネル申請・提案の分岐・実況者向けページ（リブランディング段階6）の確認項目。
 // v1.3（2026-11-16）でフォームは「提案する」（/propose）のチャンネル側に移った（ページ 提案する 仕様書 §6）。
 // ページ チャンネルを申請する 仕様書 v1.3（§2〜§8）、ページ 実況者・事務所の方へ 仕様書、ページ 再生リストを追加する 仕様書 §10.1、
-// 管理 審査ワークフロー仕様書 §15.2・§15.4、ページ お問い合わせフォーム仕様書 §4（v1.5）。
+// 管理 審査ワークフロー仕様書 §4.4、ページ お問い合わせフォーム仕様書 §4（v1.5）。
 // 実在の YouTube チャンネルを使う（確認 API が YouTube から取るため）。申請の送信は desktop・mobile で別のチャンネルを使い、
 // 掲載状態（exploration_channels）を書き換えるテストは同じチャンネルを奪い合わないよう desktop だけで行う。
 // 作ったデータ（workflows・exploration_channels・notifications）はテストの最後に自分で消す。
@@ -228,7 +228,7 @@ test('§8 1日の申請は5件まで（日本時間）', async ({ adminPage }, t
   }
 });
 
-test('審査 §15.2 承認すると掲載チャンネルに加わり（確認してから掲載）、本人に通知が届く', async ({ userPage, adminPage }, testInfo) => {
+test('審査 §4.4 承認すると掲載チャンネルに加わり（確認してから掲載）、本人に通知が届く', async ({ userPage, adminPage }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop', '掲載チャンネルを書き換えるため desktop のみ');
   test.setTimeout(180_000);
   const uid = await uidOf(TEST_USER_EMAILS.user);
@@ -256,7 +256,7 @@ test('審査 §15.2 承認すると掲載チャンネルに加わり（確認し
   }
 });
 
-test('審査 §15.2 掲載停止のチャンネルは承認できない', async ({ adminPage }, testInfo) => {
+test('審査 §4.4 掲載停止のチャンネルは承認できない', async ({ adminPage }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop', '掲載チャンネルを書き換えるため desktop のみ');
   const uid = await uidOf(TEST_USER_EMAILS.user);
   const fakeChannelId = randomId('UCE2E');

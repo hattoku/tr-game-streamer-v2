@@ -1,47 +1,27 @@
 /**
- * 審査ワークフロー詳細（/admin/workflows/[workflowId]）の種別共通部品（管理_審査ワークフロー仕様書 §8・§9・§11）。
- * 通報（ReportWorkflowDetail）と提案（PlaylistProposalDetail・GameProposalDetail）で共用する。
- * 書き込みはすべて PATCH /api/admin/workflows/[workflowId]（Admin SDK）経由。
+ * 審査ワークフロー詳細（/admin/workflows/[workflowId]）の種別共通部品（管理 審査ワークフロー仕様書 §3・§5.2）。
+ * 種別ごとの詳細（components/admin/workflows/*Detail.tsx）で共用する。
+ * 読み込みは lib/workflow-admin.ts、書き込みはすべて PATCH /api/admin/workflows/[workflowId]（callWorkflowApi）経由。
  */
 'use client';
 
 import { useEffect, useState, type ReactNode } from 'react';
-import { doc, getDoc } from 'firebase/firestore';
-import { auth, db } from '@/lib/firebase';
+import { fetchUserDisplayName } from '@/lib/admin-reads';
+import { callWorkflowApi } from '@/lib/workflow-admin';
+import { isPendingStatus, MAX_OPERATOR_MEMO_LENGTH, workflowStatusLabel, type DecisionAction, type WorkflowStatus } from '@/lib/workflow-shared';
 import { Button } from '@/components/ui/Button';
 import { CardDivider } from '@/components/ui/Card';
 import { Field, Textarea } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 import { Tag } from '@/components/ui/Tag';
 import { useToast } from '@/components/ui/Toast';
+import { AdminApiError } from '@/lib/admin-api';
 
-export type WorkflowStatus = 'reviewing_lv1' | 'reviewing_lv2' | 'approved' | 'rejected';
-export type DecisionAction = 'approve' | 'reject';
+const MAX_MEMO_LENGTH = MAX_OPERATOR_MEMO_LENGTH;
 
-const MAX_MEMO_LENGTH = 1000;
-
-export function isPendingStatus(status: WorkflowStatus): boolean {
-  return status === 'reviewing_lv1' || status === 'reviewing_lv2';
-}
-
-/** API のエラーコード（`error`）を持つ例外。呼び出し側で文言を出し分ける */
-export class WorkflowApiError extends Error {
-  constructor(readonly code: string | null, readonly status: number) {
-    super(`workflow api ${status} ${code ?? ''}`);
-  }
-}
-
-export async function callWorkflowApi(workflowId: string, body: Record<string, unknown>): Promise<void> {
-  const idToken = await auth.currentUser?.getIdToken();
-  const res = await fetch(`/api/admin/workflows/${encodeURIComponent(workflowId)}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const json = await res.json().catch(() => ({}));
-    throw new WorkflowApiError((json.error as string) ?? null, res.status);
-  }
+/** API のエラーコード（AdminApiError の code）に対応する文言。無ければ undefined */
+export function workflowErrorMessage(error: unknown, messages: Record<string, string>): string | undefined {
+  return error instanceof AdminApiError && error.code ? messages[error.code] : undefined;
 }
 
 /** 種別・提出日時・提出者・ステータスの見出し部分 */
@@ -60,8 +40,8 @@ export function WorkflowHeader({
   const [submitterName, setSubmitterName] = useState<string | null>(null);
   useEffect(() => {
     if (!submittedBy) return;
-    getDoc(doc(db, 'users', submittedBy))
-      .then((snap) => setSubmitterName((snap.data()?.displayName as string) ?? '(退会したユーザー)'))
+    fetchUserDisplayName(submittedBy)
+      .then(setSubmitterName)
       .catch(() => setSubmitterName('(取得できませんでした)'));
   }, [submittedBy]);
 
@@ -72,7 +52,7 @@ export function WorkflowHeader({
         <p className="text-md text-text-tertiary">提出日時: {submittedAt ? new Date(submittedAt).toLocaleString('ja-JP') : '-'}</p>
         {submittedBy && <p className="text-md text-text-tertiary">提出者: {submitterName ?? '…'}</p>}
       </div>
-      <Tag emphasis={isPendingStatus(status)}>{status === 'approved' ? '承認' : status === 'rejected' ? '却下' : '審査中'}</Tag>
+      <Tag emphasis={isPendingStatus(status)}>{workflowStatusLabel(status)}</Tag>
     </div>
   );
 }
@@ -95,7 +75,7 @@ export function WorkflowDecisionNote({
   );
 }
 
-/** 運営メモ（§11、1,000文字上限） */
+/** 運営メモ（審査ワークフロー仕様書 §3.5、1,000文字上限） */
 export function WorkflowMemo({ workflowId, operatorMemo }: { workflowId: string; operatorMemo: string | null }) {
   const { toast } = useToast();
   const [draft, setDraft] = useState('');
@@ -189,9 +169,9 @@ export function WorkflowDecisionButtons({
 }
 
 /**
- * 承認・却下の確認ダイアログ（§9.1 承認はコメント任意・§9.2 却下は理由必須）。
+ * 承認・却下の確認ダイアログ（審査ワークフロー仕様書 §3.2。承認はコメント任意・却下は理由必須）。
  * `onSubmit` が例外を投げなければ閉じる（エラー表示は呼び出し側）。
- * `rejectReasons` を渡すと（再生リスト登録提案、§14.4）、却下は定型理由の選択が必須になり、自由記述は任意の内部メモになる
+ * `rejectReasons` を渡すと（再生リスト登録提案、審査ワークフロー仕様書 §4.2）、却下は定型理由の選択が必須になり、自由記述は任意の内部メモになる
  * （選んだ定型理由は提案者に見せる。自由記述は見せない）。
  */
 export function WorkflowDecisionModal({

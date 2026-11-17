@@ -28,7 +28,7 @@ export interface ReviewDoc {
   watchStatus: WatchStatus | null;
   comment: string | null;
   hasSpoiler: boolean;
-  /** 通報承認で非表示（論理削除）になっている（管理 審査ワークフロー仕様書 §3.1） */
+  /** 通報承認で非表示（論理削除）になっている（管理 審査ワークフロー仕様書 §4.1） */
   isHidden: boolean;
 }
 

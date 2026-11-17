@@ -9,8 +9,6 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { collection, getDocs, query, where } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
 import { Card, SectionHeading } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -19,55 +17,15 @@ import { useToast } from '@/components/ui/Toast';
 import { CollectionNav } from '@/components/admin/collection/CollectionNav';
 import { GameSelectModal, type GameOption } from '@/components/playlists/GameSelectModal';
 import { GameCreateModal } from '@/components/games/GameCreateModal';
-import { formatDateTime, postAdminApi } from '@/lib/collection-admin';
+import { fetchGameCheckPlaylists, formatDateTime, type GameCheckPlaylist } from '@/lib/collection-admin';
+import { postAdminApi } from '@/lib/admin-api';
+import { fetchGameOptions } from '@/lib/admin-reads';
 
-interface UnsetPlaylist {
-  id: string;
-  title: string;
-  channelName: string;
-  thumbnailUrl: string;
-  gameHint: string;
-  registeredAt: number | null;
-  gameName: string;
-  gameSetAt: number | null;
-}
+type UnsetPlaylist = GameCheckPlaylist;
 
-async function fetchPlaylists(field: 'gameId' | 'gameSetBy', value: null | 'user'): Promise<UnsetPlaylist[]> {
-  const snap = await getDocs(query(collection(db, 'playlists'), where(field, '==', value)));
-  return snap.docs
-    // 掲載中のものだけ出す（取り込んだ確認待ち・非表示の再生リストは「自動掲載の確認」でゲームを付ける。仕様書 §6.5）
-    .filter((d) => (d.data().listingStatus ?? 'listed') === 'listed')
-    .map((d) => {
-      const data = d.data();
-      return {
-        id: d.id,
-        title: (data.title as string) ?? '',
-        channelName: (data.channelName as string) ?? '',
-        thumbnailUrl: (data.thumbnailUrl as string) ?? '',
-        gameHint: (data.gameHint as string | null) ?? '',
-        registeredAt: (data.registeredAt as { toMillis(): number } | undefined)?.toMillis?.() ?? null,
-        gameName: (data.gameName as string) ?? '',
-        gameSetAt: (data.gameSetAt as { toMillis(): number } | null)?.toMillis?.() ?? null,
-      };
-    })
-    .sort((a, b) => (b.gameSetAt ?? b.registeredAt ?? 0) - (a.gameSetAt ?? a.registeredAt ?? 0));
-}
-
-const fetchUnsetPlaylists = () => fetchPlaylists('gameId', null);
+const fetchUnsetPlaylists = () => fetchGameCheckPlaylists('unset');
 /** 一般ユーザーが登録したゲーム（確認して、違えば戻す。v3.2 §6.5） */
-const fetchUserSetPlaylists = () => fetchPlaylists('gameSetBy', 'user');
-
-async function fetchGames(): Promise<GameOption[]> {
-  const snap = await getDocs(collection(db, 'games'));
-  return snap.docs
-    .map((d) => ({
-      id: d.id,
-      title: (d.data().title as string) ?? '',
-      packageImageUrl: (d.data().packageImageUrl as string) ?? null,
-      aliases: (d.data().aliases as string[] | undefined) ?? [],
-    }))
-    .sort((a, b) => a.title.localeCompare(b.title, 'ja'));
-}
+const fetchUserSetPlaylists = () => fetchGameCheckPlaylists('user_set');
 
 export default function AdminUnsetPlaylistsPage() {
   const { toast } = useToast();
@@ -81,7 +39,7 @@ export default function AdminUnsetPlaylistsPage() {
   useEffect(() => {
     // 非同期 IIFE にして、effect 本体で同期的に setState しない形にする（react-hooks/set-state-in-effect）
     (async () => {
-      const [list, gameList, byUser] = await Promise.all([fetchUnsetPlaylists(), fetchGames(), fetchUserSetPlaylists()]);
+      const [list, gameList, byUser] = await Promise.all([fetchUnsetPlaylists(), fetchGameOptions(), fetchUserSetPlaylists()]);
       setPlaylists(list);
       setUserSet(byUser);
       setGames(gameList);

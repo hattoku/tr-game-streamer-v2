@@ -37,13 +37,13 @@ import {
   fetchPopularityOverview,
   formatDateTime,
   formatSubscribers,
-  postAdminApi,
   quotaExceededMessage,
   type ListingChannel,
   type ListingChannelStatus,
   type PopularityOverview,
 } from '@/lib/collection-admin';
 import { popularityScore, RECENT_DAYS, ZERO_POPULARITY } from '@/lib/popularity-shared';
+import { postAdminApi } from '@/lib/admin-api';
 
 const RESOLVE_BATCH = 40;
 

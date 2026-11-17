@@ -1,10 +1,10 @@
 // 詳細ページからの変更の提案（ゲーム・チャンネル・再生リスト）でクライアントとサーバーが共有する定数。
-// ページ 詳細ページからの変更提案 仕様書、管理 審査ワークフロー仕様書 §16。
+// ページ 詳細ページからの変更提案 仕様書、管理 審査ワークフロー仕様書 §4.5。
 // firebase-admin を import しないこと（クライアントからも読むため）。
 
 export type ChangeTargetType = 'game' | 'channel' | 'playlist';
 
-/** `workflows.type`（対象ごと。ゲームと再生リストは審査ワークフロー仕様書 §3 の既存の種別名） */
+/** `workflows.type`（対象ごと。ゲームと再生リストは以前からある種別名。審査ワークフロー仕様書 §4 の表） */
 export const CHANGE_PROPOSAL_TYPE: Record<ChangeTargetType, string> = {
   game: 'game_title_edit',
   channel: 'channel_report',
@@ -125,4 +125,100 @@ export function changeRejectReasonLabel(code: unknown): string | null {
 export function changeResultMessage(targetType: ChangeTargetType, targetName: string, action: 'approve' | 'reject', rejectLabel: string | null): string {
   const target = `${CHANGE_TARGET_LABEL[targetType]}「${targetName}」`;
   return action === 'approve' ? `${target}への提案を反映しました。ありがとうございます` : `${target}への提案は見送りになりました（${rejectLabel ?? ''}）`;
+}
+
+// ---- 審査画面でのまとめ方（管理 審査ワークフロー仕様書 §4.5・§5.1） ----
+
+/** 審査画面に渡す変更の提案1件（workflows の1件から、まとめに要る項目だけ） */
+export interface ChangeProposalItem {
+  id: string;
+  status: string;
+  submittedBy: string;
+  submittedAt: number;
+  reportData: Record<string, unknown>;
+}
+
+/**
+ * 一覧で1行にまとめるキー。審査中は同じ対象（`reportData.targetKey`）、処理済みは同じ処理（`reportData.decisionId`。無ければ自分のID）
+ */
+export function changeGroupKey(item: Pick<ChangeProposalItem, 'id' | 'status' | 'reportData'>, pending: boolean): string {
+  return pending ? `pending:${item.reportData.targetKey ?? item.id}` : `decided:${item.reportData.decisionId ?? item.id}`;
+}
+
+/** 一覧の1行（まとめのうち最も古い提案へのリンク） */
+export interface ChangeGroupRow {
+  id: string;
+  status: string;
+  submittedAt: number;
+  summary: string;
+  count: number;
+}
+
+/** 変更の提案を対象ごとの行にまとめる。`isPending` は状態が審査中か */
+export function groupChangeProposals(items: ChangeProposalItem[], isPending: (status: string) => boolean): ChangeGroupRow[] {
+  const groups = new Map<string, ChangeProposalItem[]>();
+  for (const item of items) {
+    const key = changeGroupKey(item, isPending(item.status));
+    groups.set(key, [...(groups.get(key) ?? []), item]);
+  }
+  return [...groups.values()].map((list): ChangeGroupRow => {
+    const sorted = [...list].sort((a, b) => a.submittedAt - b.submittedAt);
+    const first = sorted[0];
+    const targetType = first.reportData.targetType as ChangeTargetType;
+    // いちばん多い理由（ゲームは選んだ項目のうち最も多いもの）
+    const tally = new Map<string, number>();
+    for (const item of sorted) {
+      const keys = targetType === 'game' ? ((item.reportData.fields as string[] | undefined) ?? []) : [item.reportData.reason as string];
+      for (const key of keys) tally.set(key, (tally.get(key) ?? 0) + 1);
+    }
+    const top = topEntry(tally);
+    const reasonText = targetType === 'game' ? describeChangeReason('game', null, top ? [top] : []) : describeChangeReason(targetType, top, null);
+    return {
+      id: first.id,
+      status: first.status,
+      submittedAt: first.submittedAt,
+      count: sorted.length,
+      summary: `変更の提案（${CHANGE_TARGET_LABEL[targetType] ?? ''}）${sorted.length}人 — ${reasonText} — 「${(first.reportData.targetName as string) ?? ''}」`,
+    };
+  });
+}
+
+/** 件数がいちばん多いキー（同数なら先に数えたもの）。空なら null */
+function topEntry(tally: Map<string, number>): string | null {
+  let best: string | null = null;
+  let bestCount = 0;
+  for (const [key, n] of tally) {
+    if (n > bestCount) {
+      best = key;
+      bestCount = n;
+    }
+  }
+  return best;
+}
+
+/** まとめた提案の多数派（既定の処理を決める理由と、付け替え先の候補になるゲーム・新しいゲームの名前） */
+export interface ChangeGroupMajority {
+  reason: string | null;
+  game: { id: string; title: string } | null;
+  /** 新しいゲームとして書かれた名前（最初に書かれたもの） */
+  newGameTitle: string | null;
+}
+
+export function changeGroupMajority(
+  items: Array<{ reason: string | null; proposedGameId: string | null; proposedGameName: string | null; proposedGameTitle: string | null }>,
+): ChangeGroupMajority {
+  const reasons = new Map<string, number>();
+  const games = new Map<string, number>();
+  const gameTitles = new Map<string, string>();
+  let newGameTitle: string | null = null;
+  for (const item of items) {
+    if (item.reason) reasons.set(item.reason, (reasons.get(item.reason) ?? 0) + 1);
+    if (item.proposedGameId) {
+      games.set(item.proposedGameId, (games.get(item.proposedGameId) ?? 0) + 1);
+      if (!gameTitles.has(item.proposedGameId)) gameTitles.set(item.proposedGameId, item.proposedGameName ?? '');
+    }
+    if (!newGameTitle && item.proposedGameTitle) newGameTitle = item.proposedGameTitle;
+  }
+  const topGame = topEntry(games);
+  return { reason: topEntry(reasons), game: topGame ? { id: topGame, title: gameTitles.get(topGame) ?? '' } : null, newGameTitle };
 }

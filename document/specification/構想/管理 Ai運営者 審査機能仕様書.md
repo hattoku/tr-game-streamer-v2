@@ -5,6 +5,9 @@
 **関連ドキュメント**:
 - /document/specification/common/技術スタック仕様書.md
 - /document/specification/management/管理 審査ワークフロー仕様書.md
+- /document/specification/構想/審査ワークフロー 二段階審査とAI運営者 構想.md
+
+> **状態: 未実装の構想（2026-11-17 に management/ から 構想/ へ移した。リファクタリング③）。** AI運営者（Gemini）による審査は作っていない。今の審査は管理者が1段で承認・却下する（管理 審査ワークフロー仕様書 §1.2）。本書の「STEP1」「`step1History`」「`ai_review_error`」などは、二段階の審査の構想（構想/審査ワークフロー 二段階審査とAI運営者 構想.md）が前提。
 
 ## 目次
 

@@ -8,8 +8,7 @@
  */
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { fetchGame } from '@/lib/admin-reads';
 import { packageImageSrc } from '@/lib/package-image';
 import { Modal } from '@/components/ui/Modal';
 import { SkeletonText } from '@/components/ui/Skeleton';
@@ -32,10 +31,9 @@ export function LinkedGameModal({ gameId, onOpenChange }: { gameId: string | nul
   useEffect(() => {
     if (!gameId) return;
     let cancelled = false;
-    getDoc(doc(db, 'games', gameId))
-      .then((snap) => {
+    fetchGame(gameId)
+      .then((d) => {
         if (cancelled) return;
-        const d = snap.data();
         setLoaded({
           id: gameId,
           game: d

@@ -3,6 +3,9 @@
  * 通報モーダル（components/reviews/ReportModal.tsx）と管理画面の通報詳細（app/admin/workflows/[workflowId]）
  * で共用する。
  */
+/** `workflows.type`: レビューコメント通報（管理 審査ワークフロー仕様書 §4.1） */
+export const REVIEW_REPORT_TYPE = 'review_report';
+
 export const REPORT_REASONS = [
   { value: 'spam', label: 'スパム・宣伝' },
   { value: 'harassment', label: '荒らし・嫌がらせ' },
