@@ -110,7 +110,7 @@ v3.0（2026-10-26）で、収集の起点を**有名実況チャンネル**に�
 
 ### 2.1 実行基盤
 
-Cloud Functions 基盤は導入していない。**Cloud Run 上の API Route を Cloud Scheduler から `X-Cron-Secret` 付きで呼ぶ**構成とする。管理画面のボタンからは管理者の ID トークンで同じ API を呼ぶ。
+Cloud Functions 基盤は導入していない。**Cloud Run 上の API Route を Cloud Scheduler から `X-Cron-Secret` 付きで呼ぶ**構成とする。管理画面のボタンからは管理者の ID トークンで同じ API を呼ぶ。定期実行しているのは毎日の `POST /api/admin/refresh-new-videos` だけ（手動の巡回 `POST /api/admin/collection/sweep` も `X-Cron-Secret` を受け付けるが、定期のジョブは無い）。
 
 ---
 

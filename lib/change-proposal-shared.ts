@@ -4,7 +4,7 @@
 
 export type ChangeTargetType = 'game' | 'channel' | 'playlist';
 
-/** `workflows.type`（対象ごと。ゲームと再生リストは審査ワークフロー仕様書 §3 の既存の種別名） */
+/** `workflows.type`（対象ごと。ゲームと再生リストは以前からある種別名。審査ワークフロー仕様書 §4 の表） */
 export const CHANGE_PROPOSAL_TYPE: Record<ChangeTargetType, string> = {
   game: 'game_title_edit',
   channel: 'channel_report',

@@ -38,7 +38,7 @@ export function isApprovingLocked(approvingAtMs: number, nowMs: number): boolean
   return approvingAtMs > 0 && nowMs - approvingAtMs < APPROVING_LOCK_MS;
 }
 
-/** 運営メモの文字数上限（§11） */
+/** 運営メモの文字数上限（§3.5） */
 export const MAX_OPERATOR_MEMO_LENGTH = 1000;
 
 /** 運営メモの入力を保存する値にする（前後の空白を除き、上限で切る。空なら null）。文字列でなければ undefined（不正な依頼） */

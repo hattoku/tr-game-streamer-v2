@@ -75,7 +75,7 @@ export function WorkflowDecisionNote({
   );
 }
 
-/** 運営メモ（§11、1,000文字上限） */
+/** 運営メモ（審査ワークフロー仕様書 §3.5、1,000文字上限） */
 export function WorkflowMemo({ workflowId, operatorMemo }: { workflowId: string; operatorMemo: string | null }) {
   const { toast } = useToast();
   const [draft, setDraft] = useState('');
@@ -169,7 +169,7 @@ export function WorkflowDecisionButtons({
 }
 
 /**
- * 承認・却下の確認ダイアログ（§9.1 承認はコメント任意・§9.2 却下は理由必須）。
+ * 承認・却下の確認ダイアログ（審査ワークフロー仕様書 §3.2。承認はコメント任意・却下は理由必須）。
  * `onSubmit` が例外を投げなければ閉じる（エラー表示は呼び出し側）。
  * `rejectReasons` を渡すと（再生リスト登録提案、審査ワークフロー仕様書 §4.2）、却下は定型理由の選択が必須になり、自由記述は任意の内部メモになる
  * （選んだ定型理由は提案者に見せる。自由記述は見せない）。

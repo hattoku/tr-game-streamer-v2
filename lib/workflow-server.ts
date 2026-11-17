@@ -1,4 +1,4 @@
-// 審査ワークフローの承認・却下で種別をまたいで使うサーバー側の処理（Admin SDK）。管理 審査ワークフロー仕様書 §9・§12。
+// 審査ワークフローの承認・却下で種別をまたいで使うサーバー側の処理（Admin SDK）。管理 審査ワークフロー仕様書 §3.2〜§3.4。
 // 種別ごとの処理（lib/workflow-decisions.ts から振り分ける）は、承認処理中の印の取り外しと、状態の確定＋通知をここで行う。
 import { FieldValue, type DocumentData, type DocumentReference } from 'firebase-admin/firestore';
 import { adminDb } from './firebase-admin';
