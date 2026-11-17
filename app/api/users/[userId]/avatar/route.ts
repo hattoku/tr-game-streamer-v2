@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireUser } from '@/lib/api-auth';
 import { adminDb } from '@/lib/firebase-admin';
 import { syncUserDenormalizedFields } from '@/lib/profile-server';
+import { isHiddenUser } from '@/lib/account-status-shared';
 import { profileImageFileNameFromUrl, profileImageUrl } from '@/lib/profile-image-shared';
 import {
   PROFILE_IMAGE_REQUEST_BYTES_MAX,
@@ -30,7 +31,7 @@ async function swapProfileImageUrl(userId: string, next: string | null): Promise
   const userRef = adminDb.collection('users').doc(userId);
   return adminDb.runTransaction(async (tx) => {
     const data = (await tx.get(userRef)).data();
-    if (!data || data.isBanned === true) return null;
+    if (!data || isHiddenUser(data)) return null;
     tx.update(userRef, { profileImageUrl: next });
     return { previous: data.profileImageUrl ?? null };
   });

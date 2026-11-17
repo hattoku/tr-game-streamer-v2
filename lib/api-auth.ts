@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { adminAuth } from './firebase-admin';
+import { adminAuth, adminDb } from './firebase-admin';
+import { accountStatusOf } from './account-status-shared';
 
 const ADMIN_ROLES = new Set(['owner', 'operator']);
 
@@ -18,6 +19,19 @@ async function verifyBearerToken(
   } catch {
     return { errorResponse: NextResponse.json({ error: 'invalid token' }, { status: 401 }) };
   }
+}
+
+/**
+ * 退会中のユーザーを締め出す（2026-11-17。退会はアカウントを残してログインできなくする方式のため、
+ * トークンが残っていてもログインが要る API は使わせない）。users が無いアカウント（作成直後）は通す。
+ * 管理者（owner/operator）は退会させられないため調べない
+ */
+async function rejectWithdrawn(uid: string): Promise<NextResponse | null> {
+  const data = (await adminDb.collection('users').doc(uid).get()).data();
+  if (accountStatusOf(data) === 'withdrawn') {
+    return NextResponse.json({ error: 'account_withdrawn' }, { status: 403 });
+  }
+  return null;
 }
 
 /**
@@ -47,6 +61,19 @@ export async function requireUser(
 ): Promise<{ uid: string } | { errorResponse: NextResponse }> {
   const verified = await verifyBearerToken(request);
   if ('errorResponse' in verified) return verified;
+  const withdrawn = await rejectWithdrawn(verified.uid);
+  if (withdrawn) return { errorResponse: withdrawn };
+  return { uid: verified.uid };
+}
+
+/**
+ * トークンの検証だけ行い、退会中でも通す。退会中の本人が利用を再開する API（/api/account/resume）専用
+ */
+export async function requireSignedInIncludingWithdrawn(
+  request: NextRequest,
+): Promise<{ uid: string } | { errorResponse: NextResponse }> {
+  const verified = await verifyBearerToken(request);
+  if ('errorResponse' in verified) return verified;
   return { uid: verified.uid };
 }
 
@@ -56,7 +83,12 @@ export async function requireUserWithRole(
 ): Promise<{ uid: string; isAdmin: boolean } | { errorResponse: NextResponse }> {
   const verified = await verifyBearerToken(request);
   if ('errorResponse' in verified) return verified;
-  return { uid: verified.uid, isAdmin: typeof verified.role === 'string' && ADMIN_ROLES.has(verified.role) };
+  const isAdmin = typeof verified.role === 'string' && ADMIN_ROLES.has(verified.role);
+  if (!isAdmin) {
+    const withdrawn = await rejectWithdrawn(verified.uid);
+    if (withdrawn) return { errorResponse: withdrawn };
+  }
+  return { uid: verified.uid, isAdmin };
 }
 
 /**

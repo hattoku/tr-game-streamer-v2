@@ -13,8 +13,11 @@
  *
  * メールアドレス変更（§4.3）は 2026-11-17 に追加（「アカウント」カード内。モーダルは components/settings/EmailChangeModal.tsx）。
  *
+ * 退会（§8）は 2026-11-17 に追加。アカウントを残してログインできなくする方式（物理削除はしない。モーダルは
+ * components/settings/WithdrawModal.tsx）。管理者・テスト用会員は退会できない。
+ *
  * 入れなかったもの（未解決事項・後続フェーズへ）: パスワード・パスキー変更（§4.4・§4.5）、
- * プッシュ通知の許可状態・種別トグル（§6、FCM基盤が未実装）、退会（§8、削除ポリシー未設計）。
+ * プッシュ通知の許可状態・種別トグル（§6、FCM基盤が未実装）。
  * お問い合わせ導線（§9）はフェーズ7ステップ7-3-1で /contact と同時に追加した。
  */
 'use client';
@@ -27,6 +30,7 @@ import { auth, db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button, Card, CardDivider, CardTitle, Checkbox, LinkButton, SectionHeading, Skeleton, SkeletonText, useToast } from '@/components/ui';
 import { EmailChangeModal } from '@/components/settings/EmailChangeModal';
+import { WithdrawModal } from '@/components/settings/WithdrawModal';
 
 interface SettingsFields {
   isContinuousPlayEnabled: boolean;
@@ -41,13 +45,16 @@ interface SettingsFields {
 const PRIVACY_KEYS: ReadonlySet<keyof SettingsFields> = new Set(['isMylistPublic', 'isReviewHistoryPublic']);
 
 export default function SettingsPage() {
-  const { user, loading } = useAuth();
+  const { user, role, loading } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
 
   const [fields, setFields] = useState<SettingsFields | null>(null);
   const [signingOut, setSigningOut] = useState(false);
   const [emailModalOpen, setEmailModalOpen] = useState(false);
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
+  /** テスト用会員は退会できない（管理 ユーザー管理仕様書 §5.3） */
+  const [isTestUser, setIsTestUser] = useState(false);
   /** users/{uid}.email（ミラー）。Auth のアドレスとずれていれば合わせる（§4.3。変更は確認メールのリンクで完了するため） */
   const [mirroredEmail, setMirroredEmail] = useState<string | null | undefined>(undefined);
 
@@ -61,6 +68,7 @@ export default function SettingsPage() {
     return onSnapshot(doc(db, 'users', user.uid), (snap) => {
       const data = snap.data();
       setMirroredEmail(typeof data?.email === 'string' ? data.email : null);
+      setIsTestUser(data?.isTestUser === true);
       setFields({
         isContinuousPlayEnabled: typeof data?.isContinuousPlayEnabled === 'boolean' ? data.isContinuousPlayEnabled : true,
         hideUpcomingThumbnails: data?.hideUpcomingThumbnails === true,
@@ -209,6 +217,23 @@ export default function SettingsPage() {
             ログアウト
           </Button>
         </Card>
+
+        {/* 退会（§8）。一般ユーザーだけ。テスト用会員は押せない */}
+        {role === 'user' && (
+          <Card>
+            <CardTitle className="mb-4">退会</CardTitle>
+            <p className="mb-3 text-md text-text-muted">
+              退会すると、このアカウントではログインできなくなります。データは消えないので、同じメールアドレスとパスワードでログインすれば利用を再開できます
+            </p>
+            <div>
+              <Button variant="secondary" size="sm" onClick={() => setWithdrawOpen(true)} disabled={isTestUser}>
+                退会する
+              </Button>
+            </div>
+            {isTestUser && <p className="mt-2 text-md text-text-muted">テスト用会員は退会できません</p>}
+            <WithdrawModal open={withdrawOpen} onOpenChange={setWithdrawOpen} user={user} />
+          </Card>
+        )}
 
         {/* お問い合わせ導線（§9） */}
         <Card>

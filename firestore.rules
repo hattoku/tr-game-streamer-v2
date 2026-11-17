@@ -42,6 +42,15 @@ service cloud.firestore {
       return role() == 'owner' || role() == 'operator';
     }
 
+    // 退会中でない（2026-11-17。退会はアカウントを残してログインできなくする方式のため、トークンが残っていても
+    // 本人のデータを書かせない）。users が無いアカウント（作成直後）は利用中として扱う。読み取りは1回分かかる
+    function isActiveAccount() {
+      return isSignedIn() && (
+        !exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('accountStatus', 'active') != 'withdrawn'
+      );
+    }
+
     function onlyChangedKeys(allowed) {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowed);
     }
@@ -57,14 +66,16 @@ service cloud.firestore {
         && request.resource.data.role == 'user'
         && request.resource.data.isAI == false
         && request.resource.data.isBanned == false
+        && !('accountStatus' in request.resource.data)
         // アイコンは API だけが書く（update と同じ。削除して作り直す抜け道を塞ぐ）
         && !('profileImageUrl' in request.resource.data);
 
       // 本人はプロフィール・設定系フィールドのみ変更可。role/BAN関連/集計値は管理者のみ変更可。
       // profileImageUrl（アイコン）は API（PUT/DELETE /api/users/{uid}/avatar）だけが書く。任意の外部 URL を
       // 入れられないよう本人にも直接は書かせない（ページ 設定 プロフィール仕様書 §9.5）。
+      // accountStatus・withdrawn*（退会）は API（Admin SDK）だけが書く。退会中の本人は書けない
       allow update: if isAdmin()
-        || (isSelf(userId) && onlyChangedKeys([
+        || (isSelf(userId) && isActiveAccount() && onlyChangedKeys([
               'displayName', 'bio', 'fcmTokens',
               'isMylistPublic', 'isReviewHistoryPublic',
               'showNewArrivalNotification', 'isContinuousPlayEnabled', 'lastLoginAt',
@@ -143,12 +154,13 @@ service cloud.firestore {
     match /reviews/{reviewId} {
       allow read: if true;
 
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow create: if isActiveAccount() && request.resource.data.userId == request.auth.uid
+        && !('isAuthorWithdrawn' in request.resource.data);
 
       // 本人は評価・コメント等のみ変更可。集計値（helpfulCount/trustScore等）は
       // Cloud Functions（Admin SDK）が算出するため本人でも変更不可。
       allow update: if isAdmin()
-        || (isSelf(resource.data.userId) && onlyChangedKeys([
+        || (isSelf(resource.data.userId) && isActiveAccount() && onlyChangedKeys([
               'starRating', 'watchStatus', 'comment', 'hasSpoiler',
               'lastOpenedEpisode', 'updatedAt'
             ]));
@@ -161,7 +173,7 @@ service cloud.firestore {
     // ---------------------------------------------------------------------
     match /helpful_votes/{voteId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow create: if isActiveAccount() && request.resource.data.userId == request.auth.uid;
       allow update: if false;
       allow delete: if isSelf(resource.data.userId) || isAdmin();
     }
@@ -170,18 +182,21 @@ service cloud.firestore {
     // mylist / watch_progress / watch_history — 個人データ（本人のみRW）
     // ---------------------------------------------------------------------
     match /mylist/{mylistId} {
-      allow read, update, delete: if isSelf(resource.data.userId) || isAdmin();
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow read, delete: if isSelf(resource.data.userId) || isAdmin();
+      allow update: if (isSelf(resource.data.userId) && isActiveAccount()) || isAdmin();
+      allow create: if isActiveAccount() && request.resource.data.userId == request.auth.uid;
     }
 
     match /watch_progress/{progressId} {
-      allow read, update, delete: if isSelf(resource.data.userId) || isAdmin();
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow read, delete: if isSelf(resource.data.userId) || isAdmin();
+      allow update: if (isSelf(resource.data.userId) && isActiveAccount()) || isAdmin();
+      allow create: if isActiveAccount() && request.resource.data.userId == request.auth.uid;
     }
 
     match /watch_history/{historyId} {
-      allow read, update, delete: if isSelf(resource.data.userId) || isAdmin();
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow read, delete: if isSelf(resource.data.userId) || isAdmin();
+      allow update: if (isSelf(resource.data.userId) && isActiveAccount()) || isAdmin();
+      allow create: if isActiveAccount() && request.resource.data.userId == request.auth.uid;
     }
 
     // ---------------------------------------------------------------------
@@ -258,6 +273,12 @@ service cloud.firestore {
     // ---------------------------------------------------------------------
     // 管理・システム系ログ・内部データ — 管理者は閲覧のみ、書き込みはCloud Functions（Admin SDK）限定
     // ---------------------------------------------------------------------
+    // admin_user_records — 運営用の記録（備考・管理者が退会させた理由）。管理者だけが読む。書き込みは API のみ
+    match /admin_user_records/{userId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
     match /operation_logs/{logId} {
       allow read: if isAdmin();
       allow write: if false;

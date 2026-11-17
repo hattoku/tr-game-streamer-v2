@@ -27,7 +27,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'own_review' }, { status: 403 });
   }
   // 通報で非表示のレビューには新規に投票できない（押下済みの取り消しは下で許可する）
-  const isHidden = review.isHidden === true;
+  // 投稿者が退会中のレビューも同じ扱い（他の人からは見えないため）
+  const isHidden = review.isHidden === true || review.isAuthorWithdrawn === true;
 
   const voteRef = adminDb.collection('helpful_votes').doc(`${uid}_${reviewId}`);
   const voteSnap = await voteRef.get();

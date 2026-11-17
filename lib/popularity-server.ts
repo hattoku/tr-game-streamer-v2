@@ -143,8 +143,8 @@ export async function recomputeChannelPopularity(now = new Date()): Promise<Popu
     const channelId = channelOfPlaylist.get(str(data.playlistId) ?? '');
     if (userId && channelId) addPerson(mylist, channelId, userId, millis(data.createdAt) ?? 0);
   });
-  await readAll(adminDb.collection('reviews'), ['userId', 'playlistId', 'postedAt', 'isHidden'], (data) => {
-    if (data.isHidden === true) return;
+  await readAll(adminDb.collection('reviews'), ['userId', 'playlistId', 'postedAt', 'isHidden', 'isAuthorWithdrawn'], (data) => {
+    if (data.isHidden === true || data.isAuthorWithdrawn === true) return;
     const userId = str(data.userId);
     const channelId = channelOfPlaylist.get(str(data.playlistId) ?? '');
     if (userId && channelId) addPerson(reviews, channelId, userId, millis(data.postedAt) ?? 0);
