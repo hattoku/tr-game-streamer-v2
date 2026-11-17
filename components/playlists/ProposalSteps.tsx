@@ -13,6 +13,8 @@ import { cn } from '@/components/ui/cn';
 const STEPS = ['提案する', '運営が確認', 'さがすに公開'] as const;
 /** チャンネル申請のステップ表示（ページ チャンネルを申請する 仕様書 §4） */
 export const CHANNEL_APPLICATION_STEPS = ['申請する', '運営が確認', 'チャンネルに公開'] as const;
+/** メールアドレス変更のステップ表示（ページ 設定 仕様書 §4.3） */
+export const EMAIL_CHANGE_STEPS = ['申し込む', 'メールのリンクを開く', 'ログインし直す'] as const;
 
 type StepState = 'done' | 'current' | 'rejected' | 'upcoming';
 
@@ -21,11 +23,16 @@ export function ProposalSteps({
   rejected = false,
   className,
   labels = STEPS,
+  ariaLabel = '提案から公開までの流れ',
+  testId = 'proposal-steps',
 }: {
   current: 1 | 2 | 3;
   rejected?: boolean;
   className?: string;
   labels?: readonly [string, string, string];
+  /** 一覧の読み上げ名（メールアドレス変更など、提案以外で使うとき） */
+  ariaLabel?: string;
+  testId?: string;
 }) {
   const finished = !rejected && current === 3;
   const stateOf = (step: number): StepState => {
@@ -40,7 +47,7 @@ export function ProposalSteps({
   };
 
   return (
-    <ol className={cn('relative grid grid-cols-3', className)} aria-label="提案から公開までの流れ" data-testid="proposal-steps">
+    <ol className={cn('relative grid grid-cols-3', className)} aria-label={ariaLabel} data-testid={testId}>
       {/* 丸の中心どうしをつなぐ線（列の中央 1/6〜5/6）。丸の後ろに敷く */}
       <span aria-hidden className="pointer-events-none absolute inset-x-[16.667%] top-[13px] flex h-0.5">
         <span className={cn('h-full flex-1 rounded-l-full', segmentClass(1))} />
