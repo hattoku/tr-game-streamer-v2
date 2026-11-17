@@ -1,6 +1,6 @@
 # プレミテ Firestore データモデル設計書
 
-**バージョン**: v3.0  
+**バージョン**: v3.1  
 **作成日**: 2026年3月30日（更新）  
 **対象**: 開発チーム  
 **関連ドキュメント**: プレミテ企画書 / プレミテ_技術スタック仕様書 / 各機能仕様書
@@ -195,7 +195,7 @@ Firestoreはテーブル結合（JOIN）ができないため、一覧表示や�
 | `thumbnailUrl` | string | ✅ | YouTubeから取得したサムネイルURL |
 | `channelId` | string | ✅ | 紐づくチャンネルのドキュメントID |
 | `channelName` | string | ✅ | チャンネル名（denormalized） |
-| `channelIconUrl` | string | ✅ | チャンネルアイコンURL（denormalized） |
+| `channelIconUrl` | string | ✅ | チャンネルアイコンURL（denormalized。`channelName` とともに毎日の再取得で YouTube の今の値に合わせる。v3.1） |
 | `gameId` | string? | — | 紐づくゲームタイトルのドキュメントID。**null ＝ ゲーム未設定**（v1.28。収集画面の「ゲーム未設定で登録」で登録した再生リストなど。ゲームのページ・ジャンル別の一覧には出ない） |
 | `gameName` | string? | — | ゲームタイトル名（denormalized。ゲーム未設定は空文字） |
 | `gameHint` | string? | — | 未確定のゲーム名（v1.28。収集の `gameQuery` や承認時に入力した名前。マスタには入れない。再生リスト一覧のキーワード検索の対象で、あとの自動照合にも使う。無ければ null） |
@@ -268,14 +268,14 @@ YouTubeチャンネルの情報。
 | フィールド | 型 | 必須 | 説明 |
 |-----------|-----|:---:|------|
 | `youtubeChannelId` | string | ✅ | YouTubeチャンネルID（ドキュメントIDと同一） |
-| `name` | string | ✅ | チャンネル名 |
-| `iconUrl` | string | ✅ | チャンネルアイコンURL |
+| `name` | string | ✅ | チャンネル名（毎日の再取得で YouTube の今の値に合わせる。YouTube定期取得仕様書 §4.4、v3.1） |
+| `iconUrl` | string | ✅ | チャンネルアイコンURL（同上） |
 | `description` | string? | — | チャンネル説明文（AI生成または手入力） |
 | `isAiGeneratedDescription` | boolean | ✅ | 説明文がAI生成かどうかのフラグ |
-| `subscriberCount` | number? | — | 登録者数（チャンネル更新バッチで週次更新）。YouTube API 規約（III.E.4.b）により30日を超えて古い値を持たない |
+| `subscriberCount` | number? | — | 登録者数（今は書き込む処理が無い。週次の「チャンネル更新バッチ」は作られていない）。YouTube API 規約（III.E.4.b）により30日を超えて古い値を持たない |
 | `playlistCount` | number | ✅ | プレミテに登録された再生リスト数（集計キャッシュ）。v2.0 から掲載中（`listed`）だけを数える |
 | `registeredAt` | Timestamp | ✅ | プレミテへの登録日時 |
-| `lastFetchedAt` | Timestamp? | — | チャンネル更新バッチによる最終更新日時 |
+| `lastFetchedAt` | Timestamp? | — | チャンネル更新バッチによる最終更新日時（このバッチは作られておらず、今は書き込まない。名前・アイコンの取り直しでも更新しない） |
 | `popularity` | map? | — | 人気の集計（v2.8・段階5。共通 人気のチャンネル 集計 仕様書 §4）。`{ mylistUsers, reviewUsers, viewerUsers, recentMylistUsers, recentReviewUsers, recentViewerUsers, computedAt }`。掲載中の再生リストについて、同じ人を1人として数えた人数（`recent*` は直近30日）。点数は保存せず読むたびに計算する。無ければ全部0。書き込みは集計の API（Admin SDK）だけ |
 
 ---
@@ -721,6 +721,8 @@ YouTube定期取得バッチの実行結果ログ。
 | `autoListedCount` | number? | — | 自動で掲載した（動画一覧を取って `listed` にした）再生リストの数（v2.5） |
 | `purgedCount` | number? | — | 30日の消し込みで消した・YouTube 由来の項目を消した再生リストの数（v2.5） |
 | `sweepErrors` | map[]? | — | 巡回に失敗したチャンネル `{ explorationChannelId, message }`（v2.5） |
+| `channelProfiles` | map? | — | 配信者の名前・アイコンの取り直しの結果 `{ checked, changed, notFound, updatedDocs }`（`video_update`、v3.1。YouTube定期取得仕様書 §4.4）。YouTube のエラーが出ても、取れた分の結果を入れる |
+| `channelProfileError` | string? | — | 配信者の名前・アイコンの取り直しで出た YouTube のエラーの理由（最初の1件。出なければ null。v3.1） |
 | `updatedChannelCount` | number? | — | 人気の数字を書き直したチャンネルの数（`channel_popularity`、v2.8） |
 | `newViewerCount` | number? | — | 新しく作った `playlist_viewers` の数（`channel_popularity`、v2.8） |
 
@@ -1158,4 +1160,5 @@ ai_operators ──── (1) users
 | v2.9 | 2026-11-13 | §3.30 `notifications` に `channelName`・`channelIconUrl`・`newVideoTitles`・`newVideoCount` を追加（ユーザー通知機能仕様書 v1.4）。`videos.publishedAt` を動画の投稿日時に直し（これまでは再生リストに追加された日時だった）、`videos.addedToPlaylistAt` を追加 |
 | v2.10 | 2026-11-16 | §3.1 `users.profileImageUrl` をアイコンのアップロード実装に合わせて定義（配信 API の相対 URL、本体は Storage の `avatars/{uid}/`、書き込みは API のみ）。§7.1 退会時に `avatars/{uid}/` も消す（ページ 設定 プロフィール仕様書 v1.11） |
 | v3.0 | 2026-11-17 | `workflows` に詳細ページからの変更の提案（`channel_report` を追加、`game_title_edit`・`playlist_report` の `reportData` を定義）。`step2History` に `approveAction`・`gameId`・`gameName` |
+| v3.1 | 2026-11-17 | §3.21 `batch_logs` に `channelProfiles`・`channelProfileError` を追加。`channels.name`・`channels.iconUrl`、`exploration_channels.channelTitle`・`channelIconUrl`、`playlists.channelName`・`channelIconUrl` は毎日の再取得で YouTube の今の値に合わせる（YouTube定期取得仕様書 v1.11 §4.4） |
 | v2.8 | 2026-11-08 | 段階5 人気のチャンネル。§3.4 `channels.popularity`、§3.32 `featuredOrder` をピン留めの順に、§3.21 `batch_logs` に `channel_popularity`、§3.35 `playlist_viewers`・§3.36 `batch_state` を追加。§7.1 退会時の削除に `playlist_viewers` を追加（共通 人気のチャンネル 集計 仕様書） |

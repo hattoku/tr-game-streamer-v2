@@ -5,6 +5,7 @@
  * この画面の文言は仕様書どおり「動画数: N本」とし、一覧カードの「N話」（トークン仕様書 §6.5）は使わない。
  */
 import { Tag } from '@/components/ui/Tag';
+import { FallbackImage } from '@/components/ui/FallbackImage';
 
 interface PlaylistSummaryProps {
   title: string;
@@ -31,14 +32,7 @@ export function PlaylistSummary({ title, thumbnailUrl, channelName, channelIconU
           {title}
         </p>
         <div className="flex items-center gap-2 text-base text-text-secondary">
-          {channelIconUrl ? (
-            // チャンネルアイコン（yt3.ggpht.com）は localhost 等の Referer 付きリクエストに 429 を返すことがあり、
-            // 開発環境でプレビュー時にリンク切れになるため Referer を送らない（他のチャンネルアイコン表示箇所も同様）
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={channelIconUrl} alt="" referrerPolicy="no-referrer" className="size-6 shrink-0 rounded-full bg-bg-btn object-cover" />
-          ) : (
-            <span className="block size-6 shrink-0 rounded-full bg-bg-btn" />
-          )}
+          <FallbackImage src={channelIconUrl} className="size-6 shrink-0 rounded-full bg-bg-btn object-cover" fallback={<span className="block size-6 shrink-0 rounded-full bg-bg-btn" />} />
           <span className="truncate">{channelName}</span>
         </div>
         {gameName && (

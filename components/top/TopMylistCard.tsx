@@ -11,6 +11,7 @@ import { EpisodeCount, NewBadge } from '@/components/ui/Badge';
 import { StatusChip } from '@/components/ui/Chip';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import type { MylistEntry } from '@/lib/mylist-entries';
+import { FallbackImage } from '@/components/ui/FallbackImage';
 
 export function TopMylistCard({ entry, className }: { entry: MylistEntry; className?: string }) {
   const href = `/playlists/${entry.playlistId}`;
@@ -45,13 +46,7 @@ export function TopMylistCard({ entry, className }: { entry: MylistEntry; classN
           </p>
           {p && (
             <div className="flex items-center gap-2">
-              {p.channelIconUrl ? (
-                // referrerPolicy: yt3.ggpht.com の Referer 制限対策（PlaylistSummary 参照）
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={p.channelIconUrl} alt="" referrerPolicy="no-referrer" className="size-5 shrink-0 rounded-full" loading="lazy" />
-              ) : (
-                <span className="size-5 shrink-0 rounded-full bg-bg-btn" />
-              )}
+              <FallbackImage src={p.channelIconUrl} className="size-5 shrink-0 rounded-full" loading="lazy" fallback={<span className="size-5 shrink-0 rounded-full bg-bg-btn" />} />
               <span className="truncate text-md text-text-tertiary">{p.channelName}</span>
             </div>
           )}

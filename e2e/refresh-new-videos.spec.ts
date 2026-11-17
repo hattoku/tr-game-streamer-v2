@@ -174,6 +174,62 @@ test.describe('再取得', () => {
     }
   });
 
+  test('§4.4・§4.5 配信者の名前・アイコンが古いと、読めないアイコンは代わりの表示になり、再取得で YouTube の今の値に戻る', async ({ adminPage }) => {
+    test.setTimeout(240_000);
+    // stg の実在のチャンネル（YouTube の今の値で保存されているもの）を、古い名前・読めないアイコンにずらす
+    const channels = await e2eDb().collection('channels').get();
+    let channel: QueryDocumentSnapshot | null = null;
+    let playlist: QueryDocumentSnapshot | null = null;
+    for (const c of channels.docs) {
+      if (c.id.startsWith('UCE2E') || !c.data().iconUrl) continue;
+      const pl = await e2eDb().collection('playlists').where('channelId', '==', c.id).where('isPublic', '==', true).limit(1).get();
+      if (pl.empty || pl.docs[0].data().channelIconUrl !== c.data().iconUrl) continue;
+      channel = c;
+      playlist = pl.docs[0];
+      break;
+    }
+    if (!channel || !playlist) throw new Error('アイコンのある公開再生リストを持つチャンネルが stg にありません');
+    const saved = { name: channel.data().name as string, iconUrl: channel.data().iconUrl as string };
+    const savedPlaylist = { channelName: playlist.data().channelName as string, channelIconUrl: playlist.data().channelIconUrl as string };
+    const oldName = uniqueText('古い配信者名');
+    const brokenIcon = 'https://yt3.ggpht.com/e2e-replaced-icon-does-not-exist=s800-c-k-c0x00ffffff-no-rj';
+    await channel.ref.update({ name: oldName, iconUrl: brokenIcon });
+    await playlist.ref.update({ channelName: oldName, channelIconUrl: brokenIcon });
+
+    try {
+      // §4.5: 読めないアイコンは壊れた画像にせず、アイコンが無いときの表示にする
+      await adminPage.goto(`/channels/${encodeURIComponent(channel.id)}`);
+      await expect(adminPage.getByRole('heading', { level: 1, name: oldName })).toBeVisible();
+      await expect(adminPage.locator(`img[src="${brokenIcon}"]`)).toHaveCount(0);
+      await adminPage.goto(`/playlists/${playlist.id}`);
+      await expect(adminPage.getByText(oldName).first()).toBeVisible();
+      await expect(adminPage.locator(`img[src="${brokenIcon}"]`)).toHaveCount(0);
+
+      // §4.4: 再取得の最初に YouTube の今の名前・アイコンに戻る
+      const body = await runRefresh(adminPage);
+      expect(body.channelProfileError).toBeNull();
+      expect(body.channelProfiles.changed).toBeGreaterThanOrEqual(1);
+      expect(body.channelProfiles.updatedDocs).toBeGreaterThanOrEqual(2);
+      const after = (await channel.ref.get()).data()!;
+      expect(after.name).toBe(saved.name);
+      expect(after.iconUrl).toBe(saved.iconUrl);
+      const afterPlaylist = (await playlist.ref.get()).data()!;
+      expect(afterPlaylist.channelName).toBe(saved.name);
+      expect(afterPlaylist.channelIconUrl).toBe(saved.iconUrl);
+      expect((await latestBatchLog()).channelProfiles).toEqual(body.channelProfiles);
+
+      // 画面も今のアイコンに戻る
+      await adminPage.goto(`/channels/${encodeURIComponent(channel.id)}`);
+      await expect(adminPage.getByRole('heading', { level: 1, name: saved.name })).toBeVisible();
+      await expect(adminPage.locator(`img[src="${saved.iconUrl}"]`).first()).toBeVisible();
+    } finally {
+      const current = (await channel.ref.get()).data()!;
+      if (current.name === oldName || current.iconUrl === brokenIcon) await channel.ref.update(saved);
+      const currentPlaylist = (await playlist.ref.get()).data()!;
+      if (currentPlaylist.channelName === oldName || currentPlaylist.channelIconUrl === brokenIcon) await playlist.ref.update(savedPlaylist);
+    }
+  });
+
   test('§10.11 「自動で掲載」のチャンネルの掲載予定（auto_pending）は、動画一覧が取得済みなら毎日の再取得で掲載になる', async ({ adminPage }) => {
     test.setTimeout(240_000);
     const channelRef = e2eDb().collection('exploration_channels').doc();

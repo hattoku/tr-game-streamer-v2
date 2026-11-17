@@ -14,6 +14,7 @@ import { ChevronRightIcon, CommentIcon, InventoryIcon, PlayIcon, StarIcon, UserI
 import { cn } from '@/components/ui/cn';
 import { formatPublishedDate } from '@/components/playlists/VideoList';
 import type { ChannelListItem } from '@/lib/catalog-shared';
+import { FallbackImage } from '@/components/ui/FallbackImage';
 
 export type ChannelCardData = ChannelListItem;
 
@@ -29,14 +30,16 @@ export function ChannelListCard({ channel }: { channel: ChannelCardData }) {
       <Link href={channelHref} className="group flex gap-3">
         {/* アイコンは仕様どおり正方形（角丸）。yt3.ggpht.com の Referer 制限対策で no-referrer */}
         <div className="size-[72px] shrink-0 overflow-hidden rounded-[10px] bg-bg-btn">
-          {channel.iconUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={channel.iconUrl} alt="" referrerPolicy="no-referrer" className="size-full object-cover" loading="lazy" />
-          ) : (
-            <div className="flex size-full items-center justify-center text-text-muted">
-              <UserIcon size={28} />
-            </div>
-          )}
+          <FallbackImage
+            src={channel.iconUrl}
+            className="size-full object-cover"
+            loading="lazy"
+            fallback={
+              <div className="flex size-full items-center justify-center text-text-muted">
+                <UserIcon size={28} />
+              </div>
+            }
+          />
         </div>
         <div className="flex min-w-0 flex-1 flex-col justify-center gap-2">
           <p className="truncate text-lg font-medium text-text-primary group-hover:text-text-secondary">{channel.name}</p>
