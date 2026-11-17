@@ -172,7 +172,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
   const userRef = adminDb.collection('users').doc(userId);
   const userData = (await userRef.get()).data();
-  if (!userData || userData.isBanned === true) return NextResponse.json({ error: 'not_found' }, { status: 404 });
+  if (!userData || isHiddenUser(userData)) return NextResponse.json({ error: 'not_found' }, { status: 404 });
   await userRef.update({ displayName, bio });
 
   if (userData.displayName !== displayName) {

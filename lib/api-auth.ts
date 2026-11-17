@@ -61,8 +61,10 @@ export async function requireUser(
 ): Promise<{ uid: string } | { errorResponse: NextResponse }> {
   const verified = await verifyBearerToken(request);
   if ('errorResponse' in verified) return verified;
-  const withdrawn = await rejectWithdrawn(verified.uid);
-  if (withdrawn) return { errorResponse: withdrawn };
+  if (typeof verified.role !== 'string' || !ADMIN_ROLES.has(verified.role)) {
+    const withdrawn = await rejectWithdrawn(verified.uid);
+    if (withdrawn) return { errorResponse: withdrawn };
+  }
   return { uid: verified.uid };
 }
 

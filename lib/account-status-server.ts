@@ -28,14 +28,16 @@ async function markReviewsAuthorWithdrawn(uid: string, withdrawn: boolean): Prom
     });
   }
   await writer.close();
-  if (failed > 0) console.error(`[account-status] レビューの印の更新に ${failed} 件失敗 (uid=${uid})`);
   for (const playlistId of playlistIds) {
     try {
       await recalculatePlaylistScore(playlistId);
     } catch (e) {
       console.error(`[account-status] スコアの再計算に失敗 (playlistId=${playlistId})`, e);
+      failed += 1;
     }
   }
+  // 失敗したら API をエラーにする。もう一度同じ操作をすると、状態はそのままで印付けとスコアだけやり直す
+  if (failed > 0) throw new Error(`[account-status] レビューの印・スコアの更新に ${failed} 件失敗 (uid=${uid})`);
 }
 
 export interface WithdrawInput {
@@ -46,7 +48,7 @@ export interface WithdrawInput {
   adminReason?: string | null;
 }
 
-/** 退会させる。すでに退会中なら false */
+/** 退会させる。すでに退会中なら false（そのときもレビューの印付けはやり直す。前回途中で失敗した分を直すため） */
 export async function withdrawAccount(uid: string, input: WithdrawInput): Promise<boolean> {
   const userRef = adminDb.collection('users').doc(uid);
   const now = new Date();
@@ -68,14 +70,17 @@ export async function withdrawAccount(uid: string, input: WithdrawInput): Promis
     }
     return true;
   });
-  if (!changed) return false;
+  if (!changed) {
+    if (accountStatusOf((await userRef.get()).data()) === 'withdrawn') await markReviewsAuthorWithdrawn(uid, true);
+    return false;
+  }
   // ログイン中の端末を締め出す（クライアントは users の購読でも気づく。次のトークン更新で切れる）
   await adminAuth.revokeRefreshTokens(uid).catch((e) => console.error('[account-status] トークンの失効に失敗', e));
   await markReviewsAuthorWithdrawn(uid, true);
   return true;
 }
 
-/** 退会を解除する（本人の再開・管理者の解除）。退会中でなければ false */
+/** 退会を解除する（本人の再開・管理者の解除）。退会中でなければ false（そのときもレビューの印外しはやり直す） */
 export async function restoreAccount(uid: string): Promise<boolean> {
   const userRef = adminDb.collection('users').doc(uid);
   const changed = await adminDb.runTransaction(async (tx) => {
@@ -91,7 +96,10 @@ export async function restoreAccount(uid: string): Promise<boolean> {
     tx.set(adminDb.collection(ADMIN_USER_RECORDS).doc(uid), { adminWithdrawReason: FieldValue.delete() }, { merge: true });
     return true;
   });
-  if (!changed) return false;
+  if (!changed) {
+    if (accountStatusOf((await userRef.get()).data()) === 'active') await markReviewsAuthorWithdrawn(uid, false);
+    return false;
+  }
   await markReviewsAuthorWithdrawn(uid, false);
   return true;
 }

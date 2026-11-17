@@ -389,7 +389,7 @@ YouTubeチャンネルの情報。
 | `commentScore` | number? | — | コメント有無による乗数（変数C。あり: `1.0` / なし: `0.5`。共通 信頼度スコアリングシステム仕様書 §3.3に準拠） |
 | `userDisplayName` | string | ✅ | 投稿者の表示名の非正規化コピー（投稿・更新時点のスナップショット）。`users`は本人・管理者以外読めないルールのため、レビュー一覧での表示にはこちらを参照する（HANDOFF.md未解決事項1の対応）。プロフィールで表示名を変更すると `PATCH /api/users/[userId]/profile` が本人の全レビュー分を新しい名前に揃える |
 | `userProfileImageUrl` | string? | — | 投稿者のプロフィール画像URLの非正規化コピー（同上。アイコンを替える・外すと `PUT`／`DELETE /api/users/[userId]/avatar` が本人の全レビュー分を揃える） |
-| `isAuthorWithdrawn` | boolean? | — | 投稿者が退会中（v3.3）。`true` のレビューは他の人の一覧・スコア・件数・人気の集計から除外する。`isHidden` とは別の印にし、再開・解除で外しても通報の非表示は戻らないようにする。書き込みは Admin SDK のみ |
+| `isAuthorWithdrawn` | boolean? | — | 投稿者が退会中（v3.3）。`true` のレビューは他の人の一覧・スコア・件数・人気の集計から除外する。`isHidden` とは別の印にし、再開・解除で外しても通報の非表示は戻らないようにする。書き込みは Admin SDK のみ。`reviews` はルールで誰でも読めるため、隠すのは表示側（レビュー一覧は取得後に除外、プロフィールは API が 404）で行う（`isHidden` と同じ。一般公開前のルールでの読み取り制限は HANDOFF.md 未解決事項16） |
 | `isHidden` | boolean? | — | 通報承認による非表示（論理削除）フラグ。`true` のレビューは一覧・集計・スコアから除外する（管理 審査ワークフロー仕様書 §4.1）。未設定は `false` 扱い。書き込みは Admin SDK のみ（本人のクライアント更新の許可フィールドに含めない） |
 | `hiddenAt` | Timestamp? | — | 非表示にした日時 |
 | `hiddenByWorkflowId` | string? | — | 非表示の根拠となった `workflows` のドキュメントID |

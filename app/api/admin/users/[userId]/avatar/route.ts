@@ -17,7 +17,7 @@ export async function DELETE(request: NextRequest, { params }: Params) {
   const userRef = adminDb.collection('users').doc(userId);
   const result = await adminDb.runTransaction(async (tx) => {
     const data = (await tx.get(userRef)).data();
-    if (!data) return null;
+    if (!data || data.isAI === true) return null;
     tx.update(userRef, { profileImageUrl: null });
     return { previous: data.profileImageUrl ?? null, displayName: (data.displayName as string | undefined) ?? null };
   });
