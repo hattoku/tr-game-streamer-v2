@@ -1,5 +1,9 @@
 # 操作ログ
 
+## [2026-11-17] ingest | 配信者の名前・アイコンを毎日の再取得で取り直す（PR #59）
+`refreshNewVideos` の最初に `lib/channel-profile-refresh.ts` を追加し、`channels`・`exploration_channels`・`playlists` のチャンネルIDを `channels.list` で50件ずつ確かめ、違う名前・アイコンだけ書き換える（ユーザー決定: 毎日の巡回に組み込む）。読めないアイコンは `FallbackImage` で代わりの表示に。YouTube定期取得仕様書 v1.11。
+→ [[2026-11-17-channel-profile-refresh]]
+
 ## [2026-11-17] ingest | 設定ページからメールアドレスを変更する（PR #58）
 設定の「アカウント」カードに現在のメールアドレスと「変更する」。モーダルで新しいアドレスと現在のパスワードを入れ、再認証→`POST /api/account/email/check`（列挙保護のためサーバーで使用中か確認）→`verifyBeforeUpdateEmail`。`/api/account/email/sync` で `users.email` を Auth に合わせる。ページ 設定 仕様書 v1.10 §4.3。
 → [[2026-11-17-email-change]]

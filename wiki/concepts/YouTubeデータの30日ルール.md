@@ -17,6 +17,7 @@ III.E.4.b で、登録者数などの統計値も30日を超えて持てない�
 - ユーザーの記録（`mylist`・`reviews`・`watch_history`・`watch_progress`）がある再生リストは消さない（`hasUserRecords`）
 - 掲載停止を申し出たチャンネル（`opt_out`）は YouTube 由来の項目を消す
 - 全件の取り直しでは、再生リストから消えた動画のドキュメントも消す（[[2026-11-14-unavailable-videos]]）
+- 配信者の名前・アイコンは毎日の再取得の最初に `channels.list` で取り直し、違うものだけ書き換える（`lib/channel-profile-refresh.ts`、[[2026-11-17-channel-profile-refresh]]）
 
 ## 新しく YouTube のデータを保存するとき
 
