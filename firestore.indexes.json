@@ -98,6 +98,14 @@
         { "fieldPath": "hasAttachments", "order": "ASCENDING" },
         { "fieldPath": "resolvedAt", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "notices",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "publishedAt", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

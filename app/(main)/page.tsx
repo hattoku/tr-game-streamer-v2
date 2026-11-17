@@ -2,6 +2,8 @@
  * TOPページ本実装（ページ top 仕様書。フェーズ6ステップ2）。
  * 未ログイン: ヒーロー（§4）→ 人気のチャンネル（§6A）→ 注目の再生リスト（§6）→ タグピックアップ（§8）
  * ログイン済み: マイリスト（§5）→ 人気のチャンネル（§6A）→ 注目の再生リスト（§6）→ 新着の再生リスト（§7）→ タグピックアップ（§8）
+ * どちらも一番上に重要なお知らせ（§3.1）、一番下に運営からのお知らせ（§8A）を出す（管理 お知らせ管理仕様書 v2.0 §7.1・§7.2）。
+ * お知らせは直したらすぐ反映させたいので、再生リストのカタログとは別の API（/api/notices/*）から各部品が自分で読む。
  * 人気のチャンネル（リブランディング段階5）は再生リストのセクションと同じ応答（`fetchTopCatalog` の `popularChannels`）で受け取る。
  * 各セクションの再生リスト（注目・新着・タグピックアップ）はサーバー側で選んだ分だけ受け取る（`fetchTopCatalog`、
  * リブランディング段階7・共通 一覧のサーバー側検索 仕様書 §3.4。各カルーセル最大20件）。ジャンルマスタと合わせて1回だけ取得し、
@@ -26,6 +28,8 @@ import { FeaturedSection } from '@/components/top/FeaturedSection';
 import { NewArrivalsSection } from '@/components/top/NewArrivalsSection';
 import { PopularChannelsSection } from '@/components/top/PopularChannelsSection';
 import { TagPickupSections } from '@/components/top/TagPickupSections';
+import { ImportantNoticesArea } from '@/components/top/ImportantNoticesArea';
+import { NoticesSection } from '@/components/top/NoticesSection';
 import { fetchCompletedPlaylistIds } from '@/lib/mylist-entries';
 import { Skeleton } from '@/components/ui/Skeleton';
 
@@ -96,6 +100,7 @@ export default function HomePage() {
   // （MylistSectionが同じ位置にマウントされ続け、取得完了時に再取得が走らないよう子の並びを固定している）
   return (
     <div className="flex flex-col gap-10">
+      <ImportantNoticesArea />
       {!user && <HeroSection />}
       {user && <MylistSection />}
       {sections && genres ? (
@@ -117,6 +122,8 @@ export default function HomePage() {
       ) : (
         <SectionSkeleton />
       )}
+      {/* お知らせはカタログの取得と別（カタログが遅れても・失敗しても出す） */}
+      <NoticesSection />
     </div>
   );
 }

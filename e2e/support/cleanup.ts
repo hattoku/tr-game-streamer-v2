@@ -5,6 +5,7 @@
 // あわせて、再生リストタイトルが E2E_MARK で始まる
 // collection_candidates と、タイトルが E2E_MARK で始まり再生リストの無い games、新着取得のテストが作った
 // ID が PLE2E で始まる playlists を削除する。
+// 運営からのお知らせのテスト（e2e/notices.spec.ts）が作った、タイトルが E2E_MARK で始まる notices と、そのベル通知・画像も消す。
 // 認証は GOOGLE_APPLICATION_CREDENTIALS（stg 用サービスアカウント。roles/datastore.user）。接続先は stg 固定。
 import { applicationDefault, getApps, initializeApp } from 'firebase-admin/app';
 import { FieldPath, getFirestore } from 'firebase-admin/firestore';
@@ -61,7 +62,23 @@ async function cleanupCollectionData(): Promise<{ candidates: number; games: num
   const changeNotifications = (
     await Promise.all(changeProposals.map((d) => db().collection('notifications').where('workflowId', '==', d.id).get()))
   ).flatMap((s) => s.docs);
+  // 運営からのお知らせのテスト（e2e/notices.spec.ts）が作った、タイトルが E2E_MARK で始まるお知らせと、会員それぞれに作ったベル通知
+  const notices = await startsWithMark('notices', 'title');
+  const noticeNotifications = (
+    await Promise.all(notices.docs.map((d) => db().collection('notifications').where('noticeId', '==', d.id).get()))
+  ).flatMap((s) => s.docs);
+  for (const n of notices.docs) {
+    const fileName = n.data().imageFileName;
+    if (typeof fileName !== 'string' || !fileName) continue;
+    await getStorage(app())
+      .bucket()
+      .file(`notices/${fileName}`)
+      .delete({ ignoreNotFound: true })
+      .catch((e: unknown) => console.warn(`[e2e] お知らせの画像を削除できませんでした（${fileName}）: ${String(e)}`));
+  }
   const refs = [
+    ...notices.docs,
+    ...noticeNotifications,
     ...candidates.docs,
     ...games,
     ...playlists,
