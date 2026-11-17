@@ -28,7 +28,7 @@ export function formatProfileDate(ms: number | null): string {
   return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
 }
 
-/** プロフィール編集（§9）。表示名を変えるとサーバー側で自分のレビュー・まとめの投稿者名・作成者名も揃える */
+/** プロフィール編集（§9）。表示名を変えるとサーバー側で自分のレビューの投稿者名も揃える */
 export async function updateProfile(userId: string, input: { displayName: string; bio: string }): Promise<{ displayName: string; bio: string | null }> {
   if (!auth.currentUser) throw new Error('not signed in');
   const res = await fetch(`/api/users/${encodeURIComponent(userId)}/profile`, {
