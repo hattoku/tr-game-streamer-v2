@@ -412,7 +412,7 @@ export function PlaylistProposePanel({
         </SectionHeading>
         {!isAdmin && (
           <Card className="mb-4">
-            <ProposalSteps current={2} hereLabel />
+            <ProposalSteps current={2} />
             <p className="mt-4 text-base text-text-secondary">
               ありがとうございます！今は運営の確認待ちです。確認が済むとさがすに表示されます。結果は通知と提案履歴でお知らせします。
             </p>
