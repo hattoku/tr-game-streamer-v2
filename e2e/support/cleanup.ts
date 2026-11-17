@@ -54,9 +54,26 @@ async function cleanupCollectionData(): Promise<{ candidates: number; games: num
   // プロフィールのレビュー履歴のテスト（e2e/profile-review-history.spec.ts）が作った架空の利用者（ID が e2e-prof- で始まる）とそのレビュー
   const profileUsers = await db().collection('users').where(FieldPath.documentId(), '>=', 'e2e-prof-').where(FieldPath.documentId(), '<', 'e2e-prof-\uf8ff').get();
   const profileReviews = await db().collection('reviews').where('userId', '>=', 'e2e-prof-').where('userId', '<', 'e2e-prof-\uf8ff').get();
+  // 詳細ページからの変更の提案のテスト（e2e/change-proposals.spec.ts）が作った、対象の名前が E2E_MARK で始まる提案と、その審査結果の通知
+  const changeProposals = (await db().collection('workflows').where('type', 'in', ['game_title_edit', 'channel_report', 'playlist_report']).get()).docs.filter((d) =>
+    String(d.data().reportData?.targetName ?? '').startsWith(E2E_MARK),
+  );
+  const changeNotifications = (
+    await Promise.all(changeProposals.map((d) => db().collection('notifications').where('workflowId', '==', d.id).get()))
+  ).flatMap((s) => s.docs);
   const refs = [
-    ...candidates.docs, ...games, ...playlists, ...channels, ...exploration, ...applications, ...explorationChannels.docs, ...popularity,
-    ...profileUsers.docs, ...profileReviews.docs,
+    ...candidates.docs,
+    ...games,
+    ...playlists,
+    ...channels,
+    ...exploration,
+    ...applications,
+    ...explorationChannels.docs,
+    ...popularity,
+    ...changeProposals,
+    ...changeNotifications,
+    ...profileUsers.docs,
+    ...profileReviews.docs,
   ].map((d) => d.ref);
   for (let i = 0; i < refs.length; i += 400) {
     const batch = db().batch();

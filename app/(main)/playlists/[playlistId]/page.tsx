@@ -23,6 +23,7 @@ import { GameRegisterCard } from '@/components/playlists/GameRegisterCard';
 import { ContainingCollectionsCard } from '@/components/collections/ContainingCollectionsCard';
 import { COLLECTIONS_ENABLED } from '@/lib/feature-flags';
 import { PlaylistInfoCard } from '@/components/playlists/PlaylistInfoCard';
+import { ChangeProposalButton } from '@/components/change-proposals/ChangeProposalButton';
 import { VideoList, type VideoItem } from '@/components/playlists/VideoList';
 import { PlayerOsd, OSD_DURATION_MS } from '@/components/playlists/PlayerOsd';
 import { PlayerShortcutsModal } from '@/components/playlists/PlayerShortcutsModal';
@@ -1135,6 +1136,15 @@ export default function PlaylistDetailPage() {
       reviewCount={playlist.reviewCount}
       tags={tags}
       onEditTags={user ? () => setTagModalOpen(true) : undefined}
+      cornerAction={
+        <ChangeProposalButton
+          targetType="playlist"
+          targetId={playlistId}
+          targetName={playlist.title}
+          thumbnailUrl={playlist.thumbnailUrl}
+          currentGameId={game?.gameId ?? null}
+        />
+      }
     />
   );
 

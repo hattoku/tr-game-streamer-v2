@@ -110,6 +110,44 @@ export async function unlinkPlaylistGame(playlistId: string, userId: string | nu
 }
 
 /**
+ * 付いているゲームを別のゲームに付け替える（管理者。詳細ページからの変更提案の承認、仕様書 §6.3）。
+ * 外したゲームは rejectedGameIds に足し、自動では付け直さない。ゲーム未設定なら付けるだけ。
+ */
+export async function changePlaylistGame(
+  playlistId: string,
+  toGameId: string,
+  userId: string | null,
+): Promise<'changed' | 'unchanged' | 'playlist_not_found' | 'game_not_found'> {
+  const playlistRef = adminDb.collection('playlists').doc(playlistId);
+  const toRef = adminDb.collection('games').doc(toGameId);
+  return adminDb.runTransaction(async (tx) => {
+    const [playlistSnap, toSnap] = await Promise.all([tx.get(playlistRef), tx.get(toRef)]);
+    if (!playlistSnap.exists) return 'playlist_not_found';
+    if (!toSnap.exists) return 'game_not_found';
+    const playlist = playlistSnap.data()!;
+    const fromGameId = (playlist.gameId as string | null) ?? null;
+    if (fromGameId === toGameId) return 'unchanged';
+    const fromSnap = fromGameId ? await tx.get(adminDb.collection('games').doc(fromGameId)) : null;
+    const game = toSnap.data()!;
+    const now = new Date();
+    tx.update(playlistRef, {
+      gameId: toGameId,
+      gameName: game.title ?? '',
+      gameGenreIds: game.genreId ? [game.genreId] : [],
+      gameSetBy: 'admin',
+      gameSetAt: now,
+      ...(fromGameId ? { rejectedGameIds: FieldValue.arrayUnion(fromGameId) } : {}),
+    });
+    if (countsAsListed(playlist)) {
+      if (fromSnap?.exists) tx.update(fromSnap.ref, { playlistCount: FieldValue.increment(-1) });
+      tx.update(toRef, { playlistCount: FieldValue.increment(1) });
+    }
+    tx.set(adminDb.collection('playlist_game_changes').doc(), { playlistId, from: fromGameId, to: toGameId, by: 'admin', userId, at: now });
+    return 'changed';
+  });
+}
+
+/**
  * ゲーム未設定の再生リストを照合して、合うゲームを付ける。
  * gameIds を渡すと、そのゲーム（登録・編集したもの）だけを照合の対象にする。省略するとすべてのゲーム。
  */

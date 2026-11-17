@@ -27,6 +27,7 @@ import { UnreadDot } from '@/components/ui/Badge';
 import { ExternalLinkIcon, InventoryIcon, YouTubeIcon } from '@/components/ui/icons';
 import { PlaylistSummary } from '@/components/playlists/PlaylistSummary';
 import { CHANNEL_APPLICATION_STEPS, ProposalSteps } from '@/components/playlists/ProposalSteps';
+import { CHANGE_TARGET_LABEL, describeChangeReason, type ChangeTargetType } from '@/lib/change-proposal-shared';
 
 interface ChannelApplicationItem {
   kind: 'channel_application';
@@ -35,6 +36,23 @@ interface ChannelApplicationItem {
   channelName: string;
   channelIconUrl: string;
   youtubeChannelId: string;
+  submittedAt: number;
+  decidedAt: number | null;
+  rejectReason: string | null;
+}
+
+/** 詳細ページからの変更の提案（ページ 詳細ページからの変更提案 仕様書 §9.1） */
+interface ChangeProposalItem {
+  kind: 'change_proposal';
+  id: string;
+  status: 'reviewing' | 'approved' | 'rejected';
+  targetType: ChangeTargetType;
+  targetId: string;
+  targetName: string;
+  targetThumbnailUrl: string;
+  reason: string | null;
+  fields: string[] | null;
+  linkable: boolean;
   submittedAt: number;
   decidedAt: number | null;
   rejectReason: string | null;
@@ -81,7 +99,7 @@ export default function ProposalHistoryPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
-  const [items, setItems] = useState<Array<ProposalItem | ChannelApplicationItem> | null>(null);
+  const [items, setItems] = useState<Array<ProposalItem | ChannelApplicationItem | ChangeProposalItem> | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [unseen, setUnseen] = useState<UnseenResult[]>([]);
 
@@ -202,6 +220,10 @@ export default function ProposalHistoryPage() {
               <li key={p.id}>
                 <ChannelApplicationCard item={p} unseen={unseenWorkflowIds.has(p.id)} />
               </li>
+            ) : p.kind === 'change_proposal' ? (
+              <li key={p.id}>
+                <ChangeProposalCard item={p} unseen={unseenWorkflowIds.has(p.id)} />
+              </li>
             ) : (
             <li key={p.id}>
               <Card className="flex flex-col gap-4">
@@ -290,6 +312,55 @@ function ChannelApplicationCard({ item, unseen }: { item: ChannelApplicationItem
       {item.status === 'rejected' && (
         <p className="text-base text-text-secondary">
           見送り理由: {item.rejectReason ?? '掲載の基準に合いませんでした'}
+          <span className="ml-2 text-md text-text-muted">（{formatDate(item.decidedAt)}）</span>
+        </p>
+      )}
+    </Card>
+  );
+}
+
+function changeTargetHref(item: ChangeProposalItem): string {
+  return item.targetType === 'game' ? `/games/${item.targetId}` : item.targetType === 'channel' ? `/channels/${item.targetId}` : `/playlists/${item.targetId}`;
+}
+
+/** 詳細ページからの変更の提案（ページ 詳細ページからの変更提案 仕様書 §9.1）。掲載から外れた再生リスト・チャンネルはリンクしない */
+function ChangeProposalCard({ item, unseen }: { item: ChangeProposalItem; unseen: boolean }) {
+  return (
+    <Card className="flex flex-col gap-4" data-testid="change-proposal-card">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          {unseen && <UnreadDot />}
+          <Tag>変更の提案（{CHANGE_TARGET_LABEL[item.targetType]}）</Tag>
+          <Tag emphasis={item.status === 'reviewing'}>{item.status === 'reviewing' ? '確認待ち' : item.status === 'approved' ? '反映済み' : '見送り'}</Tag>
+        </div>
+        <span className="text-md text-text-muted">提案日時: {formatDate(item.submittedAt)}</span>
+      </div>
+      <div className="flex items-center gap-3">
+        {item.targetThumbnailUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={item.targetThumbnailUrl}
+            alt=""
+            referrerPolicy="no-referrer"
+            className={item.targetType === 'channel' ? 'size-10 shrink-0 rounded-full bg-bg-btn object-cover' : 'h-10 w-16 shrink-0 rounded-[4px] bg-bg-btn object-cover'}
+          />
+        ) : (
+          <span className="block size-10 shrink-0 rounded-[4px] bg-bg-btn" />
+        )}
+        {item.linkable ? (
+          <Link href={changeTargetHref(item)} className="min-w-0 break-words text-base font-medium text-text-primary underline-offset-4 hover:underline">
+            {item.targetName}
+          </Link>
+        ) : (
+          <p className="min-w-0 break-words text-base font-medium text-text-primary">{item.targetName}</p>
+        )}
+      </div>
+      <p className="text-base text-text-secondary">内容: {describeChangeReason(item.targetType, item.reason, item.fields)}</p>
+      {item.status === 'reviewing' && <p className="text-md text-text-muted">運営の確認待ちです。確認が済むとお知らせでお伝えします。</p>}
+      {item.status === 'approved' && <p className="text-md text-text-muted">提案を反映しました。ありがとうございます。（{formatDate(item.decidedAt)}）</p>}
+      {item.status === 'rejected' && (
+        <p className="text-base text-text-secondary">
+          見送り理由: {item.rejectReason ?? '-'}
           <span className="ml-2 text-md text-text-muted">（{formatDate(item.decidedAt)}）</span>
         </p>
       )}

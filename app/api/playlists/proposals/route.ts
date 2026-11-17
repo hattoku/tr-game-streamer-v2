@@ -3,6 +3,7 @@ import { requireUser } from '../../../../lib/api-auth';
 import { adminDb } from '../../../../lib/firebase-admin';
 import { PLAYLIST_PROPOSAL_TYPE, proposalRejectReasonLabel } from '../../../../lib/proposal-shared';
 import { CHANNEL_APPLICATION_TYPE, channelApplicationRejectReasonLabel } from '../../../../lib/channel-application-shared';
+import { listMyChangeProposals } from '../../../../lib/change-proposal-server';
 
 // 自分の再生リスト登録提案の一覧（提案履歴、ページ 再生リストを追加する 仕様書 §9.4）。
 // workflows は rules 上本人も直接読めるが、運営メモ（operatorMemo）や内部向けの自由記述（step2History.comment）を
@@ -69,6 +70,9 @@ export async function GET(request: NextRequest) {
       };
     });
 
-  const all = [...proposals, ...applications].sort((a, b) => b.submittedAt - a.submittedAt);
+  // 詳細ページからの変更の提案（ページ 詳細ページからの変更提案 仕様書 §9.1）
+  const changes = await listMyChangeProposals(auth.uid);
+
+  const all = [...proposals, ...applications, ...changes].sort((a, b) => b.submittedAt - a.submittedAt);
   return NextResponse.json({ proposals: all });
 }

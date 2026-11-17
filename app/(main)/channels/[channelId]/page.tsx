@@ -28,6 +28,7 @@ import { Checkbox, Field, Textarea } from '@/components/ui/Input';
 import { Skeleton, SkeletonText } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 import { CommentIcon, ExternalLinkIcon, InventoryIcon, PencilIcon, PlayIcon, UserIcon, UsersIcon, YouTubeIcon } from '@/components/ui/icons';
+import { ChangeProposalButton } from '@/components/change-proposals/ChangeProposalButton';
 
 interface ChannelDetail {
   name: string;
@@ -98,7 +99,15 @@ export default function ChannelDetailPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <Card className="flex flex-col gap-4">
+      <Card className="relative flex flex-col gap-4">
+        {/* 一般ユーザー向けの変更の提案（ページ 詳細ページからの変更提案 仕様書 §5。管理者には出さない）。カードの右上に置く */}
+        <ChangeProposalButton
+          targetType="channel"
+          targetId={channelId}
+          targetName={channel.name}
+          thumbnailUrl={channel.iconUrl}
+          className="absolute right-2 top-2"
+        />
         {/* PC: アイコン左＋情報右の横並び、SP: 縦積み（§3.1） */}
         <div className="flex flex-col gap-4 sm:flex-row sm:gap-6">
           <div className="size-[120px] shrink-0 overflow-hidden rounded-[12px] bg-bg-btn">
@@ -113,7 +122,7 @@ export default function ChannelDetailPage() {
             )}
           </div>
           <div className="flex min-w-0 flex-1 flex-col gap-3">
-            <h1 className="text-2xl font-medium text-text-primary">{channel.name}</h1>
+            <h1 className="pr-8 text-2xl font-medium text-text-primary">{channel.name}</h1>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-md text-text-tertiary">
               <span className="inline-flex items-center gap-1">
                 <InventoryIcon size={14} />

@@ -8,11 +8,14 @@ import { linkPlaylistToGame } from '@/lib/playlist-game-linking';
 import { GAME_PROPOSAL_TYPE, PLAYLIST_PROPOSAL_TYPE, proposalRejectReasonLabel } from '@/lib/proposal-shared';
 import { CHANNEL_APPLICATION_TYPE } from '@/lib/channel-application-shared';
 import { decideChannelApplication, getProposalChannelState } from '@/lib/channel-application-server';
+import { isChangeProposalType } from '@/lib/change-proposal-shared';
+import { decideChangeProposal } from '@/lib/change-proposal-server';
 import { publishExistingPlaylist } from '@/lib/propose-server';
 
 // 審査ワークフローの承認・却下・運営メモ更新API（管理_審査ワークフロー仕様書 §9, §11）。
 // 対象typeは`review_report`（通報、フェーズ6ステップ3）と、提案系の`playlist_register`・`game_title_register`
-// （フェーズ7ステップ7-4）と、チャンネル申請`channel_application`（段階6）。ゲームタイトル編集提案（`game_title_edit`）は投稿経路が無いため扱わない。
+// （フェーズ7ステップ7-4）と、チャンネル申請`channel_application`（段階6）と、詳細ページからの変更の提案
+// （`game_title_edit`・`channel_report`・`playlist_report`、管理 審査ワークフロー仕様書 §16。同じ対象の審査中の提案をまとめて処理する）。
 // - 再生リスト登録提案の承認: /api/playlists/register と同じ登録処理（lib/playlist-registration.ts）を実行する。
 //   `gameId` を渡すと提案のゲームタイトルを差し替えて登録し、editHistory に記録する（§10.1 の最小版、2026-10-25 ユーザー決定）。
 //   未登録チャンネルの説明文は `channelDescription`（任意）。登録に失敗したら審査中のまま残す。
@@ -42,7 +45,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     workflow.type !== 'review_report' &&
     workflow.type !== PLAYLIST_PROPOSAL_TYPE &&
     workflow.type !== GAME_PROPOSAL_TYPE &&
-    workflow.type !== CHANNEL_APPLICATION_TYPE
+    workflow.type !== CHANNEL_APPLICATION_TYPE &&
+    !isChangeProposalType(workflow.type)
   ) {
     return NextResponse.json({ error: 'unsupported_type' }, { status: 400 });
   }
@@ -80,6 +84,22 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     });
     if ('error' in result) return NextResponse.json({ error: result.error, message: result.message }, { status: result.status });
     return NextResponse.json({ ok: true, imported: result.imported });
+  }
+
+  // 詳細ページからの変更の提案（§16）。理由ごとの処理（approveAction）を実行し、同じ対象の審査中の提案をまとめて承認・却下する
+  if (isChangeProposalType(workflow.type)) {
+    const result = await decideChangeProposal({
+      workflowId,
+      workflow,
+      action,
+      uid,
+      comment,
+      rejectReasonCode: body.rejectReasonCode,
+      approveAction: body.approveAction,
+      gameId: body.gameId,
+    });
+    if ('error' in result) return NextResponse.json({ error: result.error }, { status: result.status });
+    return NextResponse.json({ ok: true, count: result.count });
   }
 
   // 再生リスト登録提案の却下は定型理由が必須（自由記述は任意）。それ以外の却下は自由記述が必須

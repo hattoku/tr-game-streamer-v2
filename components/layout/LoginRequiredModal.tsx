@@ -5,6 +5,7 @@
  */
 'use client';
 
+import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { Modal } from '@/components/ui/Modal';
 import { LinkButton } from '@/components/ui/Button';
@@ -15,9 +16,11 @@ interface LoginRequiredModalProps {
   onOpenChange: (open: boolean) => void;
   /** 例:「マイリストに追加するにはアカウントが必要です」 */
   title: string;
+  /** ボタンの下に添える補足（チャンネル詳細の「ご本人・事務所の方へ」など） */
+  note?: ReactNode;
 }
 
-export function LoginRequiredModal({ open, onOpenChange, title }: LoginRequiredModalProps) {
+export function LoginRequiredModal({ open, onOpenChange, title, note }: LoginRequiredModalProps) {
   return (
     <Modal
       open={open}
@@ -35,6 +38,7 @@ export function LoginRequiredModal({ open, onOpenChange, title }: LoginRequiredM
             ログイン
           </Link>
         </p>
+        {note}
       </div>
     </Modal>
   );
