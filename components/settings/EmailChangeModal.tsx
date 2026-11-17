@@ -4,7 +4,8 @@
  * 流れ: 入力チェック → 現在のパスワードで本人確認（reauthenticateWithCredential） → すでに使われていないかを API で確認
  * （/api/account/email/check。Firebase の列挙保護でクライアントからは分からないため） → verifyBeforeUpdateEmail で
  * 新しいアドレスへ確認メールを送る → 「確認メールを送信しました」を表示。
- * リンクを開くと Firebase 標準の画面で変更が完了し、ログイン中の端末はログアウトされる（Firebase の仕様）。
+ * リンクを開くと /auth/action（app/(auth)/auth/action）で変更が完了し、ログイン中の端末はログアウトされる（Firebase の仕様）。
+ * 全体の流れが分かるよう、上部に「① 申し込む → ② メールのリンクを開く → ③ ログインし直す」を出す（2026-11-17 ユーザー要望）。
  * 現在のパスワード欄は仕様書に無かったが、Firebase が直前の本人確認を求めるため追加した（2026-11-17 ユーザー決定）。
  */
 'use client';
@@ -15,6 +16,7 @@ import { EmailAuthProvider, reauthenticateWithCredential, verifyBeforeUpdateEmai
 import { auth } from '@/lib/firebase';
 import { Button, Field, Input, Modal, PasswordInput } from '@/components/ui';
 import { AlertIcon } from '@/components/ui/icons';
+import { EMAIL_CHANGE_STEPS, ProposalSteps } from '@/components/playlists/ProposalSteps';
 import { EMAIL_CHANGE_MESSAGES as M, validateEmailChange, type EmailChangeErrors } from '@/lib/email-change-shared';
 
 interface Props {
@@ -95,6 +97,7 @@ function EmailChangeForm({ user, onClose }: { user: User; onClose: () => void })
   if (sentTo) {
     return (
       <div>
+        <EmailChangeSteps current={2} />
         <p className="text-base font-medium text-text-primary">確認メールを送信しました</p>
         <p className="mt-2 text-md text-text-secondary">
           <span className="break-all text-text-primary">{sentTo}</span>{' '}
@@ -114,6 +117,12 @@ function EmailChangeForm({ user, onClose }: { user: User; onClose: () => void })
 
   return (
     <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
+      <div>
+        <EmailChangeSteps current={1} />
+        <p className="text-md text-text-secondary">
+          新しいメールアドレスに確認メールが届きます。メールのリンクを開くと変更が完了するので、新しいメールアドレスでログインし直してください。
+        </p>
+      </div>
       {errors.form && (
         <p role="alert" className="flex items-start gap-2 text-md text-input-error">
           <AlertIcon size={16} className="mt-[2px] shrink-0" />
@@ -153,5 +162,18 @@ function EmailChangeForm({ user, onClose }: { user: User; onClose: () => void })
         </Button>
       </div>
     </form>
+  );
+}
+
+/** 変更の流れ（① 申し込む → ② メールのリンクを開く → ③ ログインし直す）。今いる段を強調する */
+function EmailChangeSteps({ current }: { current: 1 | 2 }) {
+  return (
+    <ProposalSteps
+      current={current}
+      labels={EMAIL_CHANGE_STEPS}
+      ariaLabel="メールアドレス変更の流れ"
+      testId="email-change-steps"
+      className="mb-4"
+    />
   );
 }
