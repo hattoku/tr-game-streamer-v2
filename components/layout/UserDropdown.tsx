@@ -31,7 +31,6 @@ import { cn } from '@/components/ui/cn';
 import { USER_NAV } from './nav';
 import { formatBadgeCount, usePendingWorkflowCount } from '@/components/admin/usePendingWorkflowCount';
 import { useUnreadNotificationCounts } from './useUnreadNotificationCounts';
-import { COLLECTIONS_ENABLED } from '@/lib/feature-flags';
 import { useIsMobile } from './useIsMobile';
 
 /**
@@ -145,14 +144,6 @@ export function UserDropdown() {
             {item.label}
           </DropdownMenuItem>
         ))}
-        {/* 自分のまとめ一覧（まとめ機能仕様書 §4.1。プロフィールのまとめセクションは公開まとめのみのため、非公開を含む管理画面として残す）
-            と保存したまとめ（§8.3。仕様のヘッダーリンクの代わりにメニューに置く）。まとめ機能の取り下げ（UI仕様書 v2.0 §2.6）で出さない */}
-        {COLLECTIONS_ENABLED && (
-          <>
-            <DropdownMenuItem onSelect={() => router.push('/collections/mine')}>自分のまとめ</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => router.push('/collections/saved')}>保存したまとめ</DropdownMenuItem>
-          </>
-        )}
         <DropdownMenuSeparator />
         {/* サポート: 運営とのやり取りの履歴をまとめる（UI仕様書 v2.5 §2.6） */}
         <DropdownMenuGroup>

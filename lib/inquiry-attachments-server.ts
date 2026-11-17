@@ -11,7 +11,7 @@ import sharp from 'sharp';
 import { getStorage } from 'firebase-admin/storage';
 import type { DocumentData, DocumentReference, Transaction } from 'firebase-admin/firestore';
 import { adminApp, adminDb } from './firebase-admin';
-import { readJsonObject } from './collections-server';
+import { readJsonObject } from './request-json';
 import {
   INQUIRY_ATTACHMENTS_DAILY_MAX,
   INQUIRY_ATTACHMENTS_MAX,

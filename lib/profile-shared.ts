@@ -1,7 +1,6 @@
 // プロフィール（ページ 設定 プロフィール仕様書）のクライアント・サーバー共通の型。
 // GET /api/users/[userId]/profile（Admin SDK）が返す形。日時はミリ秒。
 import type { WatchStatus } from '@/components/ui/Chip';
-import type { CollectionJson } from '@/lib/collections-shared';
 
 /** マイリスト・レビュー履歴カードに出す再生リスト情報（公開再生リストのみ） */
 export interface ProfilePlaylistJson {
@@ -56,10 +55,6 @@ export interface ProfileJson {
   /** 他人のページで非公開設定のときは null（セクションごと出さない、§2.3） */
   mylist: ProfileMylistItemJson[] | null;
   reviews: ProfileReviewJson[] | null;
-  /** 公開まとめ（まとめ機能仕様書 §9.1）。手動並び替えの設定順 */
-  collections: CollectionJson[];
-  /** まとめカードのサムネイル用（先頭3件の再生リストID → サムネイルURL） */
-  collectionThumbnailById: Record<string, string>;
 }
 
 /** プロフィール編集（§9.2・§9.4）の上限。クライアントのフォームと PATCH /api/users/[userId]/profile の両方で使う */

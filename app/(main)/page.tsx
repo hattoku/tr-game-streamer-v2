@@ -1,10 +1,8 @@
 /**
  * TOPページ本実装（ページ top 仕様書。フェーズ6ステップ2）。
- * 未ログイン: ヒーロー（§4）→ 人気のチャンネル（§6A）→ 注目の再生リスト（§6）→ 新着のまとめ → タグピックアップ（§8）
- * ログイン済み: マイリスト（§5）→ 人気のチャンネル（§6A）→ 注目の再生リスト（§6）→ 新着の再生リスト（§7）→ 新着のまとめ → タグピックアップ（§8）
+ * 未ログイン: ヒーロー（§4）→ 人気のチャンネル（§6A）→ 注目の再生リスト（§6）→ タグピックアップ（§8）
+ * ログイン済み: マイリスト（§5）→ 人気のチャンネル（§6A）→ 注目の再生リスト（§6）→ 新着の再生リスト（§7）→ タグピックアップ（§8）
  * 人気のチャンネル（リブランディング段階5）は再生リストのセクションと同じ応答（`fetchTopCatalog` の `popularChannels`）で受け取る。
- * 新着のまとめ（2026-10-12、まとめ機能仕様書 §7）は公開まとめを別途取得し、取得前・0件・失敗時は出さない（他セクションの表示は待たせない）。
- * まとめ機能の取り下げ（2026-11-01、TOP仕様書 v2.0 §7.5）で COLLECTIONS_ENABLED が false の間は取得も表示もしない。
  * 各セクションの再生リスト（注目・新着・タグピックアップ）はサーバー側で選んだ分だけ受け取る（`fetchTopCatalog`、
  * リブランディング段階7・共通 一覧のサーバー側検索 仕様書 §3.4。各カルーセル最大20件）。ジャンルマスタと合わせて1回だけ取得し、
  * 各セクション（`components/top/`）へ渡して表示専用にする。マイリストセクションのみ
@@ -28,9 +26,6 @@ import { FeaturedSection } from '@/components/top/FeaturedSection';
 import { NewArrivalsSection } from '@/components/top/NewArrivalsSection';
 import { PopularChannelsSection } from '@/components/top/PopularChannelsSection';
 import { TagPickupSections } from '@/components/top/TagPickupSections';
-import { NewCollectionsSection } from '@/components/top/NewCollectionsSection';
-import { fetchPublicCollections, type CollectionData } from '@/lib/collections';
-import { COLLECTIONS_ENABLED } from '@/lib/feature-flags';
 import { fetchCompletedPlaylistIds } from '@/lib/mylist-entries';
 import { Skeleton } from '@/components/ui/Skeleton';
 
@@ -47,7 +42,6 @@ export default function HomePage() {
   const { user, loading: authLoading } = useAuth();
   const [top, setTop] = useState<TopCatalog | null>(null);
   const [genres, setGenres] = useState<Genre[] | null>(null);
-  const [collections, setCollections] = useState<CollectionData[]>([]);
   const [completed, setCompleted] = useState<{ uid: string; ids: Set<string> } | null>(null);
   const uid = user?.uid ?? null;
 
@@ -60,11 +54,6 @@ export default function HomePage() {
       .then((genresSnap) => genresSnap.docs.map((d) => ({ id: d.id, name: (d.data().name as string) ?? '' })))
       .catch(() => [])
       .then(setGenres);
-    if (COLLECTIONS_ENABLED) {
-      fetchPublicCollections()
-        .then(setCollections)
-        .catch(() => setCollections([]));
-    }
   }, []);
 
   useEffect(() => {
@@ -96,7 +85,6 @@ export default function HomePage() {
       newArrivals: pick(top.newArrivals),
       tagPickups: top.tagPickups.map((t) => ({ tagId: t.tagId, tagName: t.tagName, playlists: pick(t.ids) })),
       popularChannels: top.popularChannels ?? [],
-      all: top.playlists,
     };
   }, [top]);
   const dataReady = sections !== null && genres !== null;
@@ -124,7 +112,6 @@ export default function HomePage() {
             <SectionSkeleton />
           )}
           {user && <NewArrivalsSection playlists={sections.newArrivals} />}
-          {COLLECTIONS_ENABLED && <NewCollectionsSection collections={collections} playlists={sections.all} />}
           <TagPickupSections pickups={sections.tagPickups} />
         </>
       ) : (

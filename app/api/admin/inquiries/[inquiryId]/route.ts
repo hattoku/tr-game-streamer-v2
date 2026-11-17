@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/api-auth';
 import { adminDb } from '@/lib/firebase-admin';
-import { readJsonObject } from '@/lib/collections-server';
+import { readJsonObject } from '@/lib/request-json';
 import { INQUIRY_MEMO_MAX, INQUIRY_REPLY_MAX, isInquiryStatus } from '@/lib/inquiry-shared';
 
 // お問い合わせの管理操作API（管理 お問い合わせ管理仕様書 §4）。operator/owner 共通（§2.1）。

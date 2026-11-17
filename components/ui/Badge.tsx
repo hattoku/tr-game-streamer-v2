@@ -8,7 +8,7 @@
  *                  未読ドット（§15.1）と同じ赤ドット＋白文字で表現する
  * - UnreadDot:     未読インジケーター（§15.1）
  * - CountBadge:    タブの件数バッジ（§15.2、ピル）
- * - StatusBadge:   公開状態などの控えめなラベル（まとめの公開設定、プロフィールの「非公開」）
+ * - StatusBadge:   公開状態などの控えめなラベル（プロフィールの「非公開」）
  */
 import type { ReactNode } from 'react';
 import { cn } from './cn';

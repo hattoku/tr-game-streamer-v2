@@ -2,7 +2,7 @@
  * プロフィールヘッダー（ページ 設定 プロフィール仕様書 §4・§9）。アイコン／表示名／自己紹介／登録日。
  * 本人のページでは「編集する」「公開設定」を出し、「編集する」でこのカードがインライン編集フォームに切り替わる（§9.3）。
  * 「公開設定」は設定ページへ移らず、その場でポップアップ（ProfileVisibilityModal）を開く（2026-10-12 ユーザー決定）。
- * 保存は PATCH /api/users/[userId]/profile 経由（表示名を変えると自分のレビュー・まとめの投稿者名・作成者名も揃う）。
+ * 保存は PATCH /api/users/[userId]/profile 経由（表示名を変えると自分のレビューの投稿者名も揃う）。
  * アイコン（§9.2）は編集フォームで画像を選ぶとその場でプレビューし、「保存する」で PUT /api/users/[userId]/avatar に送る
  * （「画像を外す」は DELETE）。未設定はシルエット表示（UserAvatar）。
  */
@@ -17,7 +17,6 @@ import { useToast } from '@/components/ui/Toast';
 import { LockIcon, PencilIcon } from '@/components/ui/icons';
 import { cn } from '@/components/ui/cn';
 import { ProfileVisibilityModal } from '@/components/profile/ProfileVisibilityModal';
-import { COLLECTIONS_ENABLED } from '@/lib/feature-flags';
 import {
   BIO_MAX,
   DISPLAY_NAME_MAX,
@@ -198,7 +197,7 @@ function ProfileEditForm({
           ) : (
             <UserAvatar imageUrl={image.kind === 'remove' ? null : u.profileImageUrl} size={EDIT_AVATAR_SIZE} />
           )}
-          <Field label="表示名" error={errors.displayName} hint={COLLECTIONS_ENABLED ? 'レビューやまとめに表示される名前です' : 'レビューに表示される名前です'} className="min-w-0 flex-1 md:max-w-sm">
+          <Field label="表示名" error={errors.displayName} hint="レビューに表示される名前です" className="min-w-0 flex-1 md:max-w-sm">
             {(props) => (
               <Input
                 {...props}
