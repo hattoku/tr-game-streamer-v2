@@ -8,7 +8,7 @@
  *
  * 名前（1行1件）またはチャンネルURL・@ハンドルで追加し、名前は YouTube のチャンネル検索で候補を出して確定する。
  * 名前検索は1件約101ユニットかかるため、まとめて特定は1回40件まで（80件なら2日に分ける。§6）。
- * 確定したチャンネル（探索中）にはチャンネル単位のタグ（運営者タグ）を設定でき、承認時に付与される。
+ * 確定したチャンネル（掲載中）にはチャンネル単位のタグ（運営者タグ）を設定でき、承認時に付与される。
  */
 'use client';
 
@@ -33,22 +33,22 @@ import { COLLECTION_DAILY_QUOTA_LIMIT, NAME_SEARCH_COST } from '@/lib/collection
 import {
   countListing,
   fetchCollectionQuotaUsedToday,
-  fetchExplorationChannels,
+  fetchListingChannels,
   fetchPopularityOverview,
   formatDateTime,
   formatSubscribers,
   postAdminApi,
   quotaExceededMessage,
-  type ExplorationChannel,
-  type ExplorationChannelStatus,
+  type ListingChannel,
+  type ListingChannelStatus,
   type PopularityOverview,
 } from '@/lib/collection-admin';
 import { popularityScore, RECENT_DAYS, ZERO_POPULARITY } from '@/lib/popularity-shared';
 
 const RESOLVE_BATCH = 40;
 
-const TAB_ORDER: ExplorationChannelStatus[] = ['pending_confirm', 'unresolved', 'active', 'excluded', 'opted_out'];
-const TAB_LABEL: Record<ExplorationChannelStatus, string> = {
+const TAB_ORDER: ListingChannelStatus[] = ['pending_confirm', 'unresolved', 'active', 'excluded', 'opted_out'];
+const TAB_LABEL: Record<ListingChannelStatus, string> = {
   pending_confirm: '確認待ち',
   unresolved: '未特定',
   active: '登録済み',
@@ -67,27 +67,27 @@ const AUTHORIZED_VIA_LABEL: Record<string, string> = {
 
 export default function AdminExplorationChannelsPage() {
   const { toast } = useToast();
-  const [channels, setChannels] = useState<ExplorationChannel[] | null>(null);
+  const [channels, setChannels] = useState<ListingChannel[] | null>(null);
   const [tagsMap, setTagsMap] = useState<Map<string, TagInfo>>(new Map());
   const [quotaUsed, setQuotaUsed] = useState<number | null>(null);
-  const [tab, setTab] = useState<ExplorationChannelStatus>('pending_confirm');
+  const [tab, setTab] = useState<ListingChannelStatus>('pending_confirm');
   const [lines, setLines] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [selectedCandidate, setSelectedCandidate] = useState<Record<string, string>>({});
   const [refInputs, setRefInputs] = useState<Record<string, string>>({});
-  const [tagTarget, setTagTarget] = useState<ExplorationChannel | null>(null);
+  const [tagTarget, setTagTarget] = useState<ListingChannel | null>(null);
   const [draftTagIds, setDraftTagIds] = useState<Set<string>>(new Set());
   const [listingCounts, setListingCounts] = useState<Record<string, { listed: number; unconfirmed: number }>>({});
   const [orderInputs, setOrderInputs] = useState<Record<string, string>>({});
   const [popularity, setPopularity] = useState<PopularityOverview | null>(null);
   // 掲載から外す・掲載を止める（理由メモとお問い合わせID）
-  const [offTarget, setOffTarget] = useState<{ channel: ExplorationChannel; kind: 'exclude' | 'opt_out' } | null>(null);
+  const [offTarget, setOffTarget] = useState<{ channel: ListingChannel; kind: 'exclude' | 'opt_out' } | null>(null);
   const [offNote, setOffNote] = useState('');
   const [offInquiry, setOffInquiry] = useState('');
 
   async function reload() {
     const [list, used, pop] = await Promise.all([
-      fetchExplorationChannels(),
+      fetchListingChannels(),
       fetchCollectionQuotaUsedToday(),
       fetchPopularityOverview().catch(() => null),
     ]);
@@ -111,7 +111,7 @@ export default function AdminExplorationChannelsPage() {
   }, []);
 
   const counts = useMemo(() => {
-    const c: Record<ExplorationChannelStatus, number> = { pending_confirm: 0, unresolved: 0, active: 0, excluded: 0, opted_out: 0 };
+    const c: Record<ListingChannelStatus, number> = { pending_confirm: 0, unresolved: 0, active: 0, excluded: 0, opted_out: 0 };
     channels?.forEach((ch) => c[ch.status]++);
     return c;
   }, [channels]);
@@ -179,7 +179,7 @@ export default function AdminExplorationChannelsPage() {
     });
   }
 
-  function openTagModal(channel: ExplorationChannel) {
+  function openTagModal(channel: ListingChannel) {
     setTagTarget(channel);
     setDraftTagIds(new Set(channel.tagIds));
   }
@@ -237,7 +237,7 @@ export default function AdminExplorationChannelsPage() {
         本日のYouTube API消費（コンテンツ収集分）: {quotaUsed ?? '-'} / {COLLECTION_DAILY_QUOTA_LIMIT.toLocaleString('ja-JP')} ユニット
       </p>
 
-      <Tabs value={tab} onValueChange={(v) => setTab(v as ExplorationChannelStatus)}>
+      <Tabs value={tab} onValueChange={(v) => setTab(v as ListingChannelStatus)}>
         <TabsList aria-label="状態で絞り込み">
           {TAB_ORDER.map((s) => (
             <TabsTrigger key={s} value={s} count={counts[s]}>
@@ -463,9 +463,9 @@ export default function AdminExplorationChannelsPage() {
                         variant="ghost"
                         size="sm"
                         disabled={busy !== null}
-                        loading={busy === `explore-${c.id}`}
+                        loading={busy === `sweep-${c.id}`}
                         onClick={() =>
-                          run(`explore-${c.id}`, '/api/admin/collection/explore', { explorationChannelId: c.id }, (b) => `新しい再生リストを${b.candidatesFound}件取り込みました`)
+                          run(`sweep-${c.id}`, '/api/admin/collection/sweep', { explorationChannelId: c.id }, (b) => `新しい再生リストを${b.newPlaylistCount}件取り込みました`)
                         }
                       >
                         このチャンネルだけ巡回

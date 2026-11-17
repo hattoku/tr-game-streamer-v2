@@ -39,7 +39,7 @@ function bestThumbnailUrl(thumbnails: Thumbnails | undefined): string {
 // list系エンドポイント（playlists/channels/playlistItems/videos）は1ユニット、search.list は
 // 100ユニットとして加算する（ENDPOINT_COST）。resetQuotaCounter()/getQuotaConsumed()で1バッチ分を集計する想定
 // （batch_logs.quotaConsumed。Firestore データモデル設計書 3.21節）。
-// 同時に走るリクエスト（探索の定期実行と手動操作など）で数が混ざらないよう、resetQuotaCounter() は
+// 同時に走るリクエスト（毎日の巡回と手動操作など）で数が混ざらないよう、resetQuotaCounter() は
 // 呼び出し元の非同期コンテキストに専用のカウンタを置く（AsyncLocalStorage.enterWith）。
 const quotaStorage = new AsyncLocalStorage<{ count: number }>();
 
@@ -321,7 +321,7 @@ export async function fetchVideoDurations(videoIds: string[]): Promise<Map<strin
   return result;
 }
 
-// ---- コンテンツ収集（チャンネル起点の再生リスト探索）用 ----
+// ---- コンテンツ収集（掲載チャンネルの巡回）用 ----
 // 管理_Ai運営者 コンテンツ収集機能仕様書 v3.0 §3
 
 export interface ChannelPlaylist {

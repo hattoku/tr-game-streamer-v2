@@ -1,12 +1,12 @@
 // コンテンツ収集の管理画面（/admin/collection 配下）で共用するクライアント側の読み込み・API呼び出し。
-// 管理 AI運営者向け収集候補レビューUI仕様書 v2.0。exploration_channels・collection_candidates 等は
+// 管理 AI運営者向け収集候補レビューUI仕様書 v2.0。掲載チャンネル（DB 名は段階3までの exploration_channels のまま）等は
 // rules で管理者の読み取りのみ許可しているため、読み込みはクライアントSDK、書き込みは API Route 経由。
 import { collection, doc, getCountFromServer, getDoc, getDocs, limit, orderBy, query, where } from 'firebase/firestore';
 import { auth, db } from './firebase';
 import { todayJst } from './collection-quota-shared';
 import type { PopularityCounts } from './popularity-shared';
 
-export type ExplorationChannelStatus = 'unresolved' | 'pending_confirm' | 'active' | 'excluded' | 'opted_out';
+export type ListingChannelStatus = 'unresolved' | 'pending_confirm' | 'active' | 'excluded' | 'opted_out';
 
 export interface ChannelCandidate {
   youtubeChannelId: string;
@@ -17,10 +17,10 @@ export interface ChannelCandidate {
 
 export type PublishMode = 'confirm' | 'auto';
 
-export interface ExplorationChannel {
+export interface ListingChannel {
   id: string;
   name: string;
-  status: ExplorationChannelStatus;
+  status: ListingChannelStatus;
   youtubeChannelId: string | null;
   channelTitle: string | null;
   channelIconUrl: string | null;
@@ -40,10 +40,10 @@ function toMillis(value: unknown): number | null {
   return (value as { toMillis?: () => number } | null)?.toMillis?.() ?? null;
 }
 
-export async function fetchExplorationChannels(): Promise<ExplorationChannel[]> {
+export async function fetchListingChannels(): Promise<ListingChannel[]> {
   const snap = await getDocs(collection(db, 'exploration_channels'));
   return snap.docs
-    .map((d): ExplorationChannel => {
+    .map((d): ListingChannel => {
       const data = d.data();
       return {
         id: d.id,
@@ -143,7 +143,8 @@ export interface CollectionBatchLog {
   executedAt: number;
   trigger: 'manual' | 'cron';
   processedChannels: number;
-  candidatesFound: number;
+  /** 新しく取り込んだ再生リストの数（手動の巡回のログでは項目名が段階3までの candidatesFound のまま） */
+  newPlaylistCount: number;
   status: string;
 }
 
@@ -163,7 +164,7 @@ export async function fetchLastCollectionBatch(): Promise<CollectionBatchLog | n
       executedAt: dailyAt,
       trigger: 'cron',
       processedChannels: daily.sweptChannelCount ?? 0,
-      candidatesFound: Object.values(counts).reduce((a, b) => a + b, 0),
+      newPlaylistCount: Object.values(counts).reduce((a, b) => a + b, 0),
       status: daily.status ?? '',
     };
   }
@@ -172,7 +173,7 @@ export async function fetchLastCollectionBatch(): Promise<CollectionBatchLog | n
     executedAt: manualAt,
     trigger: manual.trigger === 'cron' ? 'cron' : 'manual',
     processedChannels: manual.processedChannels ?? 0,
-    candidatesFound: manual.candidatesFound ?? 0,
+    newPlaylistCount: manual.candidatesFound ?? 0,
     status: manual.status ?? '',
   };
 }

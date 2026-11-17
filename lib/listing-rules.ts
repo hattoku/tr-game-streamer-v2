@@ -1,7 +1,7 @@
 // 掲載状態の判定ルール（純粋な関数。巡回のサーバー処理と、確認画面の「判定の言葉」モーダルの両方から使う）。
 // 管理_Ai運営者 コンテンツ収集機能仕様書 §10.4（判定の順）・§10.5（除外語・非ゲーム語）・§10.11（理由の値）。
 // 言葉の表は app_settings/listing_rules（Firestore データモデル設計書 §3.28）。無いときは DEFAULT_LISTING_RULES を使う。
-import { normalizeForMatch } from './exploration-rules';
+import { normalizeForMatch } from './playlist-title-rules';
 import type { ListingStatus } from './listing';
 
 export interface ListingRules {

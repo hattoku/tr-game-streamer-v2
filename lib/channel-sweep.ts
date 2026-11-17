@@ -4,9 +4,14 @@
 // メタ情報だけで playlists に作って掲載状態を判定する（全件保存。除外・非ゲーム・10本未満も消さずに持つ）。
 // 動画一覧は掲載（listed）にするときに初めて取る。「自動で掲載」のチャンネルでルールに当たらなかったものは
 // いったん unconfirmed（auto_pending）で作り、listAutoPending で動画一覧を取ってから listed にする。
+//
+// 巡回の入口はどれもこのファイルの sweepChannels → listAutoPending を通る:
+//   - 毎日の「新着動画の再取得」（lib/new-videos-refresh.ts の refreshNewVideos。全チャンネル）
+//   - 手動の巡回（lib/channel-sweep-run.ts の runChannelSweep）: 確認画面の「巡回を実行」・掲載チャンネル画面の「このチャンネルだけ巡回」
+//   - 掲載チャンネルに加えた直後（lib/channel-sweep-run.ts の sweepChannelNow）: 掲載チャンネル画面で登録済みにしたとき・チャンネル申請の承認
 import type { DocumentData, DocumentSnapshot, QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import { adminDb } from './firebase-admin';
-import { extractGameQuery } from './exploration-rules';
+import { extractGameQuery } from './playlist-title-rules';
 import { judgeListing, parseListingRules, publishModeOf, type ListingRules, type PublishMode } from './listing-rules';
 import { matchGameForPlaylist } from './playlist-game-linking';
 import { defaultListingTagIds, listPlaylist } from './listing-server';
@@ -44,6 +49,12 @@ export interface SweepContext {
   rules: ListingRules;
   games: GameForSweep[];
   now: Date;
+}
+
+/** 巡回に使う判定の言葉の表とゲームタイトルを読む */
+export async function loadSweepContext(now: Date): Promise<SweepContext> {
+  const [rules, games] = await Promise.all([loadListingRules(), loadGamesForSweep()]);
+  return { rules, games, now };
 }
 
 export type NewPlaylistCounts = Record<'unconfirmed' | 'non_game' | 'excluded' | 'too_short', number>;
@@ -124,7 +135,6 @@ function millis(value: unknown): number | null {
   return (value as { toMillis?: () => number } | null | undefined)?.toMillis?.() ?? null;
 }
 
-/** 1つの掲載チャンネル（active）を巡回する。YouTube のエラーは呼び出し元へ投げる */
 /**
  * 掲載チャンネルのアイコン。段階3の移行で作った掲載チャンネルはアイコンが空（null）だったため、
  * 空ならプレミテのチャンネルページ（channels.iconUrl）、それも無ければ YouTube（channels.list、1ユニット）から補う（2026-11-12）。
@@ -143,6 +153,7 @@ async function resolveChannelIconUrl(channel: DocumentData, channelPage: Documen
   }
 }
 
+/** 1つの掲載チャンネル（active）を巡回する。YouTube のエラーは呼び出し元へ投げる */
 export async function sweepChannel(channelDoc: DocumentSnapshot, ctx: SweepContext): Promise<ChannelSweepResult> {
   const stored = channelDoc.data()!;
   const youtubeChannelId = stored.youtubeChannelId as string;
@@ -153,12 +164,8 @@ export async function sweepChannel(channelDoc: DocumentSnapshot, ctx: SweepConte
   // 取り込む再生リストには補ったアイコンを入れる（newPlaylistDoc は channel.channelIconUrl を使う）
   const channel = iconUrl && iconUrl !== stored.channelIconUrl ? { ...stored, channelIconUrl: iconUrl } : stored;
 
-  const [existingSnap, candidatesSnap] = await Promise.all([
-    adminDb.collection('playlists').where('channelId', '==', youtubeChannelId).get(),
-    adminDb.collection('collection_candidates').where('explorationChannelId', '==', channelDoc.id).get(),
-  ]);
+  const existingSnap = await adminDb.collection('playlists').where('channelId', '==', youtubeChannelId).get();
   const existing = new Map(existingSnap.docs.map((d) => [d.id, d]));
-  const candidates = new Map(candidatesSnap.docs.map((d) => [d.id, d]));
 
   const result: ChannelSweepResult = {
     explorationChannelId: channelDoc.id,
@@ -178,12 +185,7 @@ export async function sweepChannel(channelDoc: DocumentSnapshot, ctx: SweepConte
     const doc = existing.get(p.youtubePlaylistId);
 
     if (!doc) {
-      // 収集候補で人が却下したものは、その判断を引き継いで対象外にする（§10.11）
-      const candidate = candidates.get(p.youtubePlaylistId)?.data();
-      const humanRejected = candidate?.status === 'rejected' && candidate.reviewedBy && candidate.reviewedBy !== 'auto';
-      const judged = humanRejected
-        ? { status: 'excluded', reason: 'candidate_rejected', setBy: 'admin' as const }
-        : { ...toStoredJudgement(p.title, p.itemCount, ctx, mode), setBy: 'auto' as const };
+      const judged = { ...toStoredJudgement(p.title, p.itemCount, ctx, mode), setBy: 'auto' as const };
       writes.push((b) => b.set(ref, newPlaylistDoc(p, channel, channelDoc.id, ctx, judged)));
       result.newCounts[judged.status as keyof NewPlaylistCounts]++;
       continue;
@@ -226,11 +228,6 @@ export async function sweepChannel(channelDoc: DocumentSnapshot, ctx: SweepConte
     }
   }
 
-  // 取り込んだ収集候補は役目を終えたので消す（YouTube のデータを古いまま持たない。§10.8・§10.11）
-  for (const id of candidates.keys()) {
-    if (fetchedIds.has(id)) writes.push((b) => b.delete(adminDb.collection('collection_candidates').doc(id)));
-  }
-
   if (iconUrl && channelPage.exists && !channelPage.data()?.iconUrl) writes.push((b) => b.update(channelPage.ref, { iconUrl }));
 
   for (let i = 0; i < writes.length; i += WRITE_CHUNK_SIZE) {
@@ -239,7 +236,7 @@ export async function sweepChannel(channelDoc: DocumentSnapshot, ctx: SweepConte
     await batch.commit();
   }
 
-  const newCount = Object.values(result.newCounts).reduce((a, b) => a + b, 0);
+  const newCount = totalNewPlaylists(result.newCounts);
   await channelDoc.ref.update({
     lastSweptAt: ctx.now,
     lastSweepNewCount: newCount,
@@ -252,6 +249,61 @@ export async function sweepChannel(channelDoc: DocumentSnapshot, ctx: SweepConte
     updatedAt: ctx.now,
   });
   return result;
+}
+
+export interface SweepChannelsResult {
+  /** 巡回できた掲載チャンネルのドキュメントID */
+  swept: Set<string>;
+  playlistsFetched: number;
+  newCounts: NewPlaylistCounts;
+  itemCounts: Map<string, PlaylistItemCount>;
+  missing: Array<{ playlistId: string; title: string }>;
+  /** YouTube のエラーで巡回できなかったチャンネル */
+  errors: Array<{ explorationChannelId: string; message: string }>;
+  /** YouTube の1日のクォータが途中で尽きた */
+  quotaExceeded: boolean;
+  /** 枠が足りない（canSweep が false・クォータが尽きた）ので巡回しなかったチャンネル */
+  skipped: string[];
+}
+
+export function emptySweepChannelsResult(): SweepChannelsResult {
+  return { swept: new Set(), playlistsFetched: 0, newCounts: emptyNewCounts(), itemCounts: new Map(), missing: [], errors: [], quotaExceeded: false, skipped: [] };
+}
+
+/**
+ * 掲載チャンネルを順に巡回する（巡回の入口で共通）。各チャンネルの前に canSweep() を確かめ、false なら残りは skipped にする。
+ * YouTube のエラーはチャンネルごとに errors に残して続ける（クォータが尽きたら残りは skipped）。それ以外のエラーは投げる。
+ * 途中で投げても、そこまでの結果は result（呼び出し側が渡したもの）に残る。
+ */
+export async function sweepChannels(
+  channels: readonly DocumentSnapshot[],
+  ctx: SweepContext,
+  options: { canSweep: () => boolean },
+  result: SweepChannelsResult = emptySweepChannelsResult(),
+): Promise<SweepChannelsResult> {
+  for (const channelDoc of channels) {
+    if (result.quotaExceeded || !options.canSweep()) {
+      result.skipped.push(channelDoc.id);
+      continue;
+    }
+    try {
+      const swept = await sweepChannel(channelDoc, ctx);
+      result.swept.add(channelDoc.id);
+      result.playlistsFetched += swept.playlistsFetched;
+      for (const [k, v] of Object.entries(swept.newCounts)) result.newCounts[k as keyof NewPlaylistCounts] += v;
+      swept.itemCounts.forEach((v, k) => result.itemCounts.set(k, v));
+      result.missing.push(...swept.missing);
+    } catch (e) {
+      if (!(e instanceof YouTubeApiError)) throw e;
+      result.errors.push({ explorationChannelId: channelDoc.id, message: e.message });
+      if (isQuotaExceededError(e)) result.quotaExceeded = true;
+    }
+  }
+  return result;
+}
+
+export function totalNewPlaylists(counts: NewPlaylistCounts): number {
+  return Object.values(counts).reduce((a, b) => a + b, 0);
 }
 
 export interface AutoListSummary {

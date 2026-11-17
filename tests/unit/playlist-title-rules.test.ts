@@ -1,7 +1,7 @@
-// コンテンツ収集の判定ルール（lib/exploration-rules.ts）。
+// コンテンツ収集の判定ルール（lib/playlist-title-rules.ts）。
 // 管理_Ai運営者 コンテンツ収集機能仕様書 v3.0 §3.3（除外語）・§3.4（ゲームの推定）・§3.5（タイトル由来のタグ）。
 import { describe, expect, it } from 'vitest';
-import { extractGameQuery, findExcludeWord, guessGame, matchTitleTagNames, normalizeForMatch } from '@/lib/exploration-rules';
+import { extractGameQuery, findExcludeWord, guessGame, matchTitleTagNames, normalizeForMatch } from '@/lib/playlist-title-rules';
 
 describe('normalizeForMatch（§3.4: NFKC・小文字化・空白と記号の除去）', () => {
   it('全角英数を半角に、大文字を小文字にし、空白と記号を落とす', () => {

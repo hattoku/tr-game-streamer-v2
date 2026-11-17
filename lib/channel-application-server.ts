@@ -5,7 +5,6 @@
 // 申請の承認で掲載チャンネルに加える（publishMode: confirm）ことだけを行う。
 import type { DocumentReference, DocumentSnapshot } from 'firebase-admin/firestore';
 import { FieldValue } from 'firebase-admin/firestore';
-import { after } from 'next/server';
 import { adminDb } from './firebase-admin';
 import {
   extractPlaylistId,
@@ -24,8 +23,7 @@ import {
   type ApplyChannelState,
 } from './channel-application-shared';
 import { todayJst } from './collection-quota-shared';
-import { exploreChannels } from './exploration-server';
-import { checkCollectionQuota } from './collection-quota';
+import { sweepChannelAfterResponse } from './channel-sweep-run';
 
 export type ChannelApiError = { error: string; status: number; message?: string };
 
@@ -143,7 +141,7 @@ const APPROVING_LOCK_MS = 2 * 60 * 1000;
  * YouTube チャンネルを掲載チャンネル（`exploration_channels`、status: active、掲載方法「確認してから掲載」）にする。
  * チャンネル申請の承認（審査ワークフロー仕様書 §15.2）と、管理者の直接登録でチャンネルも同時に掲載するとき
  * （ページ 提案する 仕様書 §9）に使う。同じ YouTube チャンネルの既存ドキュメント（未特定・確認待ち・掲載しない）があればそれを使う。
- * 戻り値は掲載チャンネルのドキュメントID。取り込み（exploreChannels）は呼び出し側で行う。
+ * 戻り値は掲載チャンネルのドキュメントID。取り込み（lib/channel-sweep-run.ts の sweepChannelAfterResponse）は呼び出し側で行う。
  */
 export async function activateListingChannel(params: {
   youtubeChannelId: string;
@@ -197,18 +195,6 @@ export async function activateListingChannel(params: {
     await ref.update(fields);
   }
   return ref.id;
-}
-
-/** 掲載チャンネルに加えたあと、そのチャンネルの再生リストを1回取り込む（応答のあとに実行。失敗しても元の操作は取り消さない） */
-export function importChannelAfterResponse(explorationChannelId: string, uid: string, label: string): void {
-  after(async () => {
-    try {
-      const quota = await checkCollectionQuota(1);
-      if (quota.ok) await exploreChannels({ trigger: 'manual', executedBy: uid, explorationChannelId });
-    } catch (e) {
-      console.error(`${label}の取り込みに失敗`, e);
-    }
-  });
 }
 
 export async function decideChannelApplication(params: {
@@ -318,7 +304,7 @@ export async function decideChannelApplication(params: {
   if (newlyActivatedId) {
     const explorationChannelId = newlyActivatedId;
     imported = true;
-    importChannelAfterResponse(explorationChannelId, uid, 'チャンネル申請の承認後');
+    sweepChannelAfterResponse(explorationChannelId, uid, 'チャンネル申請の承認後の取り込み');
   }
   return { ok: true, imported };
 }
