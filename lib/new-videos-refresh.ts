@@ -1,4 +1,5 @@
 // 新着動画の取得・掲載チャンネルの巡回（動画更新バッチ）の本体（サーバー専用）。共通 YouTube定期取得仕様書 §7・§8.6。
+// ⓪ 配信者の名前・アイコンを取り直す（第4章）
 // ① 掲載チャンネルを巡回して新しい再生リストを取り込む ② 監視の対象の動画数を確認する
 // ③ 動画数が変わった再生リストの動画一覧を取り直す ④ 30日（25日）を過ぎる前に全件を取り直す
 // ⑤ 「自動で掲載する予定」の再生リストを掲載する ⑥ 30日ルールの消し込み。
@@ -16,6 +17,7 @@ import {
   sweepChannel,
   type NewPlaylistCounts,
 } from './channel-sweep';
+import { refreshChannelProfiles, type ChannelProfileRefreshResult } from './channel-profile-refresh';
 import { metaAgeBase, purgeStalePlaylists, REFETCH_AFTER_DAYS, videosAgeBase } from './data-retention';
 
 /** 1回の実行で使うクォータの上限（コンテンツ収集の1日の上限 6,000 の残り。§7.3） */
@@ -62,6 +64,9 @@ export interface RefreshSummary {
   fullRefetchedCount: number;
   autoListedCount: number;
   purgedCount: number;
+  /** 配信者の名前・アイコンの取り直しの結果（YouTube のエラーが出たときは channelProfileError に理由。取れた分は反映済み） */
+  channelProfiles: ChannelProfileRefreshResult | null;
+  channelProfileError: string | null;
 }
 
 function errorMessage(e: unknown): string {
@@ -172,9 +177,19 @@ export async function refreshNewVideos(): Promise<RefreshSummary> {
     fullRefetchedCount: 0,
     autoListedCount: 0,
     purgedCount: 0,
+    channelProfiles: null,
+    channelProfileError: null,
   };
   const titleOf = (d: QueryDocumentSnapshot) => (d.data().title as string) ?? d.id;
   const overBudget = (units: number) => summary.quotaExceeded || getQuotaConsumed() + units > NEW_VIDEOS_QUOTA_BUDGET;
+
+  // ⓪ 配信者の名前・アイコンの取り直し（第4章。50チャンネルで1ユニット）。巡回より先に行い、新しく取り込む再生リストにも今の名前・アイコンを入れる
+  const profiles = await refreshChannelProfiles(isQuotaExceeded);
+  summary.channelProfiles = profiles.result;
+  if (profiles.error) {
+    summary.channelProfileError = errorMessage(profiles.error);
+    if (isQuotaExceeded(profiles.error)) summary.quotaExceeded = true;
+  }
 
   // ① 掲載チャンネルの巡回
   const counts = new Map<string, PlaylistItemCount>();
@@ -354,5 +369,7 @@ export function toBatchLogFields(summary: RefreshSummary) {
     autoListedCount: summary.autoListedCount,
     purgedCount: summary.purgedCount,
     sweepErrors: summary.sweepErrors.slice(0, LOG_LIST_LIMIT),
+    channelProfiles: summary.channelProfiles,
+    channelProfileError: summary.channelProfileError,
   };
 }

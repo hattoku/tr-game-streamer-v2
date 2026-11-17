@@ -32,6 +32,7 @@ import {
   EXPLORATION_STATUS_LABEL,
 } from '@/lib/channel-application-shared';
 import { formatSubscribers } from '@/lib/collection-admin';
+import { FallbackImage } from '@/components/ui/FallbackImage';
 
 const DECIDE_ERRORS: Record<string, string> = {
   channel_opted_out: 'このチャンネルは掲載停止中のため承認できません。掲載チャンネル画面で掲載を再開してから承認してください',
@@ -117,12 +118,7 @@ export function ChannelApplicationDetail({ workflowId, data }: { workflowId: str
         <CardDivider />
 
         <div className="flex items-center gap-3">
-          {iconUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={iconUrl} alt="" referrerPolicy="no-referrer" className="size-14 shrink-0 rounded-full bg-bg-btn object-cover" />
-          ) : (
-            <span className="block size-14 shrink-0 rounded-full bg-bg-btn" />
-          )}
+          <FallbackImage src={iconUrl} className="size-14 shrink-0 rounded-full bg-bg-btn object-cover" fallback={<span className="block size-14 shrink-0 rounded-full bg-bg-btn" />} />
           <div className="min-w-0">
             <p className="text-lg font-medium text-text-primary">{(proposal.channelTitle as string) ?? ''}</p>
             <p className="text-md text-text-tertiary">{formatSubscribers(subscribers)}</p>

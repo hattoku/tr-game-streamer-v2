@@ -214,6 +214,28 @@ export async function fetchChannelSnippet(channelId: string): Promise<ChannelSni
 }
 
 /**
+ * 複数のチャンネルの名前・アイコンをまとめて取得する（channels.list part=snippet、50件ごとに1ユニット）。
+ * YouTube で見つからない（削除・停止された）チャンネルは結果に入らない。毎日の名前・アイコンの取り直しで使う
+ * （共通 YouTube定期取得仕様書 第4章）。
+ */
+export async function fetchChannelSnippets(channelIds: string[]): Promise<Map<string, ChannelSnippet>> {
+  const result = new Map<string, ChannelSnippet>();
+  for (let i = 0; i < channelIds.length; i += 50) {
+    const data = await callApi<{
+      items?: Array<{ id: string; snippet: { title: string; thumbnails: Thumbnails } }>;
+    }>('channels', {
+      part: 'snippet',
+      id: channelIds.slice(i, i + 50).join(','),
+      maxResults: '50',
+    });
+    for (const item of data.items ?? []) {
+      result.set(item.id, { youtubeChannelId: item.id, name: item.snippet.title, iconUrl: bestThumbnailUrl(item.snippet.thumbnails) });
+    }
+  }
+  return result;
+}
+
+/**
  * 再生リストで見られる動画の状態（playlistItems の status.privacyStatus）。
  * 削除された動画は「Deleted video」、非公開の動画は「Private video」という項目として返り続ける
  * （YouTube の画面では隠れているので欠番に見えない）。この2つ以外だけを取り込む。

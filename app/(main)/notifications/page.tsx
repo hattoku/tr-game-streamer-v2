@@ -16,6 +16,7 @@ import { useToast } from '@/components/ui/Toast';
 import { BellIcon, ChevronLeftIcon, ChevronRightIcon } from '@/components/ui/icons';
 import { cn } from '@/components/ui/cn';
 import { formatNewVideos, isFeedNotification } from '@/lib/notification-format';
+import { FallbackImage } from '@/components/ui/FallbackImage';
 
 // 通知一覧ページ。document/specification/page/ページ ユーザー通知機能仕様書.md §5 準拠。
 // フェーズ2.5ステップ6でデザイン適用（wiki/sources/2026-09-11-phase2.5-design-plan.md §4）。
@@ -321,12 +322,14 @@ export default function NotificationsPage() {
 
 /** 配信者のアイコン（丸）。URLが空なら同じ大きさの丸だけ出して、行の位置をそろえる */
 function ChannelIcon({ url }: { url: string }) {
-  return url ? (
-    // referrerPolicy: yt3.ggpht.com の Referer 制限対策（PlaylistSummary 参照）
-    // eslint-disable-next-line @next/next/no-img-element
-    <img src={url} alt="" referrerPolicy="no-referrer" className="mt-[2px] size-9 shrink-0 rounded-full" loading="lazy" />
-  ) : (
-    <span aria-hidden className="mt-[2px] size-9 shrink-0 rounded-full bg-bg-btn" />
+  // 通知に入っているのは通知を作ったときのアイコン。配信者が差し替えて古いURLが読めなくなっていたら丸い枠だけ出す
+  return (
+    <FallbackImage
+      src={url}
+      className="mt-[2px] size-9 shrink-0 rounded-full"
+      loading="lazy"
+      fallback={<span aria-hidden className="mt-[2px] size-9 shrink-0 rounded-full bg-bg-btn" />}
+    />
   );
 }
 

@@ -29,6 +29,7 @@ import { Skeleton, SkeletonText } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 import { CommentIcon, ExternalLinkIcon, InventoryIcon, PencilIcon, PlayIcon, UserIcon, UsersIcon, YouTubeIcon } from '@/components/ui/icons';
 import { ChangeProposalButton } from '@/components/change-proposals/ChangeProposalButton';
+import { FallbackImage } from '@/components/ui/FallbackImage';
 
 interface ChannelDetail {
   name: string;
@@ -111,15 +112,15 @@ export default function ChannelDetailPage() {
         {/* PC: アイコン左＋情報右の横並び、SP: 縦積み（§3.1） */}
         <div className="flex flex-col gap-4 sm:flex-row sm:gap-6">
           <div className="size-[120px] shrink-0 overflow-hidden rounded-[12px] bg-bg-btn">
-            {channel.iconUrl ? (
-              // referrerPolicy: yt3.ggpht.com の Referer 制限対策
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={channel.iconUrl} alt="" referrerPolicy="no-referrer" className="size-full object-cover" />
-            ) : (
-              <div className="flex size-full items-center justify-center text-text-muted">
-                <UserIcon size={48} />
-              </div>
-            )}
+            <FallbackImage
+              src={channel.iconUrl}
+              className="size-full object-cover"
+              fallback={
+                <div className="flex size-full items-center justify-center text-text-muted">
+                  <UserIcon size={48} />
+                </div>
+              }
+            />
           </div>
           <div className="flex min-w-0 flex-1 flex-col gap-3">
             <h1 className="pr-8 text-2xl font-medium text-text-primary">{channel.name}</h1>

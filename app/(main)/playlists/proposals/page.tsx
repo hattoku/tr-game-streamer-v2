@@ -28,6 +28,7 @@ import { ExternalLinkIcon, InventoryIcon, YouTubeIcon } from '@/components/ui/ic
 import { PlaylistSummary } from '@/components/playlists/PlaylistSummary';
 import { CHANNEL_APPLICATION_STEPS, ProposalSteps } from '@/components/playlists/ProposalSteps';
 import { CHANGE_TARGET_LABEL, describeChangeReason, type ChangeTargetType } from '@/lib/change-proposal-shared';
+import { FallbackImage } from '@/components/ui/FallbackImage';
 
 interface ChannelApplicationItem {
   kind: 'channel_application';
@@ -279,12 +280,7 @@ function ChannelApplicationCard({ item, unseen }: { item: ChannelApplicationItem
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
-          {item.channelIconUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={item.channelIconUrl} alt="" referrerPolicy="no-referrer" className="size-10 shrink-0 rounded-full bg-bg-btn object-cover" />
-          ) : (
-            <span className="block size-10 shrink-0 rounded-full bg-bg-btn" />
-          )}
+          <FallbackImage src={item.channelIconUrl} className="size-10 shrink-0 rounded-full bg-bg-btn object-cover" fallback={<span className="block size-10 shrink-0 rounded-full bg-bg-btn" />} />
           <p className="min-w-0 break-words text-base font-medium text-text-primary">{item.channelName}</p>
         </div>
         {/* 申請したチャンネルが合っているか本人が確かめる導線（ページ チャンネルを申請する 仕様書 §6、v1.3）。
