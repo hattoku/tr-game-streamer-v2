@@ -15,6 +15,7 @@ import { LinkButton } from '@/components/ui/Button';
 import { Card, CardTitle } from '@/components/ui/Card';
 import { ChevronRightIcon, InventoryIcon, PlayIcon, UsersIcon } from '@/components/ui/icons';
 import { fetchPlaylistPage } from '@/lib/catalog';
+import { FallbackImage } from '@/components/ui/FallbackImage';
 
 interface ChannelCardProps {
   channelId: string;
@@ -57,13 +58,7 @@ export function ChannelCard({ channelId, name, iconUrl }: ChannelCardProps) {
       <CardTitle className="text-md font-normal text-text-muted">配信者</CardTitle>
       <div className="flex items-center gap-3">
         <Link href={href} className="shrink-0">
-          {iconUrl ? (
-            // referrerPolicy: yt3.ggpht.com の Referer 制限対策（PlaylistSummary 参照）
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={iconUrl} alt="" referrerPolicy="no-referrer" className="size-12 rounded-full bg-bg-btn object-cover" />
-          ) : (
-            <span className="block size-12 rounded-full bg-bg-btn" />
-          )}
+          <FallbackImage src={iconUrl} className="size-12 rounded-full bg-bg-btn object-cover" fallback={<span className="block size-12 rounded-full bg-bg-btn" />} />
         </Link>
         <div className="flex min-w-0 flex-col gap-1">
           <Link href={href} className="min-w-0 text-lg text-text-primary hover:text-text-secondary">

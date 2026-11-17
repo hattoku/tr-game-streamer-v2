@@ -29,6 +29,7 @@ import { ProgressBar } from '@/components/ui/ProgressBar';
 import { formatDuration } from '@/components/playlists/VideoList';
 import { ChevronDownIcon, ChevronRightIcon, PlayIcon, TrashIcon } from '@/components/ui/icons';
 import { useCanAutoplayAfterNavigation } from '@/lib/autoplay';
+import { FallbackImage } from '@/components/ui/FallbackImage';
 
 export interface MylistCardData {
   mylistId: string;
@@ -96,13 +97,7 @@ export function MylistCard({ entry, onStatusChange, onRemove }: MylistCardProps)
           </Link>
           {p && (
             <div className="flex items-center gap-2">
-              {p.channelIconUrl ? (
-                // referrerPolicy: yt3.ggpht.com の Referer 制限対策（PlaylistSummary 参照）
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={p.channelIconUrl} alt="" referrerPolicy="no-referrer" className="size-[18px] shrink-0 rounded-full md:size-[22px]" loading="lazy" />
-              ) : (
-                <span className="size-[18px] shrink-0 rounded-full bg-bg-btn md:size-[22px]" />
-              )}
+              <FallbackImage src={p.channelIconUrl} className="size-[18px] shrink-0 rounded-full md:size-[22px]" loading="lazy" fallback={<span className="size-[18px] shrink-0 rounded-full bg-bg-btn md:size-[22px]" />} />
               <span className="truncate text-sm text-text-tertiary md:text-md">{p.channelName}</span>
               <EpisodeCount count={p.videoCount} className="text-sm text-text-muted md:text-md" />
             </div>

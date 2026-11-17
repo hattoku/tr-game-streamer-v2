@@ -21,6 +21,7 @@ import { Tag } from '@/components/ui/Tag';
 import { CommentIcon, InventoryIcon, StarIcon, UsersIcon } from '@/components/ui/icons';
 import { cn } from '@/components/ui/cn';
 import type { PlaylistSummary } from '@/lib/catalog-shared';
+import { FallbackImage } from '@/components/ui/FallbackImage';
 
 export type { PlaylistSummary, PlaylistSort } from '@/lib/catalog-shared';
 
@@ -55,13 +56,7 @@ export function PlaylistCard({
         <div className="flex flex-1 flex-col gap-2 px-[14px] pb-[14px] pt-3">
           <p className="line-clamp-2 text-lg font-medium leading-snug text-text-primary">{p.title}</p>
           <div className="flex items-center gap-2">
-            {p.channelIconUrl ? (
-              // referrerPolicy: yt3.ggpht.com の Referer 制限対策（PlaylistSummary 参照）
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={p.channelIconUrl} alt="" referrerPolicy="no-referrer" className="size-5 shrink-0 rounded-full" loading="lazy" />
-            ) : (
-              <span className="size-5 shrink-0 rounded-full bg-bg-btn" />
-            )}
+            <FallbackImage src={p.channelIconUrl} className="size-5 shrink-0 rounded-full" loading="lazy" fallback={<span className="size-5 shrink-0 rounded-full bg-bg-btn" />} />
             <span className="truncate text-md text-text-tertiary">{p.channelName}</span>
           </div>
           {/* スコア・話数・マイリスト数・レビュー数（探す仕様書 §3.3）。レビュー0件は「評価なし」 */}

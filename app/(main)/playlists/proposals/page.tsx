@@ -1,6 +1,6 @@
 /**
  * 提案履歴（/playlists/proposals）。ページ 再生リストを追加する 仕様書 §9.4。
- * 自分が送った再生リスト登録提案を提案日時の新しい順に並べ、提案ごとにステップ表示（確認待ち＝②いまここ／
+ * 自分が送った再生リスト登録提案を提案日時の新しい順に並べ、提案ごとにステップ表示（確認待ち＝②／
  * 公開済み＝③／見送り＝②で止めて「見送り」）を出す。取得は本人専用の GET /api/playlists/proposals
  * （運営メモ・内部向けの自由記述を渡さないため Firestore を直接読まない）。
  * 公開済みは再生リストへのリンク、見送りは定型の理由（管理 審査ワークフロー仕様書 §14.4）を表示する。
@@ -28,6 +28,7 @@ import { ExternalLinkIcon, InventoryIcon, YouTubeIcon } from '@/components/ui/ic
 import { PlaylistSummary } from '@/components/playlists/PlaylistSummary';
 import { CHANNEL_APPLICATION_STEPS, ProposalSteps } from '@/components/playlists/ProposalSteps';
 import { CHANGE_TARGET_LABEL, describeChangeReason, type ChangeTargetType } from '@/lib/change-proposal-shared';
+import { FallbackImage } from '@/components/ui/FallbackImage';
 
 interface ChannelApplicationItem {
   kind: 'channel_application';
@@ -242,7 +243,7 @@ export default function ProposalHistoryPage() {
                   videoCount={p.videoCount}
                   gameName={p.isNewGame && p.status !== 'approved' ? `${p.gameName}（新しいゲームタイトル）` : p.gameName}
                 />
-                <ProposalSteps current={p.status === 'approved' ? 3 : 2} rejected={p.status === 'rejected'} hereLabel />
+                <ProposalSteps current={p.status === 'approved' ? 3 : 2} rejected={p.status === 'rejected'} />
                 {p.status === 'reviewing' && <p className="text-md text-text-muted">運営の確認待ちです。確認が済むとさがすに表示されます。</p>}
                 {p.status === 'rejected' && (
                   <p className="text-base text-text-secondary">
@@ -279,12 +280,7 @@ function ChannelApplicationCard({ item, unseen }: { item: ChannelApplicationItem
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
-          {item.channelIconUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={item.channelIconUrl} alt="" referrerPolicy="no-referrer" className="size-10 shrink-0 rounded-full bg-bg-btn object-cover" />
-          ) : (
-            <span className="block size-10 shrink-0 rounded-full bg-bg-btn" />
-          )}
+          <FallbackImage src={item.channelIconUrl} className="size-10 shrink-0 rounded-full bg-bg-btn object-cover" fallback={<span className="block size-10 shrink-0 rounded-full bg-bg-btn" />} />
           <p className="min-w-0 break-words text-base font-medium text-text-primary">{item.channelName}</p>
         </div>
         {/* 申請したチャンネルが合っているか本人が確かめる導線（ページ チャンネルを申請する 仕様書 §6、v1.3）。
@@ -304,7 +300,7 @@ function ChannelApplicationCard({ item, unseen }: { item: ChannelApplicationItem
           </a>
         )}
       </div>
-      <ProposalSteps labels={CHANNEL_APPLICATION_STEPS} current={item.status === 'approved' ? 3 : 2} rejected={item.status === 'rejected'} hereLabel />
+      <ProposalSteps labels={CHANNEL_APPLICATION_STEPS} current={item.status === 'approved' ? 3 : 2} rejected={item.status === 'rejected'} />
       {item.status === 'reviewing' && <p className="text-md text-text-muted">運営の確認待ちです。掲載が決まるとお知らせでお伝えします。</p>}
       {item.status === 'approved' && (
         <p className="text-md text-text-muted">掲載が決まりました。このチャンネルの再生リストは、運営の確認のあと順に公開します。</p>

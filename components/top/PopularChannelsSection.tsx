@@ -12,6 +12,7 @@ import { CarouselItem } from '@/components/ui/Carousel';
 import { TopSection } from '@/components/top/TopSection';
 import { InventoryIcon, PlayIcon, UserIcon, UsersIcon } from '@/components/ui/icons';
 import type { PopularChannelItem } from '@/lib/catalog-shared';
+import { FallbackImage } from '@/components/ui/FallbackImage';
 
 export function PopularChannelsSection({ channels }: { channels: PopularChannelItem[] }) {
   if (channels.length === 0) return null;
@@ -33,14 +34,16 @@ function PopularChannelCard({ channel }: { channel: PopularChannelItem }) {
     <Link href={`/channels/${encodeURIComponent(channel.id)}`} className="group flex flex-col gap-2" data-testid="popular-channel-card">
       {/* yt3.ggpht.com の Referer 制限対策で no-referrer */}
       <div className="aspect-square w-full overflow-hidden rounded-[12px] bg-bg-btn transition-transform duration-[120ms] group-hover:-translate-y-[3px]">
-        {channel.iconUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={channel.iconUrl} alt="" referrerPolicy="no-referrer" className="size-full object-cover" loading="lazy" />
-        ) : (
-          <div className="flex size-full items-center justify-center text-text-muted">
-            <UserIcon size={36} />
-          </div>
-        )}
+        <FallbackImage
+          src={channel.iconUrl}
+          className="size-full object-cover"
+          loading="lazy"
+          fallback={
+            <div className="flex size-full items-center justify-center text-text-muted">
+              <UserIcon size={36} />
+            </div>
+          }
+        />
       </div>
       {/* 名前が1行でも2行分の高さを取り、件数の位置をカード間でそろえる */}
       <p className="line-clamp-2 min-h-[2lh] text-base font-medium text-text-primary group-hover:text-text-secondary">{channel.name}</p>
