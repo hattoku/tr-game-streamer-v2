@@ -1,6 +1,6 @@
 # プレミテ Firestore データモデル設計書
 
-**バージョン**: v3.1  
+**バージョン**: v3.2  
 **作成日**: 2026年3月30日（更新）  
 **対象**: 開発チーム  
 **関連ドキュメント**: プレミテ企画書 / プレミテ_技術スタック仕様書 / 各機能仕様書
@@ -302,7 +302,7 @@ YouTubeチャンネルの情報。
 | `themeIds` | string[] | ✅ | 紐づくテーマIDリスト（`themes` コレクション） |
 | `gameTagIds` | string[] | ✅ | 付与されたタグIDリスト |
 | `gameTagsFixed` | string[] | ✅ | 固定タグIDリスト |
-| `playlistCount` | number | ✅ | 紐づく再生リスト数（集計キャッシュ） |
+| `playlistCount` | number | ✅ | 紐づく再生リスト数（集計キャッシュ）。掲載中（`listed`）だけを数える（v3.2 で明記。増減は `lib/listing-counts.ts`） |
 | `createdAt` | Timestamp | ✅ | マスタへの登録日時 |
 | `updatedAt` | Timestamp | ✅ | 最終更新日時 |
 
@@ -351,7 +351,7 @@ YouTubeチャンネルの情報。
 | `tagId` | string | ✅ | タグID（ドキュメントIDと同一、`TAG-{連番}` 形式） |
 | `name` | string | ✅ | タグ名 |
 | `origin` | string | ✅ | 出自：`"operator"` / `"user"` |
-| `usagePlaylistCount` | number | ✅ | 再生リストへの付与件数（集計キャッシュ） |
+| `usagePlaylistCount` | number | ✅ | 再生リストへの付与件数（集計キャッシュ）。掲載中（`listed`）の再生リストだけを数える（v3.2 で明記。一般ユーザーのタグ編集も同じ。増減は `lib/listing-counts.ts`） |
 | `usageGameCount` | number | ✅ | ゲームタイトルへの付与件数（集計キャッシュ） |
 | `createdAt` | Timestamp | ✅ | 登録日時 |
 | `createdBy` | string? | — | 作成者のuserId（ユーザータグのみ。運営者タグはnull） |
@@ -1164,4 +1164,5 @@ ai_operators ──── (1) users
 | v3.1 | 2026-11-17 | §3.14 まとめ機能のコード削除を注記（API Route・作成者名の揃え直しが無くなった。データとルールは残す） |
 | v3.0 | 2026-11-17 | `workflows` に詳細ページからの変更の提案（`channel_report` を追加、`game_title_edit`・`playlist_report` の `reportData` を定義）。`step2History` に `approveAction`・`gameId`・`gameName` |
 | v3.1 | 2026-11-17 | §3.21 `batch_logs` に `channelProfiles`・`channelProfileError` を追加。`channels.name`・`channels.iconUrl`、`exploration_channels.channelTitle`・`channelIconUrl`、`playlists.channelName`・`channelIconUrl` は毎日の再取得で YouTube の今の値に合わせる（YouTube定期取得仕様書 v1.11 §4.4） |
+| v3.2 | 2026-11-17 | リファクタリング②。`games.playlistCount`・`tags.usagePlaylistCount` が掲載中の再生リストだけを数えることを明記。一般ユーザーのタグの付け外しも、掲載中の再生リストのときだけ `usagePlaylistCount` を動かすように揃えた（これまでは掲載状態を見ずに数えていたため、掲載していない再生リストにタグを付けてから掲載すると二重に数えていた） |
 | v2.8 | 2026-11-08 | 段階5 人気のチャンネル。§3.4 `channels.popularity`、§3.32 `featuredOrder` をピン留めの順に、§3.21 `batch_logs` に `channel_popularity`、§3.35 `playlist_viewers`・§3.36 `batch_state` を追加。§7.1 退会時の削除に `playlist_viewers` を追加（共通 人気のチャンネル 集計 仕様書） |

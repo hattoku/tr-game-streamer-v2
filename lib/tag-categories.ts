@@ -1,5 +1,5 @@
 // 運営者タグのカテゴリ別グルーピング（ページ ゲームタイトル 詳細 仕様書 §8.5）。タグ編集モーダルと、
-// 管理画面の探索対象チャンネルのタグ設定（収集候補レビューUI仕様書 v2.0 §6.4）で共用する。
+// 管理画面の掲載チャンネルのタグ設定（収集候補レビューUI仕様書 v2.0 §6.4）で共用する。
 // カテゴリは Firestore に保存しておらず、scripts/data/tags.mjs（各「初期登録データ一覧.md」の構成）を正とする。
 import type { TagInfo } from './tags';
 import { GAME_TITLE_TAG_CATEGORIES, PLAYLIST_TAG_CATEGORIES } from '@/scripts/data/tags.mjs';

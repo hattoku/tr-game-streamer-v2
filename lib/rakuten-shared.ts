@@ -52,7 +52,7 @@ const PLATFORM_WORDS = [
 ];
 const PLATFORM_PATTERN = PLATFORM_WORDS.join('|');
 
-import { normalizeForMatch } from './exploration-rules';
+import { normalizeForMatch } from './playlist-title-rules';
 
 export function normalizeRakutenGameTitle(rakutenTitle: string): string {
   return (

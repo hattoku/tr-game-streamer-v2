@@ -1,6 +1,6 @@
 # AI運営者_コンテンツ収集機能仕様書
 
-**バージョン**: v4.6
+**バージョン**: v4.7
 **作成日**: 2026年3月16日
 **更新日**: 2026年11月17日
 **関連ドキュメント**: プレミテ_AI運営者_企画書 / AI運営者_YouTube API調査レポート / AI運営者_コンテンツ品質基準検討書 / プレミテ_YouTube定期取得仕様書 / プレミテ_技術スタック仕様書 / 管理 AI運営者向け収集候補レビューUI仕様書 / Firestore データモデル設計書
@@ -136,7 +136,7 @@ API で取得できる情報だけで機械的に除外する。除外したも�
 
 `collection_candidates` に既にある再生リストは新しい候補にしないが、動画数（`videoCount`）と数えた日時（`videoCountCheckedAt`）はこの探索の値に更新する（v3.2。取得済みの一覧を使うのでクォータは増えない）。
 
-除外語（初期値）: `切り抜き`、`歌ってみた`、`踊ってみた`、`ショート`、`shorts`、`配信アーカイブ`、`生放送`、`メンバー限定`、`ASMR`、`Vlog`、`MV`、`料理`、`単発`（v3.1 で追加。「単発実況」のような寄せ集めの再生リストはシリーズではないため）、`実写`、`くだらない`、`ドッキリ`、`大喜利`、`ラジオ`、`雑談`、`食べてみた`、`飲んでみた`（v3.5 で追加。ゲームではない企画・番組）。「検証」「企画」「やってみた」はゲーム実況でも使うため入れない。大文字・小文字と全角・半角の違いは区別しない。除外語は `lib/exploration-rules.ts` に定数で持ち、運用しながら見直す。
+除外語（初期値）: `切り抜き`、`歌ってみた`、`踊ってみた`、`ショート`、`shorts`、`配信アーカイブ`、`生放送`、`メンバー限定`、`ASMR`、`Vlog`、`MV`、`料理`、`単発`（v3.1 で追加。「単発実況」のような寄せ集めの再生リストはシリーズではないため）、`実写`、`くだらない`、`ドッキリ`、`大喜利`、`ラジオ`、`雑談`、`食べてみた`、`飲んでみた`（v3.5 で追加。ゲームではない企画・番組）。「検証」「企画」「やってみた」はゲーム実況でも使うため入れない。大文字・小文字と全角・半角の違いは区別しない。除外語は `lib/playlist-title-rules.ts` に定数で持ち、運用しながら見直す。
 
 > **除外語に当たった再生リストの扱い（v3.5）**: 捨てずに、候補を「却下済み（自動）」で残す（`reviewedBy: 'auto'`、`reviewComment: 'auto_exclude:<語>'`）。次の探索で同じ判定をやり直さず、却下の一覧に理由が出て「未処理に戻す」こともできる。動画数不足・非公開は後から変わりうるので残さない。
 
@@ -160,7 +160,7 @@ API で取得できる情報だけで機械的に除外する。除外したも�
 | 由来 | 内容 |
 |------|------|
 | チャンネル単位 | 探索対象チャンネルに設定したタグ（例: 生声・男性実況者・ゆっくり・Vtuber） |
-| タイトルの語句 | 再生リストタイトルに含まれる語句から対応するタグを付ける。対応表は `lib/exploration-rules.ts` に定数で持つ |
+| タイトルの語句 | 再生リストタイトルに含まれる語句から対応するタグを付ける。対応表は `lib/playlist-title-rules.ts` に定数で持つ |
 
 語句とタグの対応（初期値）:
 
@@ -448,11 +448,15 @@ YouTube API Services Developer Policies（III.E.4）は、ユーザーの認可�
 
 | 処理 | 呼び出し | クォータ | 実装 |
 |---|---|---|---|
-| 毎日の巡回＋新着の監視＋30日の取り直し＋消し込み | 今の「新着動画の再取得」（`POST /api/admin/refresh-new-videos`。Cloud Scheduler 毎日・ダッシュボードのボタン） | 新着の監視用の枠（1回 4,000） | `lib/new-videos-refresh.ts`（`refreshNewVideos`）が `lib/channel-sweep.ts` を呼ぶ。YouTube定期取得仕様書 §8.6 |
-| 手動の巡回（全チャンネル／1チャンネル） | 確認画面の「巡回を実行」・掲載チャンネル画面の「このチャンネルだけ巡回」（`POST /api/admin/collection/explore`） | 収集の枠（1日 6,000） | `lib/exploration-server.ts` の `exploreChannels`（名前と引数は段階3までと同じ。段階6の申請の承認からも呼ぶ） |
+| 毎日の巡回＋新着の監視＋30日の取り直し＋消し込み | 今の「新着動画の再取得」（`POST /api/admin/refresh-new-videos`。Cloud Scheduler 毎日・ダッシュボードのボタン） | 新着の監視用の枠（1回 4,000） | `lib/new-videos-refresh.ts`（`refreshNewVideos`）が `lib/channel-sweep.ts` の `sweepChannels` を呼ぶ。YouTube定期取得仕様書 §8.6 |
+| 手動の巡回（全チャンネル／1チャンネル） | 確認画面の「巡回を実行」・掲載チャンネル画面の「このチャンネルだけ巡回」（`POST /api/admin/collection/sweep`） | 収集の枠（1日 6,000） | `lib/channel-sweep-run.ts` の `runChannelSweep`（v4.6 までは `lib/exploration-server.ts` の `exploreChannels`、パスは `/api/admin/collection/explore`） |
+| 掲載チャンネルに加えた直後の巡回（そのチャンネルだけ） | 掲載チャンネル画面で登録済みにしたとき・チャンネル申請の承認（段階6）・再生リスト登録でのチャンネル同時掲載 | 収集の枠 | `lib/channel-sweep-run.ts` の `sweepChannelNow`・`sweepChannelAfterResponse`（失敗しても元の操作は成功のまま。毎日の巡回が拾う） |
 | 掲載する・ゲームではない・対象外にする | 確認画面（`POST /api/admin/collection/listing`） | 収集の枠 | `lib/listing-server.ts` |
 | 掲載方法・掲載から外す・掲載を止める・再開 | 掲載チャンネル画面（`POST /api/admin/collection/channels`） | 収集の枠（再開で掲載に戻すとき） | 同上 |
 | 判定の言葉の保存・判定し直す | 確認画面の「判定の言葉」（`POST /api/admin/collection/listing-rules`） | なし（判定し直した結果が自動で掲載になるものは次の巡回で動画を取る） | `lib/listing-rules.ts`（判定。画面と共用）・`lib/listing-server.ts` |
+
+- 巡回の入口はどれも `lib/channel-sweep.ts` の `sweepChannels`（掲載チャンネルを順に巡回）→ `listAutoPending`（自動で掲載する予定の掲載）を通る。
+- 件数（`games.playlistCount`・`channels.playlistCount`・`tags.usagePlaylistCount`）を動かす処理（登録・掲載の切り替え・ゲームの付け外し・タグの付け外し）は、どれも `lib/listing-counts.ts`（増減の計算）と `lib/listing-counts-server.ts`（書き込み）を通す（v4.7）。
 
 - 新しい Cloud Scheduler のジョブは作らない。毎日の「新着動画の再取得」が巡回も兼ねる。週1の探索（`collection-explore-weekly`、未設定）は不要になった。
 - 収集候補（`collection_candidates`）の承認API（`/api/admin/collection/candidates`）と、収集候補の楽天ブックスの先読みは削除した。
@@ -471,7 +475,7 @@ YouTube API Services Developer Policies（III.E.4）は、ユーザーの認可�
 | 掲載状態 | §10.4 の判定（`listingSetBy: auto`）。`source: channel_sweep`、`explorationChannelId` |
 | タグ | 付けない（`playlistTagIds`・`playlistTagsFixed` は空。掲載するときに付ける） |
 
-- 収集候補で人が却下したもの（`collection_candidates.status: rejected` で `reviewedBy` が `auto` 以外）は、`excluded`（`listingSetBy: admin`、`listingReason: candidate_rejected`）で作る。それ以外の収集候補は他と同じく判定する。取り込んだら、その収集候補のドキュメントは消す（§10.8）。
+- ~~収集候補で人が却下したもの（`collection_candidates.status: rejected` で `reviewedBy` が `auto` 以外）は、`excluded`（`listingSetBy: admin`、`listingReason: candidate_rejected`）で作る。取り込んだら、その収集候補のドキュメントは消す（§10.8）。~~ v4.7 で外した。段階4以降、毎日の巡回で掲載チャンネルの収集候補はすべて取り込み済みのため、巡回は収集候補を読まない。すでに `candidate_rejected` で作った再生リストはそのまま。
 - 既にある再生リスト（ユーザーの提案などで別の経路から入ったもの）は作り直さず、タイトル・サムネイル・`metaFetchedAt`（動画一覧が未取得なら `videoCount` も）を更新し、`explorationChannelId` が無ければ付ける。
 - **チャンネルのアイコンを補う（v4.4）**: 掲載チャンネルのアイコン（`channelIconUrl`）が空なら、巡回のときにプレミテのチャンネルページ（`channels.iconUrl`）から、それも無ければ YouTube の `channels.list`（1ユニット、収集の枠）から取って掲載チャンネルに保存する。取り込む再生リストにはそのアイコンを入れ、アイコンが空のまま入っていた既存の再生リストとチャンネルページも埋める。段階3の移行（§10.9）で作った掲載チャンネルはアイコンが空で、巡回で取り込んだ再生リストのアイコンも空になっていたため（2026-11-12）。移行スクリプトも、チャンネルのアイコンを引き継ぐように直した。
 
@@ -494,6 +498,7 @@ YouTube API Services Developer Policies（III.E.4）は、ユーザーの認可�
 
 - **掲載する**: 動画一覧がまだなら取る（登録と同じ。動画・再生時間を保存し、`youtubeItemCount`・`fullRefetchedAt`・`lastFetchedAt`・`latestVideoPublishedAt` を書く）。タグ（チャンネル単位タグ＋タイトル由来のタグ。画面で外したものを除く）を固定タグとして足し、`games.playlistCount`・`channels.playlistCount`（チャンネルのドキュメントが無ければ作る）・`tags.usagePlaylistCount` を足す。YouTube で見つからなければ失敗として返し、状態は変えない。`channel_off` の再生リストはこの操作では掲載できない（チャンネルの操作で戻す）。
 - **ゲームではない／対象外にする／10本未満に戻す／確認待ちに戻す**: 掲載中だったら件数を戻す。動画・タグ・レビュー・マイリストは消さない。
+- 件数は「変わる前に数えていた分を引き、変わった後に数える分を足す」で求める（`lib/listing-counts.ts` の `playlistCountDeltas`）。消されたゲーム・タグは飛ばす。
 - 状態の切り替えと件数の増減は1件ずつトランザクションで行い、同時に操作しても二重に数えない。
 
 #### 30日ルールの実装（§10.8）
@@ -502,7 +507,7 @@ YouTube API Services Developer Policies（III.E.4）は、ユーザーの認可�
 - メタ情報（タイトル・サムネイル）は、掲載チャンネルの再生リストなら巡回で、それ以外の監視の対象なら動画数の確認（`playlists.list` の `id` 指定。`part=snippet,contentDetails,status` で消費は同じ）で毎日取り直し、`metaFetchedAt` を書く。
 - 監視の対象の動画一覧は、`fullRefetchedAt`（無ければ `lastFetchedAt`→`registeredAt`）から25日を過ぎたら全件を取り直す（動画のタイトル・サムネイル・順番・再生時間を上書き。再生リストから消えた動画・削除や非公開の動画のドキュメントは消す。YouTube定期取得仕様書 v1.10 §7.2）。1日に回す件数は対象全体の1/25まで（少なくとも10件）にし、古い順に回す。
 - **消し込み**: 掲載中でなく、監視の対象でもない再生リストのうち、メタ情報を30日取り直していない（`metaFetchedAt`、無ければ `lastFetchedAt`→`registeredAt` が30日より前）もので、ユーザーの記録（マイリスト・レビュー・視聴履歴・視聴位置）が無いものは、`playlists` と `videos` を消す（チャンネルを掲載し直せば巡回で作り直される）。`opt_out` で記録があるものは、YouTube 由来の項目（タイトル→「掲載を終了した再生リスト」・サムネイル・チャンネル名・アイコン）を空にし、動画のドキュメントを消して、`youtubeDataRemovedAt` を書く。
-- 収集候補（`collection_candidates`）は、`collectedAt` から30日を過ぎたら消す（巡回に取り込まれたものはその時点で消す）。
+- 収集候補（`collection_candidates`。もう作られない）の残りは、`collectedAt` から30日を過ぎたら消す。本番で残りが無くなったのを確かめたら、この処理も外してよい（v4.7）。
 - 掲載チャンネルの登録者数（`exploration_channels.subscriberCount`）は巡回のたびに null にする（確定のときの確認にだけ使う）。名前検索の候補（`searchCandidates`）の登録者数は、`updatedAt` から30日を過ぎたら null にする。
 - 消し込みは1回あたり500件まで（多いときは翌日に続ける）。
 
@@ -528,3 +533,4 @@ YouTube API Services Developer Policies（III.E.4）は、ユーザーの認可�
 | v4.4 | 2026-11-12 | §10.11: 巡回で掲載チャンネルのアイコンが空なら補い、アイコンが空の再生リスト・チャンネルページも埋めるようにした（段階3の移行で作った掲載チャンネルのアイコンが空だった不具合） |
 | v4.5 | 2026-11-13 | §10.11: 全件の取り直しで、再生リストから消えた動画のドキュメントを消すようにした（これまでは視聴記録のため残していた）。削除・非公開の動画は取り込まない（YouTube定期取得仕様書 v1.10） |
 | v4.6 | 2026-11-17 | §10.8: チャンネル名・アイコンは毎日の再取得で取り直す（YouTube定期取得仕様書 v1.11 §4.4）。作られていない「チャンネル更新バッチ（週1）」への言及を直した |
+| v4.7 | 2026-11-17 | §10.11（リファクタリング②）: 巡回の入口を `sweepChannels` に揃え、手動の巡回を `lib/channel-sweep-run.ts`・`POST /api/admin/collection/sweep` に改名。件数の増減を `lib/listing-counts.ts` に集めた。巡回で収集候補の却下を引き継ぐ処理を外した（残りの収集候補の30日の消し込みだけ残す）。ゲーム推定などのルールのファイルを `lib/playlist-title-rules.ts` に改名 |

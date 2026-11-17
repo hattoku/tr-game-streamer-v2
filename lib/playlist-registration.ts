@@ -1,4 +1,3 @@
-import { FieldValue } from 'firebase-admin/firestore';
 import { adminDb } from './firebase-admin';
 import {
   extractPlaylistId,
@@ -12,11 +11,12 @@ import {
 } from './youtube';
 import { PLAYLIST_PROPOSAL_TYPE } from './proposal-shared';
 import type { PlaylistSource } from './listing';
+import { playlistCountDeltas } from './listing-counts';
+import { directReader, prepareCountWrites } from './listing-counts-server';
 
 // 再生リストの登録・提案で共通のサーバー側処理（ページ 再生リストを追加する 仕様書 §4.1.5・§5）。
 // 管理者の直接登録（/api/playlists/register）、一般ユーザーの提案（/api/playlists/propose）、
-// 提案の承認（/api/admin/workflows/[workflowId]）、コンテンツ収集の承認（/api/admin/collection/candidates、
-// 収集候補レビューUI仕様書 v2.0 §4）から使う。プレビュー時の情報は信用せず、
+// 提案の承認（/api/admin/workflows/[workflowId]）から使う。プレビュー時の情報は信用せず、
 // YouTube API と Firestore の状態を毎回サーバー側で取り直す。
 
 export type PlaylistApiError = { error: string; status: number; message?: string };
@@ -89,7 +89,7 @@ export async function registerPlaylist(params: {
   proposedBy: string | null;
   /** 固定タグとして付けるタグID（運営者タグ。存在確認は呼び出し側で行う） */
   fixedTagIds?: string[];
-  /** 入った経路。省略は管理者の直接登録（`admin`）。収集候補の承認は `collection_candidate` */
+  /** 入った経路。省略は管理者の直接登録（`admin`） */
   source?: PlaylistSource;
   /** 所属する掲載チャンネル（`exploration_channels` のドキュメントID）。分かるときだけ */
   explorationChannelId?: string | null;
@@ -103,14 +103,9 @@ export async function registerPlaylist(params: {
   const { playlist, channel } = valid;
 
   const playlistRef = adminDb.collection('playlists').doc(playlist.youtubePlaylistId);
-  const channelRef = adminDb.collection('channels').doc(channel.youtubeChannelId);
   const gameRef = gameId ? adminDb.collection('games').doc(gameId) : null;
 
-  const [playlistDoc, channelDoc, gameDoc] = await Promise.all([
-    playlistRef.get(),
-    channelRef.get(),
-    gameRef ? gameRef.get() : Promise.resolve(null),
-  ]);
+  const [playlistDoc, gameDoc] = await Promise.all([playlistRef.get(), gameRef ? gameRef.get() : Promise.resolve(null)]);
 
   if (playlistDoc.exists) return { error: 'already_registered', status: 409 };
   if (gameDoc && !gameDoc.exists) return { error: 'game_not_found', status: 404 };
@@ -148,23 +143,20 @@ export async function registerPlaylist(params: {
   }
 
   const now = new Date();
+  // 件数（チャンネル・ゲーム・固定タグ。lib/listing-counts.ts）。チャンネルページが無ければ作る
+  const counts = await prepareCountWrites(
+    directReader,
+    playlistCountDeltas(null, { listed: true, gameId, channelId: channel.youtubeChannelId, tagIds: fixedTagIds }),
+    {
+      channelSeed: {
+        name: channel.name,
+        iconUrl: channel.iconUrl,
+        description: typeof channelDescription === 'string' && channelDescription.trim() ? channelDescription.trim() : null,
+      },
+      now,
+    },
+  );
   const batch = adminDb.batch();
-
-  if (channelDoc.exists) {
-    batch.update(channelRef, { playlistCount: (channelDoc.data()!.playlistCount ?? 0) + 1 });
-  } else {
-    batch.set(channelRef, {
-      youtubeChannelId: channel.youtubeChannelId,
-      name: channel.name,
-      iconUrl: channel.iconUrl,
-      description: typeof channelDescription === 'string' && channelDescription.trim() ? channelDescription.trim() : null,
-      isAiGeneratedDescription: false,
-      subscriberCount: null,
-      playlistCount: 1,
-      registeredAt: now,
-      lastFetchedAt: null,
-    });
-  }
 
   batch.set(playlistRef, {
     youtubePlaylistId: playlist.youtubePlaylistId,
@@ -207,12 +199,7 @@ export async function registerPlaylist(params: {
     lastFetchedAt: null,
   });
 
-  for (const tagId of fixedTagIds) {
-    batch.update(adminDb.collection('tags').doc(tagId), { usagePlaylistCount: FieldValue.increment(1) });
-  }
-
-  if (gameRef && game) batch.update(gameRef, { playlistCount: (game.playlistCount ?? 0) + 1 });
-
+  counts.write(batch);
   await batch.commit();
 
   return {

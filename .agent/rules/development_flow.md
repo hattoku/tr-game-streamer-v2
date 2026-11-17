@@ -166,7 +166,7 @@ E2E の前に、DB を使わない処理を手元・クラウドで数秒で確�
 
 - 実行: `npm test`（1回だけ流す）／`npm run test:watch`（ファイルを保存するたびに流す）。設定は `vitest.config.mts`
 - 置き場所: `tests/unit/<対象のファイル名>.test.ts`。`@/` の import はそのまま使える
-- 対象: **DB（Firestore）・外部 API（YouTube・楽天など）・画面を使わない処理だけ**。判定のルール（`lib/listing-rules.ts`）・ゲームの推定（`lib/exploration-rules.ts`）・点数や件数の計算・入力の検証・表示の整形など。`*-shared.ts` や純粋な関数のファイルが中心
+- 対象: **DB（Firestore）・外部 API（YouTube・楽天など）・画面を使わない処理だけ**。判定のルール（`lib/listing-rules.ts`）・ゲームの推定（`lib/playlist-title-rules.ts`）・点数や件数の計算・入力の検証・表示の整形など。`*-shared.ts` や純粋な関数のファイルが中心
 - 対象外: Firestore を読み書きする処理（`*-server.ts`、API Route）と画面。Firestore エミュレーターは使わない。これらは stg の E2E で確かめる
 - 書き方: E2E と同じく、テスト名・コメントに仕様書と節を書き、仕様書の1項目を1テストにする（第3章）
 - 追加のタイミング: DB を使わない処理を足したり変えたりしたら、その分のテストを足す。DB を使う処理の中に判定や計算があるときは、その部分を純粋な関数に分けてからテストする

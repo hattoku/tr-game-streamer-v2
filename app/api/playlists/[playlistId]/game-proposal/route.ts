@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireUser } from '@/lib/api-auth';
 import { adminDb } from '@/lib/firebase-admin';
-import { normalizeForMatch } from '@/lib/exploration-rules';
+import { normalizeForMatch } from '@/lib/playlist-title-rules';
 import { GAME_PROPOSAL_TYPE, MAX_GAME_PROPOSAL_NOTE_LENGTH, MAX_GAME_TITLE_LENGTH } from '@/lib/proposal-shared';
 import { newWorkflowRecord } from '@/lib/playlist-registration';
 

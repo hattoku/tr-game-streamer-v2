@@ -7,16 +7,7 @@ import type { QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import { adminDb } from './firebase-admin';
 import { fetchPlaylistItemCounts, getQuotaConsumed, YouTubeApiError, type PlaylistItemCount } from './youtube';
 import { fetchAndStoreAllVideos, estimateVideoFetchCost } from './playlist-videos';
-import {
-  activeChannelsForSweep,
-  emptyNewCounts,
-  isQuotaExceededError,
-  listAutoPending,
-  loadGamesForSweep,
-  loadListingRules,
-  sweepChannel,
-  type NewPlaylistCounts,
-} from './channel-sweep';
+import { activeChannelsForSweep, emptyNewCounts, emptySweepChannelsResult, listAutoPending, loadSweepContext, sweepChannels, type NewPlaylistCounts } from './channel-sweep';
 import { refreshChannelProfiles, type ChannelProfileRefreshResult } from './channel-profile-refresh';
 import { metaAgeBase, purgeStalePlaylists, REFETCH_AFTER_DAYS, videosAgeBase } from './data-retention';
 
@@ -191,29 +182,15 @@ export async function refreshNewVideos(): Promise<RefreshSummary> {
     if (isQuotaExceeded(profiles.error)) summary.quotaExceeded = true;
   }
 
-  // ① 掲載チャンネルの巡回
-  const counts = new Map<string, PlaylistItemCount>();
+  // ① 掲載チャンネルの巡回（巡回の入口で共通の sweepChannels。1チャンネルの見込みは最低10ユニットとして、1回の上限を超えそうなら残りは翌日）
   const channels = await activeChannelsForSweep();
-  if (channels.length > 0) {
-    const ctx = { rules: await loadListingRules(), games: await loadGamesForSweep(), now };
-    for (const channelDoc of channels) {
-      if (overBudget(10)) break;
-      try {
-        const result = await sweepChannel(channelDoc, ctx);
-        summary.sweptChannelCount++;
-        result.itemCounts.forEach((v, k) => counts.set(k, v));
-        for (const [k, v] of Object.entries(result.newCounts)) summary.sweepNewPlaylists[k as keyof NewPlaylistCounts] += v;
-        summary.notFoundPlaylists.push(...result.missing);
-      } catch (e) {
-        if (!(e instanceof YouTubeApiError)) throw e;
-        summary.sweepErrors.push({ explorationChannelId: channelDoc.id, message: errorMessage(e) });
-        if (isQuotaExceededError(e)) {
-          summary.quotaExceeded = true;
-          break;
-        }
-      }
-    }
-  }
+  const sweep = channels.length > 0 ? await sweepChannels(channels, await loadSweepContext(now), { canSweep: () => !overBudget(10) }) : emptySweepChannelsResult();
+  const counts = new Map<string, PlaylistItemCount>(sweep.itemCounts);
+  summary.sweptChannelCount = sweep.swept.size;
+  summary.sweepNewPlaylists = sweep.newCounts;
+  summary.sweepErrors = sweep.errors;
+  summary.notFoundPlaylists.push(...sweep.missing);
+  if (sweep.quotaExceeded) summary.quotaExceeded = true;
 
   // 監視の対象（巡回で作った・更新したあとの状態で選ぶ）
   const [playlistsSnap, mylistSnap] = await Promise.all([
