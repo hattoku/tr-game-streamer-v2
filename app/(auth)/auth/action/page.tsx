@@ -100,8 +100,17 @@ function StatusIcon({ tone }: { tone: 'success' | 'error' }) {
           : 'bg-bg-card text-input-error shadow-[inset_0_0_0_1.5px_var(--color-input-error)]',
       )}
     >
-      {tone === 'success' ? <CheckIcon size={24} /> : <AlertIcon size={24} />}
+      {tone === 'success' ? <CheckIcon size={24} /> : <ExclamationMark />}
     </span>
+  );
+}
+
+/** 丸の中に「!」だけを置く（AlertIcon は自身が丸を含み、丸が二重になるため使わない） */
+function ExclamationMark() {
+  return (
+    <svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round">
+      <path d="M12 6v8M12 18.5h.01" />
+    </svg>
   );
 }
 
@@ -126,7 +135,7 @@ function ResultPanel({
       {action}
       <p className="text-center text-base text-text-muted">
         <Link href="/" className={LINK_CLASS}>
-          プレミテのトップへ
+          TOP
         </Link>
       </p>
     </div>

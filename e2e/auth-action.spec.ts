@@ -23,7 +23,7 @@ test.describe('リンクが使えないとき（§9.4）', () => {
       await expect(guestPage.getByRole('link', { name: c.button })).toHaveAttribute('href', c.href);
       // プレミテの認証画面のレイアウト（ロゴのヘッダー）で出す
       await expect(guestPage.locator('header').getByRole('link', { name: 'プレミテ トップページ' })).toBeVisible();
-      await expect(guestPage.getByRole('link', { name: 'プレミテのトップへ' })).toHaveAttribute('href', '/');
+      await expect(guestPage.getByRole('link', { name: 'TOP', exact: true })).toHaveAttribute('href', '/');
     });
   }
 });
