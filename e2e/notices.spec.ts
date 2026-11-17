@@ -104,7 +104,7 @@ test('§5・§6.3 下書きを作れて、利用者側には出ない。添付�
   await test.step('タイトルだけで下書き保存でき、編集画面の URL に変わる', async () => {
     await adminPage.getByLabel(/^タイトル/).fill(title);
     await adminPage.getByRole('button', { name: '下書き保存' }).click();
-    await expect(adminPage.getByText('下書きを保存しました')).toBeVisible();
+    await expect(adminPage.getByText('下書きを保存しました').first()).toBeVisible();
     await expect(adminPage).toHaveURL(/\/admin\/notices\/(?!new)[^/]+$/);
     createdNotices.push(noticeIdFromUrl(adminPage));
     await expect(adminPage.getByTestId('notice-status')).toHaveText('下書き');
@@ -162,7 +162,7 @@ test('§5・§7 公開するとTOPの欄・一覧・詳細に出て、ベルと�
     await expect(dialog).toContainText('ベルで');
     await expect(dialog).toContainText('重要なお知らせとして出します');
     await dialog.getByRole('button', { name: '公開する' }).click();
-    await expect(adminPage.getByText(/公開しました。.*人のベルに通知しました/)).toBeVisible({ timeout: 30_000 });
+    await expect(adminPage.getByText(/公開しました。.*人のベルに通知しました/).first()).toBeVisible({ timeout: 30_000 });
     noticeId = noticeIdFromUrl(adminPage);
     createdNotices.push(noticeId);
     await expect(adminPage.getByTestId('notice-status')).toHaveText('公開中');
@@ -211,7 +211,7 @@ test('§5・§7 公開するとTOPの欄・一覧・詳細に出て、ベルと�
     const edited = `${title.slice(0, 44)} 修正`;
     await adminPage.getByLabel(/^タイトル/).fill(edited);
     await adminPage.getByRole('button', { name: '保存', exact: true }).click();
-    await expect(adminPage.getByText('保存しました。公開中のお知らせにすぐ反映されます')).toBeVisible();
+    await expect(adminPage.getByText('保存しました。公開中のお知らせにすぐ反映されます').first()).toBeVisible();
     await guestPage.goto(`/notices/${noticeId}`);
     await expect(guestPage.getByRole('heading', { name: edited })).toBeVisible();
     expect(await bellCount(noticeId)).toBe(firstBellCount);
