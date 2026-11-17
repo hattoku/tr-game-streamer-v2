@@ -5,7 +5,7 @@ import { fetchChannelPlaylistsFirstPage, YouTubeApiError } from '@/lib/youtube';
 import { CHANNEL_APPLICATION_TYPE } from '@/lib/channel-application-shared';
 import { getListingChannel } from '@/lib/channel-application-server';
 
-// チャンネル申請の審査詳細に出す情報（管理 審査ワークフロー仕様書 §15.2）。
+// チャンネル申請の審査詳細に出す情報（管理 審査ワークフロー仕様書 §4.4）。
 // 申請のチャンネルの再生リスト（最大20件、YouTube から都度取得。保存しない）と、掲載チャンネルとしての今の状態を返す。
 export async function GET(request: NextRequest, { params }: { params: Promise<{ workflowId: string }> }) {
   const auth = await requireAdmin(request);

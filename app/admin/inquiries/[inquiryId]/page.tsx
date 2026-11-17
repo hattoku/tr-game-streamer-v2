@@ -1,7 +1,7 @@
 /**
  * お問い合わせ詳細・チャットスレッド（/admin/inquiries/[inquiryId]）。管理 お問い合わせ管理仕様書 §4 準拠。
  *
- * お問い合わせ本体と messages サブコレクションを onSnapshot で購読し、操作（ステータス変更・対応メモ・返信・
+ * お問い合わせ本体と messages サブコレクションを onSnapshot で購読し（lib/inquiry-admin.ts）、操作（ステータス変更・対応メモ・返信・
  * クローズ・再オープン）はすべて PATCH /api/admin/inquiries/[inquiryId]（Admin SDK）で行う。
  * スレッドの先頭にはお問い合わせ内容（inquiries.body）をユーザーのメッセージとして表示する。
  * 未ログインユーザーのお問い合わせはスレッドが無いため（§4.5）、返信欄の代わりにメールでの返信を案内する
@@ -12,15 +12,12 @@
 
 import { useEffect, useState } from 'react';
 import { notFound, useParams } from 'next/navigation';
-import { collection, doc, onSnapshot, orderBy, query } from 'firebase/firestore';
-import { auth, db } from '@/lib/firebase';
+import { callInquiryAdminApi, subscribeInquiry, subscribeInquiryMessages, type AdminInquiryDetail, type AdminInquiryMessage } from '@/lib/inquiry-admin';
 import {
   INQUIRY_MEMO_MAX,
   INQUIRY_REPLY_MAX,
   INQUIRY_STATUSES,
   inquiryCategoryLabel,
-  parseInquiryAttachments,
-  type InquiryAttachmentJson,
   type InquiryStatus,
 } from '@/lib/inquiry-shared';
 import { Card, CardDivider, SectionHeading } from '@/components/ui/Card';
@@ -34,27 +31,8 @@ import { ChevronLeftIcon, ExternalLinkIcon } from '@/components/ui/icons';
 import { ThreadMessage, formatInquiryDate as formatDate } from '@/components/contact/ThreadMessage';
 import { InquiryAttachments } from '@/components/contact/InquiryAttachments';
 
-interface InquiryDetail {
-  userId: string | null;
-  userName: string | null;
-  email: string;
-  category: string;
-  body: string;
-  relatedUrls: string[];
-  attachments: InquiryAttachmentJson[];
-  status: InquiryStatus;
-  isGuest: boolean;
-  operatorMemo: string | null;
-  submittedAt: number;
-}
-
-interface Message {
-  id: string;
-  senderType: 'user' | 'admin';
-  body: string;
-  attachments: InquiryAttachmentJson[];
-  sentAt: number;
-}
+type InquiryDetail = AdminInquiryDetail;
+type Message = AdminInquiryMessage;
 
 export default function AdminInquiryDetailPage() {
   const { inquiryId } = useParams<{ inquiryId: string }>();
@@ -76,64 +54,22 @@ export default function AdminInquiryDetailPage() {
 
   useEffect(() => {
     if (!inquiryId) return;
-    return onSnapshot(
-      doc(db, 'inquiries', inquiryId),
-      (snap) => {
-        if (!snap.exists()) {
-          setMissing(true);
-          return;
-        }
-        const data = snap.data();
-        setInquiry({
-          userId: (data.userId as string | null) ?? null,
-          userName: (data.userName as string | null) ?? null,
-          email: (data.email as string) ?? '',
-          category: (data.category as string) ?? 'other',
-          body: (data.body as string) ?? '',
-          relatedUrls: Array.isArray(data.relatedUrls) ? (data.relatedUrls as string[]) : [],
-          attachments: parseInquiryAttachments(data.attachments),
-          status: (data.status as InquiryStatus) ?? 'open',
-          isGuest: data.isGuest === true,
-          operatorMemo: (data.operatorMemo as string | null) ?? null,
-          submittedAt: data.submittedAt?.toMillis?.() ?? 0,
-        });
-      },
+    return subscribeInquiry(
+      inquiryId,
+      (next) => (next ? setInquiry(next) : setMissing(true)),
       () => setLoadError(true),
     );
   }, [inquiryId]);
 
   useEffect(() => {
     if (!inquiryId) return;
-    return onSnapshot(
-      query(collection(db, 'inquiries', inquiryId, 'messages'), orderBy('sentAt', 'asc')),
-      (snap) => {
-        setMessages(
-          snap.docs.map((d) => {
-            const data = d.data();
-            return {
-              id: d.id,
-              senderType: data.senderType === 'admin' ? 'admin' : 'user',
-              body: (data.body as string) ?? '',
-              attachments: parseInquiryAttachments(data.attachments),
-              sentAt: data.sentAt?.toMillis?.() ?? 0,
-            };
-          }),
-        );
-      },
-      () => setLoadError(true),
-    );
+    return subscribeInquiryMessages(inquiryId, setMessages, () => setLoadError(true));
   }, [inquiryId]);
 
   if (missing) notFound();
 
-  async function callApi(body: Record<string, unknown>) {
-    const idToken = await auth.currentUser?.getIdToken();
-    const res = await fetch(`/api/admin/inquiries/${encodeURIComponent(inquiryId)}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) throw new Error(`status ${res.status}`);
+  function callApi(body: Record<string, unknown>) {
+    return callInquiryAdminApi(inquiryId, body);
   }
 
   // 変更は即時保存（§4.3）

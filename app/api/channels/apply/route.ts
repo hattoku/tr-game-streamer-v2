@@ -10,7 +10,7 @@ import {
   MAX_APPLICATION_REASON_LENGTH,
 } from '@/lib/channel-application-shared';
 
-// チャンネル申請の送信（ページ チャンネルを申請する 仕様書 §5・§8、管理 審査ワークフロー仕様書 §15.2）。
+// チャンネル申請の送信（ページ チャンネルを申請する 仕様書 §5・§8、管理 審査ワークフロー仕様書 §4.4）。
 // `workflows`（type: channel_application、審査中）を作る。YouTube の情報はサーバー側で取り直して保存する。
 // 管理者は申請できない（掲載チャンネル画面から直接登録する）。受け付けない条件は確認API（preview）と同じ判定をここでも行う。
 export async function POST(request: NextRequest) {

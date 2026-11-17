@@ -1,5 +1,5 @@
 // 詳細ページからの変更の提案の共有部分（lib/change-proposal-shared.ts）。
-// ページ 詳細ページからの変更提案 仕様書 §4.2・§5.2・§6.2・§8・§9.2、管理 審査ワークフロー仕様書 §16。
+// ページ 詳細ページからの変更提案 仕様書 §4.2・§5.2・§6.2・§8・§9.2、管理 審査ワークフロー仕様書 §4.5。
 import { describe, expect, it } from 'vitest';
 import {
   CHANGE_APPROVE_ACTIONS,

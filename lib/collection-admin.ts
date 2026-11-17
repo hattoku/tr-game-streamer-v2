@@ -1,9 +1,11 @@
-// コンテンツ収集の管理画面（/admin/collection 配下）で共用するクライアント側の読み込み・API呼び出し。
-// 管理 AI運営者向け収集候補レビューUI仕様書 v2.0。掲載チャンネル（DB 名は段階3までの exploration_channels のまま）等は
-// rules で管理者の読み取りのみ許可しているため、読み込みはクライアントSDK、書き込みは API Route 経由。
+// コンテンツ収集の管理画面（/admin/collection 配下）の読み込み（クライアント専用）。管理 AI運営者向け収集候補レビューUI仕様書。
+// 掲載チャンネル（DB 名は段階3までの exploration_channels のまま）等は rules で管理者の読み取りのみ許可しているため、
+// 読み込みはクライアントSDK、書き込みは管理 API 経由（lib/admin-api.ts）。管理画面の読み込みの決まりは lib/admin-api.ts の冒頭。
 import { collection, doc, getCountFromServer, getDoc, getDocs, limit, orderBy, query, where } from 'firebase/firestore';
-import { auth, db } from './firebase';
+import { db } from './firebase';
+import { requestAdminApi } from './admin-api';
 import { todayJst } from './collection-quota-shared';
+import { DEFAULT_LISTING_RULES, type ListingRules } from './listing-rules';
 import type { PopularityCounts } from './popularity-shared';
 
 export type ListingChannelStatus = 'unresolved' | 'pending_confirm' | 'active' | 'excluded' | 'opted_out';
@@ -128,10 +130,51 @@ export async function countListing(status: ListingTab, explorationChannelId?: st
   return (await getCountFromServer(query(collection(db, 'playlists'), ...constraints))).data().count;
 }
 
-export interface ListingRulesDoc {
-  excludedWords: string[];
-  nonGameWords: string[];
-  minVideoCount: number;
+/** 判定の言葉（`app_settings/listing_rules`。保存していなければ初期値） */
+export async function fetchListingRules(): Promise<ListingRules> {
+  const d = (await getDoc(doc(db, 'app_settings', 'listing_rules'))).data();
+  return {
+    excludedWords: Array.isArray(d?.excludedWords) ? d.excludedWords : DEFAULT_LISTING_RULES.excludedWords,
+    nonGameWords: Array.isArray(d?.nonGameWords) ? d.nonGameWords : DEFAULT_LISTING_RULES.nonGameWords,
+    minVideoCount: typeof d?.minVideoCount === 'number' ? d.minVideoCount : DEFAULT_LISTING_RULES.minVideoCount,
+  };
+}
+
+/** ゲーム未設定・ユーザーがゲームを付けた再生リストの画面（/admin/collection/unset、仕様書 §6.5）の1行 */
+export interface GameCheckPlaylist {
+  id: string;
+  title: string;
+  channelName: string;
+  thumbnailUrl: string;
+  gameHint: string;
+  registeredAt: number | null;
+  gameName: string;
+  gameSetAt: number | null;
+}
+
+/**
+ * 掲載中の再生リストのうち、ゲーム未設定のもの（`kind: unset`）か、一般ユーザーがゲームを付けたもの（`kind: user_set`、確認して違えば戻す）。
+ * 取り込んだ確認待ち・非表示の再生リストは「自動掲載の確認」でゲームを付けるため出さない。新しい順
+ */
+export async function fetchGameCheckPlaylists(kind: 'unset' | 'user_set'): Promise<GameCheckPlaylist[]> {
+  const condition = kind === 'unset' ? where('gameId', '==', null) : where('gameSetBy', '==', 'user');
+  const snap = await getDocs(query(collection(db, 'playlists'), condition));
+  return snap.docs
+    .filter((d) => (d.data().listingStatus ?? 'listed') === 'listed')
+    .map((d): GameCheckPlaylist => {
+      const data = d.data();
+      return {
+        id: d.id,
+        title: (data.title as string) ?? '',
+        channelName: (data.channelName as string) ?? '',
+        thumbnailUrl: (data.thumbnailUrl as string) ?? '',
+        gameHint: (data.gameHint as string | null) ?? '',
+        registeredAt: toMillis(data.registeredAt),
+        gameName: (data.gameName as string) ?? '',
+        gameSetAt: toMillis(data.gameSetAt),
+      };
+    })
+    .sort((a, b) => (b.gameSetAt ?? b.registeredAt ?? 0) - (a.gameSetAt ?? a.registeredAt ?? 0));
 }
 
 export async function fetchCollectionQuotaUsedToday(): Promise<number> {
@@ -178,29 +221,14 @@ export async function fetchLastCollectionBatch(): Promise<CollectionBatchLog | n
   };
 }
 
-/** 管理者のIDトークンを付けて管理APIを POST で呼ぶ。レスポンスの JSON とステータスを返す */
-export async function postAdminApi<T = Record<string, unknown>>(path: string, body: unknown): Promise<{ ok: boolean; status: number; body: T }> {
-  const idToken = await auth.currentUser?.getIdToken();
-  const res = await fetch(path, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-    body: JSON.stringify(body),
-  });
-  const json = (await res.json().catch(() => ({}))) as T;
-  return { ok: res.ok, status: res.status, body: json };
-}
-
 /** 人気の数字（共通 人気のチャンネル 集計 仕様書 §6）。channels は YouTube のチャンネルID → 人数 */
 export interface PopularityOverview {
   lastRunAt: number | null;
   channels: Record<string, PopularityCounts>;
 }
 
-export async function fetchPopularityOverview(): Promise<PopularityOverview> {
-  const idToken = await auth.currentUser?.getIdToken();
-  const res = await fetch('/api/admin/popularity', { headers: { Authorization: `Bearer ${idToken}` }, cache: 'no-store' });
-  if (!res.ok) throw new Error(`status ${res.status}`);
-  return (await res.json()) as PopularityOverview;
+export function fetchPopularityOverview(): Promise<PopularityOverview> {
+  return requestAdminApi<PopularityOverview>('/api/admin/popularity', { method: 'GET' });
 }
 
 /** クォータ超過（429）のときのメッセージ */

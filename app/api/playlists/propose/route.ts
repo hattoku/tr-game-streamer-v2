@@ -42,10 +42,10 @@ function parseRakutenItem(value: unknown): ProposalRakutenItem | null {
 
 // 一般ユーザーの再生リスト登録提案API（ページ 再生リストを追加する 仕様書 §5.4、ページ 提案する 仕様書 §5.5）。
 // 本番の `playlists` には書かず、`workflows`（type: "playlist_register"、ステータス「審査中」）に保存する。
-// 承認・却下は管理画面（/admin/workflows、単一ステップ。管理 審査ワークフロー仕様書 §14・§15.3）で行う。
+// 承認・却下は管理画面（/admin/workflows、単一ステップ。管理 審査ワークフロー仕様書 §4.2）で行う。
 // 2つの形で受け付ける:
 // - `playlistId`: 提案ページの一覧から選んだ、すでに `playlists` にある（巡回で取り込んだ）掲載していない再生リスト。
-//   承認で掲載（listed）になる（審査ワークフロー仕様書 §15.3）。運営が手で外したものは受け付けない。
+//   承認で掲載（listed）になる（審査ワークフロー仕様書 §4.2）。運営が手で外したものは受け付けない。
 // - `playlistUrl`: 一覧に無いときの URL 入力（今までの提案）。`playlists` にすでにあって掲載していなければ、上と同じ扱いにする。
 // 制約チェックはサーバー側でも行う（クライアントの判定を信用しない）。
 // ゲームタイトルは任意（ページ 提案する 仕様書 §5.4）: 既存の `gameId`、候補に無い場合の新しいゲームタイトル `newGameTitle`（＋`newGameNote`・
@@ -170,7 +170,7 @@ export async function POST(request: NextRequest) {
       ...(existingGameId || noGame
         ? {}
         : { newGameTitle: newTitle, newGameNote: newNote || null, newGamePlatforms: newPlatforms, newGameRakuten: newRakuten }),
-      // すでにプレミテにある再生リストの掲載の提案（審査ワークフロー仕様書 §15.3）。提案時点の掲載状態と理由
+      // すでにプレミテにある再生リストの掲載の提案（審査ワークフロー仕様書 §4.2）。提案時点の掲載状態と理由
       ...(existing
         ? {
             existingListingStatus: (existing.listingStatus as string) ?? null,

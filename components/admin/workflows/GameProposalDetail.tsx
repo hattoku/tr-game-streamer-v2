@@ -9,9 +9,10 @@
 'use client';
 
 import { useState } from 'react';
-import { collection, getDocs, type DocumentData } from 'firebase/firestore';
 import Link from 'next/link';
-import { db } from '@/lib/firebase';
+import { fetchGameOptions } from '@/lib/admin-reads';
+import { callWorkflowApi, type WorkflowDoc } from '@/lib/workflow-admin';
+import { isPendingStatus, type DecisionAction, type WorkflowStatus } from '@/lib/workflow-shared';
 import { GameSelectModal, type GameOption } from '@/components/playlists/GameSelectModal';
 import { Button, LinkButton } from '@/components/ui/Button';
 import { Card, CardDivider } from '@/components/ui/Card';
@@ -19,18 +20,19 @@ import { useToast } from '@/components/ui/Toast';
 import { ExternalLinkIcon } from '@/components/ui/icons';
 import { GameCreateModal } from '@/components/games/GameCreateModal';
 import {
-  callWorkflowApi,
-  isPendingStatus,
+  workflowErrorMessage,
   WorkflowDecisionButtons,
   WorkflowDecisionModal,
   WorkflowDecisionNote,
   WorkflowHeader,
   WorkflowMemo,
-  type DecisionAction,
-  type WorkflowStatus,
 } from './shared';
 
-export function GameProposalDetail({ workflowId, data }: { workflowId: string; data: DocumentData }) {
+const APPROVE_ERRORS: Record<string, string> = {
+  playlist_game_already_set: 'この再生リストには、すでに別のゲームが付いているため承認できません。却下してください',
+};
+
+export function GameProposalDetail({ workflowId, data }: { workflowId: string; data: WorkflowDoc }) {
   const { toast } = useToast();
   const status = (data.status as WorkflowStatus) ?? 'reviewing_lv1';
   const pending = isPendingStatus(status);
@@ -46,12 +48,7 @@ export function GameProposalDetail({ workflowId, data }: { workflowId: string; d
   async function openSelect() {
     if (games.length === 0) {
       try {
-        const snap = await getDocs(collection(db, 'games'));
-        setGames(
-          snap.docs
-            .map((d) => ({ id: d.id, title: (d.data().title as string) ?? '', packageImageUrl: (d.data().packageImageUrl as string) ?? null, aliases: (d.data().aliases as string[] | undefined) ?? [] }))
-            .sort((a, b) => a.title.localeCompare(b.title, 'ja')),
-        );
+        setGames(await fetchGameOptions());
       } catch {
         toast({ type: 'error', message: 'ゲームの一覧を読み込めませんでした' });
         return;
@@ -70,13 +67,9 @@ export function GameProposalDetail({ workflowId, data }: { workflowId: string; d
       await callWorkflowApi(workflowId, { action: 'approve', createdGameId: gameId, comment: null });
       toast({ type: 'success', message: 'ゲームタイトルを登録し、提案を承認しました' });
     } catch (e) {
-      const code = (e as { code?: string | null }).code;
       toast({
         type: 'error',
-        message:
-          code === 'playlist_game_already_set'
-            ? 'この再生リストには、すでに別のゲームが付いているため承認できません。却下してください'
-            : '承認の記録に失敗しました。もう一度「承認する」を押してください',
+        message: workflowErrorMessage(e, APPROVE_ERRORS) ?? '承認の記録に失敗しました。もう一度「承認する」を押してください',
       });
     } finally {
       setApproving(false);

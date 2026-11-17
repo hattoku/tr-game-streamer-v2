@@ -37,7 +37,7 @@ interface ReviewItem {
   helpfulCount: number;
   postedAt: Date | null;
   updatedAt: Date | null;
-  /** 通報承認で非表示（管理 審査ワークフロー仕様書 §3.1）。本人のカードにだけ残して「非表示」を示す */
+  /** 通報承認で非表示（管理 審査ワークフロー仕様書 §4.1）。本人のカードにだけ残して「非表示」を示す */
   isHidden: boolean;
 }
 

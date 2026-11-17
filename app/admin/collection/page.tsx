@@ -9,8 +9,6 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { collection, getDocs } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
 import { Card, SectionHeading } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
@@ -33,6 +31,8 @@ import { fetchTagsMap, type TagInfo } from '@/lib/tags';
 import { packageImageSrc } from '@/lib/package-image';
 import { matchTitleTagNames } from '@/lib/playlist-title-rules';
 import { DEFAULT_LISTING_RULES, describeListingReason, MAX_RULE_WORD_LENGTH, type ListingRules } from '@/lib/listing-rules';
+import { postAdminApi } from '@/lib/admin-api';
+import { fetchChannelPageIds, fetchGameOptions } from '@/lib/admin-reads';
 import { COLLECTION_DAILY_QUOTA_LIMIT } from '@/lib/collection-quota-shared';
 import {
   countListing,
@@ -40,8 +40,8 @@ import {
   fetchListingChannels,
   fetchLastCollectionBatch,
   fetchListingPlaylists,
+  fetchListingRules,
   formatDateTime,
-  postAdminApi,
   quotaExceededMessage,
   type CollectionBatchLog,
   type ListingChannel,
@@ -122,25 +122,20 @@ export default function AdminListingConfirmPage() {
   }
 
   async function loadMeta() {
-    const [channelList, batch, used, channelPagesSnap] = await Promise.all([
+    const [channelList, batch, used, channelPages] = await Promise.all([
       fetchListingChannels(),
       fetchLastCollectionBatch(),
       fetchCollectionQuotaUsedToday(),
-      getDocs(collection(db, 'channels')),
+      fetchChannelPageIds(),
     ]);
     setChannels(new Map(channelList.map((c) => [c.id, c])));
-    setChannelPageIds(new Set(channelPagesSnap.docs.map((d) => d.id)));
+    setChannelPageIds(channelPages);
     setLastBatch(batch);
     setQuotaUsed(used);
   }
 
   async function loadGames() {
-    const gamesSnap = await getDocs(collection(db, 'games'));
-    setGames(
-      gamesSnap.docs
-        .map((d) => ({ id: d.id, title: (d.data().title as string) ?? '', packageImageUrl: (d.data().packageImageUrl as string) ?? null, aliases: (d.data().aliases as string[] | undefined) ?? [] }))
-        .sort((a, b) => a.title.localeCompare(b.title, 'ja')),
-    );
+    setGames(await fetchGameOptions());
   }
 
   useEffect(() => {
@@ -573,16 +568,7 @@ function RulesModal({ open, onOpenChange, onRejudged }: { open: boolean; onOpenC
 
   useEffect(() => {
     if (!open) return;
-    (async () => {
-      const { doc, getDoc } = await import('firebase/firestore');
-      const snap = await getDoc(doc(db, 'app_settings', 'listing_rules'));
-      const d = snap.data();
-      setRules({
-        excludedWords: Array.isArray(d?.excludedWords) ? d.excludedWords : DEFAULT_LISTING_RULES.excludedWords,
-        nonGameWords: Array.isArray(d?.nonGameWords) ? d.nonGameWords : DEFAULT_LISTING_RULES.nonGameWords,
-        minVideoCount: typeof d?.minVideoCount === 'number' ? d.minVideoCount : DEFAULT_LISTING_RULES.minVideoCount,
-      });
-    })();
+    (async () => setRules(await fetchListingRules()))();
   }, [open]);
 
   function addWord(kind: 'excludedWords' | 'nonGameWords', input: string, clear: () => void) {

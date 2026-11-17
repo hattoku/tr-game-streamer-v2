@@ -1,6 +1,6 @@
 /**
  * 審査ワークフロー詳細のうち、チャンネル申請（type: "channel_application"、リブランディング段階6）。
- * 管理 審査ワークフロー仕様書 §15.2・§15.4。チャンネルのアイコン・名前・登録者数・YouTube へのリンク、
+ * 管理 審査ワークフロー仕様書 §4.4。チャンネルのアイコン・名前・登録者数・YouTube へのリンク、
  * チャンネルの再生リスト（最大20件、都度取得）、申請の理由、掲載チャンネルとしての今の状態を出す。
  * 承認すると PATCH /api/admin/workflows/[workflowId] が掲載チャンネルに加え（確認してから掲載）、再生リストを1回取り込む。
  * 却下は定型の見送り理由が必須で、自由記述は内部メモ（申請者には見せない）。
@@ -8,23 +8,19 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { type DocumentData } from 'firebase/firestore';
-import { auth } from '@/lib/firebase';
+import { callWorkflowApi, fetchApplicationChannelInfo, type ApplicationPlaylist, type WorkflowDoc } from '@/lib/workflow-admin';
+import { isPendingStatus, type DecisionAction, type WorkflowStatus } from '@/lib/workflow-shared';
 import { Card, CardDivider } from '@/components/ui/Card';
 import { SkeletonText } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 import { ExternalLinkIcon } from '@/components/ui/icons';
 import {
-  callWorkflowApi,
-  isPendingStatus,
-  WorkflowApiError,
+  workflowErrorMessage,
   WorkflowDecisionButtons,
   WorkflowDecisionModal,
   WorkflowDecisionNote,
   WorkflowHeader,
   WorkflowMemo,
-  type DecisionAction,
-  type WorkflowStatus,
 } from './shared';
 import {
   CHANNEL_APPLICATION_REJECT_REASONS,
@@ -39,15 +35,9 @@ const DECIDE_ERRORS: Record<string, string> = {
   already_processed: 'ほかの操作で処理中か、すでに処理済みです。画面を再読み込みして確認してください',
 };
 
-interface PlaylistRow {
-  youtubePlaylistId: string;
-  title: string;
-  thumbnailUrl: string;
-  itemCount: number;
-  isPublic: boolean;
-}
+type PlaylistRow = ApplicationPlaylist;
 
-export function ChannelApplicationDetail({ workflowId, data }: { workflowId: string; data: DocumentData }) {
+export function ChannelApplicationDetail({ workflowId, data }: { workflowId: string; data: WorkflowDoc }) {
   const { toast } = useToast();
   const status = (data.status as WorkflowStatus) ?? 'reviewing_lv1';
   const pending = isPendingStatus(status);
@@ -66,15 +56,10 @@ export function ChannelApplicationDetail({ workflowId, data }: { workflowId: str
     if (!pending) return;
     (async () => {
       try {
-        if (!auth.currentUser) throw new Error('not signed in');
-        const idToken = await auth.currentUser.getIdToken();
-        const res = await fetch(`/api/admin/workflows/${encodeURIComponent(workflowId)}/channel-playlists`, {
-          headers: { Authorization: `Bearer ${idToken}` },
-        });
-        const body = await res.json().catch(() => ({}));
-        if ('listingStatus' in body) setListingStatus(body.listingStatus as string | null);
-        if (!res.ok) throw new Error(`status ${res.status}`);
-        setPlaylists({ rows: body.playlists ?? [], total: body.totalResults ?? 0 });
+        const info = await fetchApplicationChannelInfo(workflowId);
+        if (info.listingStatus !== undefined) setListingStatus(info.listingStatus);
+        if (!info.playlists) throw new Error('playlists unavailable');
+        setPlaylists(info.playlists);
       } catch {
         setPlaylistsError(true);
       }
@@ -89,7 +74,7 @@ export function ChannelApplicationDetail({ workflowId, data }: { workflowId: str
       toast({ type: 'success', message: action === 'approve' ? '承認し、掲載チャンネルに加えました' : '却下しました' });
       return true;
     } catch (e) {
-      const message = e instanceof WorkflowApiError && e.code ? DECIDE_ERRORS[e.code] : undefined;
+      const message = workflowErrorMessage(e, DECIDE_ERRORS);
       if (message) {
         setDecideError(message);
         toast({ type: 'error', message });

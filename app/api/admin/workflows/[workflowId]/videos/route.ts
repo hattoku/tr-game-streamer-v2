@@ -4,7 +4,7 @@ import { adminDb } from '@/lib/firebase-admin';
 import { fetchPlaylistItems, YouTubeApiError } from '@/lib/youtube';
 import { PLAYLIST_PROPOSAL_TYPE } from '@/lib/proposal-shared';
 
-// 再生リスト登録提案の審査詳細に出す動画一覧（管理 審査ワークフロー仕様書 §14.4）。
+// 再生リスト登録提案の審査詳細に出す動画一覧（管理 審査ワークフロー仕様書 §4.2）。
 // YouTube へ移らずに中身（ゲームが混ざっていないか等）を確かめるため、提案の再生リストの動画を都度取得して返す。
 // 返すのは表示に要るサムネ・タイトル・動画IDだけ（審査中の判断材料なので保存はしない）。
 export async function GET(request: NextRequest, { params }: { params: Promise<{ workflowId: string }> }) {

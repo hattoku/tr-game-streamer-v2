@@ -1,6 +1,6 @@
 /**
  * 審査ワークフロー詳細のうち、詳細ページからの変更の提案（type: game_title_edit・channel_report・playlist_report。
- * 管理 審査ワークフロー仕様書 §16、ページ 詳細ページからの変更提案 仕様書 §8）。
+ * 管理 審査ワークフロー仕様書 §4.5、ページ 詳細ページからの変更提案 仕様書 §8）。
  * 同じ対象への報告をまとめて見せ（審査中は reportData.targetKey、処理済みは reportData.decisionId が同じもの）、
  * 承認・却下はまとめて行う（API 側で同じ対象の審査中の提案をすべて処理し、報告した全員に通知する）。
  * 承認の処理は理由ごとの既定（いちばん多い理由）を選んだ状態で出し、運営が選び直せる。
@@ -9,8 +9,9 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { collection, doc, getDoc, getDocs, onSnapshot, query, where, type DocumentData } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { fetchGameOptions, fetchUserDisplayNames } from '@/lib/admin-reads';
+import { callWorkflowApi, subscribeChangeProposals, subscribePlaylistState, type WorkflowDoc } from '@/lib/workflow-admin';
+import { isPendingStatus, type DecisionAction, type WorkflowStatus } from '@/lib/workflow-shared';
 import { Button } from '@/components/ui/Button';
 import { Card, CardDivider } from '@/components/ui/Card';
 import { useToast } from '@/components/ui/Toast';
@@ -22,6 +23,7 @@ import {
   CHANGE_APPROVE_ACTION_LABEL,
   CHANGE_REJECT_REASONS,
   CHANGE_TARGET_LABEL,
+  changeGroupMajority,
   changeRejectReasonLabel,
   defaultApproveAction,
   describeChangeReason,
@@ -29,15 +31,12 @@ import {
   type ChangeTargetType,
 } from '@/lib/change-proposal-shared';
 import {
-  callWorkflowApi,
-  isPendingStatus,
+  workflowErrorMessage,
   WorkflowDecisionButtons,
   WorkflowDecisionModal,
   WorkflowDecisionNote,
   WorkflowHeader,
   WorkflowMemo,
-  type DecisionAction,
-  type WorkflowStatus,
 } from './shared';
 
 interface GroupItem {
@@ -75,7 +74,7 @@ function targetHref(targetType: ChangeTargetType, targetId: string): string {
   return targetType === 'game' ? `/games/${targetId}` : targetType === 'channel' ? `/channels/${targetId}` : `/playlists/${targetId}`;
 }
 
-export function ChangeProposalDetail({ workflowId, data }: { workflowId: string; data: DocumentData }) {
+export function ChangeProposalDetail({ workflowId, data }: { workflowId: string; data: WorkflowDoc }) {
   const { toast } = useToast();
   const status = (data.status as WorkflowStatus) ?? 'reviewing_lv1';
   const pending = isPendingStatus(status);
@@ -98,19 +97,15 @@ export function ChangeProposalDetail({ workflowId, data }: { workflowId: string;
   // まとめた報告（審査中なら同じ対象の審査中のもの、処理済みなら同じ処理のもの）
   useEffect(() => {
     if (!targetKey) return;
-    return onSnapshot(query(collection(db, 'workflows'), where('reportData.targetKey', '==', targetKey)), (snap) => {
-      const items = snap.docs
-        .filter((d) => {
-          const s = d.data().status as WorkflowStatus;
-          if (pending) return isPendingStatus(s);
-          return (d.data().reportData?.decisionId ?? d.id) === (decisionId ?? workflowId);
-        })
-        .map((d): GroupItem => {
-          const r = d.data().reportData ?? {};
+    return subscribeChangeProposals(targetKey, (all) => {
+      const items = all
+        .filter((item) => (pending ? isPendingStatus(item.status) : (item.reportData.decisionId ?? item.id) === (decisionId ?? workflowId)))
+        .map((item): GroupItem => {
+          const r = item.reportData;
           return {
-            id: d.id,
-            submittedBy: (d.data().submittedBy as string) ?? '',
-            submittedAt: d.data().submittedAt?.toMillis?.() ?? 0,
+            id: item.id,
+            submittedBy: item.submittedBy,
+            submittedAt: item.submittedAt,
             reason: (r.reason as string | null) ?? null,
             fields: (r.fields as string[] | null) ?? null,
             detail: (r.detail as string | null) ?? null,
@@ -120,7 +115,7 @@ export function ChangeProposalDetail({ workflowId, data }: { workflowId: string;
             proposedGameTitle: (r.proposedGameTitle as string | null) ?? null,
           };
         })
-        .sort((a, b) => a.submittedAt - b.submittedAt);
+        .sort((x, y) => x.submittedAt - y.submittedAt);
       setGroup(items);
     });
   }, [targetKey, pending, decisionId, workflowId]);
@@ -130,44 +125,19 @@ export function ChangeProposalDetail({ workflowId, data }: { workflowId: string;
     if (!group) return;
     const missing = [...new Set(group.map((g) => g.submittedBy))].filter((uid) => uid && !(uid in names));
     if (missing.length === 0) return;
-    Promise.all(
-      missing.map(async (uid) => {
-        const snap = await getDoc(doc(db, 'users', uid)).catch(() => null);
-        return [uid, (snap?.data()?.displayName as string) ?? '(退会したユーザー)'] as const;
-      }),
-    ).then((entries) => setNames((prev) => ({ ...prev, ...Object.fromEntries(entries) })));
+    fetchUserDisplayNames(missing).then((found) => setNames((prev) => ({ ...prev, ...found })));
   }, [group, names]);
 
   // 対象の今の状態（再生リストはゲームと掲載状態）
   useEffect(() => {
     if (!targetId || targetType !== 'playlist') return;
-    return onSnapshot(doc(db, 'playlists', targetId), (snap) => {
-      if (!snap.exists()) {
-        setTargetState({ missing: true });
-        return;
-      }
-      setTargetState({ gameName: (snap.data().gameName as string) || '（未設定）', listingStatus: snap.data().listingStatus as string });
-    });
+    return subscribePlaylistState(targetId, (state) =>
+      setTargetState(state ? { gameName: state.gameName || '（未設定）', listingStatus: state.listingStatus } : { missing: true }),
+    );
   }, [targetId, targetType]);
 
   // いちばん多い理由と、付け替え先の候補（いちばん多く選ばれたゲーム）
-  const majority = useMemo(() => {
-    if (!group || group.length === 0) return { reason: null as string | null, game: null as { id: string; title: string } | null, title: null as string | null };
-    const tally = new Map<string, number>();
-    const gameTally = new Map<string, { title: string; n: number }>();
-    let title: string | null = null;
-    for (const g of group) {
-      if (g.reason) tally.set(g.reason, (tally.get(g.reason) ?? 0) + 1);
-      if (g.proposedGameId) {
-        const cur = gameTally.get(g.proposedGameId) ?? { title: g.proposedGameName ?? '', n: 0 };
-        gameTally.set(g.proposedGameId, { ...cur, n: cur.n + 1 });
-      }
-      if (!title && g.proposedGameTitle) title = g.proposedGameTitle;
-    }
-    const reason = [...tally.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
-    const topGame = [...gameTally.entries()].sort((a, b) => b[1].n - a[1].n)[0];
-    return { reason, game: topGame ? { id: topGame[0], title: topGame[1].title } : null, title };
-  }, [group]);
+  const majority = useMemo(() => changeGroupMajority(group ?? []), [group]);
 
   const action: ChangeApproveAction = chosen ?? defaultApproveAction(targetType, majority.reason);
   const gameForRelink = relinkGame ?? majority.game;
@@ -176,12 +146,7 @@ export function ChangeProposalDetail({ workflowId, data }: { workflowId: string;
   async function openSelect() {
     if (games.length === 0) {
       try {
-        const snap = await getDocs(collection(db, 'games'));
-        setGames(
-          snap.docs
-            .map((d) => ({ id: d.id, title: (d.data().title as string) ?? '', packageImageUrl: (d.data().packageImageUrl as string) ?? null, aliases: (d.data().aliases as string[] | undefined) ?? [] }))
-            .sort((a, b) => a.title.localeCompare(b.title, 'ja')),
-        );
+        setGames(await fetchGameOptions());
       } catch {
         toast({ type: 'error', message: 'ゲームの一覧を読み込めませんでした' });
         return;
@@ -202,8 +167,7 @@ export function ChangeProposalDetail({ workflowId, data }: { workflowId: string;
       toast({ type: 'success', message: decision === 'approve' ? '承認しました' : '却下しました' });
       return true;
     } catch (e) {
-      const code = (e as { code?: string | null }).code ?? '';
-      toast({ type: 'error', message: ERROR_MESSAGE[code] ?? '処理に失敗しました。時間をおいて再試行してください' });
+      toast({ type: 'error', message: workflowErrorMessage(e, ERROR_MESSAGE) ?? '処理に失敗しました。時間をおいて再試行してください' });
       return false;
     }
   }
@@ -297,9 +261,9 @@ export function ChangeProposalDetail({ workflowId, data }: { workflowId: string;
                   <Button variant="secondary" size="sm" onClick={openSelect}>
                     既存のゲームから選ぶ
                   </Button>
-                  {majority.title && (
+                  {majority.newGameTitle && (
                     <Button variant="secondary" size="sm" onClick={() => setCreateOpen(true)}>
-                      「{majority.title}」を新しく登録する
+                      「{majority.newGameTitle}」を新しく登録する
                     </Button>
                   )}
                 </div>
@@ -341,7 +305,7 @@ export function ChangeProposalDetail({ workflowId, data }: { workflowId: string;
       <GameCreateModal
         open={createOpen}
         onOpenChange={setCreateOpen}
-        defaultTitle={majority.title ?? ''}
+        defaultTitle={majority.newGameTitle ?? ''}
         onCreated={(g) => setRelinkGame({ id: g.id, title: g.title })}
       />
       <WorkflowDecisionModal

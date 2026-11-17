@@ -1,34 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/api-auth';
 import { adminDb } from '@/lib/firebase-admin';
-import { recalculatePlaylistScore } from '@/lib/review-score';
-import { FieldValue } from 'firebase-admin/firestore';
-import { registerPlaylist, type PlaylistApiError } from '@/lib/playlist-registration';
-import { linkPlaylistToGame } from '@/lib/playlist-game-linking';
-import { GAME_PROPOSAL_TYPE, PLAYLIST_PROPOSAL_TYPE, proposalRejectReasonLabel } from '@/lib/proposal-shared';
-import { CHANNEL_APPLICATION_TYPE } from '@/lib/channel-application-shared';
-import { decideChannelApplication, getProposalChannelState } from '@/lib/channel-application-server';
-import { isChangeProposalType } from '@/lib/change-proposal-shared';
-import { decideChangeProposal } from '@/lib/change-proposal-server';
-import { publishExistingPlaylist } from '@/lib/propose-server';
+import { workflowDecisionHandler } from '@/lib/workflow-decisions';
+import { isPendingStatus, normalizeDecisionComment, normalizeOperatorMemo } from '@/lib/workflow-shared';
 
-// 審査ワークフローの承認・却下・運営メモ更新API（管理_審査ワークフロー仕様書 §9, §11）。
-// 対象typeは`review_report`（通報、フェーズ6ステップ3）と、提案系の`playlist_register`・`game_title_register`
-// （フェーズ7ステップ7-4）と、チャンネル申請`channel_application`（段階6）と、詳細ページからの変更の提案
-// （`game_title_edit`・`channel_report`・`playlist_report`、管理 審査ワークフロー仕様書 §16。同じ対象の審査中の提案をまとめて処理する）。
-// - 再生リスト登録提案の承認: /api/playlists/register と同じ登録処理（lib/playlist-registration.ts）を実行する。
-//   `gameId` を渡すと提案のゲームタイトルを差し替えて登録し、editHistory に記録する（§10.1 の最小版、2026-10-25 ユーザー決定）。
-//   未登録チャンネルの説明文は `channelDescription`（任意）。登録に失敗したら審査中のまま残す。
-//   新しいゲームタイトル付きの提案（proposalData.gameId が null、§14.3 v10.1）は、管理者が GameCreateModal で登録した gameId を渡す。
-// - ゲームタイトル登録提案（旧形式、v10.1 以降は新規作成なし）の承認: 管理者が先に GameCreateModal（POST /api/admin/games）で登録し、その `createdGameId` を渡す。
-// - 再生リスト登録提案の却下は定型の見送り理由 `rejectReasonCode` が必須で、`comment` は任意の内部メモ（§14.4 v11.0）。
-//   承認・却下とも提案者にサイト内通知（`notifications`、type: "review_result"）を作る（§14.4。ページ ユーザー通知機能仕様書 §2.1）。
+// 審査ワークフローの承認・却下・運営メモ更新API（管理 審査ワークフロー仕様書 §3・§4・§6）。
+// ここでは、ワークフローの読み込み・運営メモの保存・審査中かどうかの確認だけを行い、承認・却下は種別ごとの処理
+// （lib/workflow-decisions.ts の表から、lib/review-report-server.ts・lib/playlist-proposal-server.ts・lib/game-proposal-server.ts・
+// lib/channel-application-server.ts・lib/change-proposal-server.ts）へ渡す。
 // operator/owner共通のためロール別の分岐は無い（requireAdminのみで判定）。
-// STEP1/STEP2の二段階フローは実装しないため、承認・却下の記録は常にstep2Historyへ追記する
-// （step1Historyは使わない。AI運営者・ジャンル別担当アサインが未実装のため）。
-// 再生リスト登録提案の承認処理中の印（approvingAt）の有効期間
-const APPROVING_LOCK_MS = 2 * 60 * 1000;
-
+// 依頼: { action: 'update_memo', operatorMemo } / { action: 'approve' | 'reject', comment?, ...種別ごとの項目 }
+// 応答: { ok: true, ...種別ごとの項目 } / { error, message? }（エラーコードは種別ごとの処理が決める）
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ workflowId: string }> }) {
   const auth = await requireAdmin(request);
   if ('errorResponse' in auth) return auth.errorResponse;
@@ -41,280 +23,33 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     return NextResponse.json({ error: 'not_found' }, { status: 404 });
   }
   const workflow = workflowSnap.data()!;
-  if (
-    workflow.type !== 'review_report' &&
-    workflow.type !== PLAYLIST_PROPOSAL_TYPE &&
-    workflow.type !== GAME_PROPOSAL_TYPE &&
-    workflow.type !== CHANNEL_APPLICATION_TYPE &&
-    !isChangeProposalType(workflow.type)
-  ) {
+  const decide = workflowDecisionHandler(workflow.type);
+  if (!decide) {
     return NextResponse.json({ error: 'unsupported_type' }, { status: 400 });
   }
 
-  const body = await request.json();
+  const body = (await request.json()) as Record<string, unknown>;
   const action = body.action;
-  const comment = typeof body.comment === 'string' && body.comment.trim() ? body.comment.trim() : null;
-  const now = new Date();
 
   if (action === 'update_memo') {
-    if (typeof body.operatorMemo !== 'string') {
+    const operatorMemo = normalizeOperatorMemo(body.operatorMemo);
+    if (operatorMemo === undefined) {
       return NextResponse.json({ error: 'invalid_request' }, { status: 400 });
     }
-    const operatorMemo = body.operatorMemo.trim().slice(0, 1000) || null;
-    await workflowRef.update({ operatorMemo, updatedAt: now });
+    await workflowRef.update({ operatorMemo, updatedAt: new Date() });
     return NextResponse.json({ ok: true });
   }
 
   if (action !== 'approve' && action !== 'reject') {
     return NextResponse.json({ error: 'invalid_action' }, { status: 400 });
   }
-  if (workflow.status !== 'reviewing_lv1' && workflow.status !== 'reviewing_lv2') {
+  if (!isPendingStatus(workflow.status)) {
     return NextResponse.json({ error: 'already_processed' }, { status: 409 });
   }
-  // チャンネル申請（段階6、管理 審査ワークフロー仕様書 §15.2）。承認で掲載チャンネルに加え、定型の見送り理由で却下する
-  if (workflow.type === CHANNEL_APPLICATION_TYPE) {
-    const result = await decideChannelApplication({
-      workflowRef,
-      workflow,
-      workflowId,
-      action,
-      uid,
-      comment,
-      rejectReasonCode: body.rejectReasonCode,
-    });
-    if ('error' in result) return NextResponse.json({ error: result.error, message: result.message }, { status: result.status });
-    return NextResponse.json({ ok: true, imported: result.imported });
+
+  const result = await decide({ workflowRef, workflowId, workflow, action, uid, comment: normalizeDecisionComment(body.comment), body });
+  if ('error' in result) {
+    return NextResponse.json({ error: result.error, message: result.message }, { status: result.status });
   }
-
-  // 詳細ページからの変更の提案（§16）。理由ごとの処理（approveAction）を実行し、同じ対象の審査中の提案をまとめて承認・却下する
-  if (isChangeProposalType(workflow.type)) {
-    const result = await decideChangeProposal({
-      workflowId,
-      workflow,
-      action,
-      uid,
-      comment,
-      rejectReasonCode: body.rejectReasonCode,
-      approveAction: body.approveAction,
-      gameId: body.gameId,
-    });
-    if ('error' in result) return NextResponse.json({ error: result.error }, { status: result.status });
-    return NextResponse.json({ ok: true, count: result.count });
-  }
-
-  // 再生リスト登録提案の却下は定型理由が必須（自由記述は任意）。それ以外の却下は自由記述が必須
-  const rejectReasonLabel = proposalRejectReasonLabel(body.rejectReasonCode);
-  if (action === 'reject' && (workflow.type === PLAYLIST_PROPOSAL_TYPE ? !rejectReasonLabel : !comment)) {
-    return NextResponse.json({ error: 'reject_reason_required' }, { status: 400 });
-  }
-
-  const historyEntry = {
-    executedAt: now,
-    operatorId: uid,
-    isAI: false,
-    action: action === 'approve' ? 'approved' : 'rejected',
-    comment,
-  };
-
-  if (workflow.type === PLAYLIST_PROPOSAL_TYPE || workflow.type === GAME_PROPOSAL_TYPE) {
-    const updates: Record<string, unknown> = {};
-    if (action === 'approve' && workflow.type === PLAYLIST_PROPOSAL_TYPE) {
-      const proposal = workflow.proposalData ?? {};
-      // 新しいゲームタイトル付きの提案（§14.3 v10.1）は gameId が null。管理者が先にゲームタイトルを登録（または選択）して gameId を渡す。
-      // ゲームが分からない提案（noGame、§15.3）は、ゲームを決めずに承認できる（ゲーム未設定、すでにある再生リストは今のゲームのまま）
-      const originalGameId = (proposal.gameId as string | null) ?? null;
-      const gameId: string | null = typeof body.gameId === 'string' && body.gameId ? body.gameId : originalGameId;
-      if (!gameId && proposal.newGameTitle) {
-        return NextResponse.json({ error: 'game_required' }, { status: 400 });
-      }
-
-      // 承認時にも掲載チャンネルかを確かめる（審査ワークフロー仕様書 §15.3）。外れていたら承認せず審査中のまま残す
-      const proposalChannelId = proposal.channelId as string | undefined;
-      if (proposalChannelId && (await getProposalChannelState(proposalChannelId)) !== 'listed') {
-        return NextResponse.json({ error: 'channel_not_listed' }, { status: 409 });
-      }
-
-      // 同時承認で二重登録しないよう、承認処理中の印（approvingAt）をトランザクションで先に取る。
-      // 処理が途中で落ちた場合に詰まらないよう、2分より古い印は取り直してよい
-      const claimed = await adminDb.runTransaction(async (tx) => {
-        const snap = await tx.get(workflowRef);
-        const current = snap.data();
-        if (!current || (current.status !== 'reviewing_lv1' && current.status !== 'reviewing_lv2')) return false;
-        const approvingAt = current.approvingAt?.toMillis?.() ?? 0;
-        if (approvingAt && now.getTime() - approvingAt < APPROVING_LOCK_MS) return false;
-        tx.update(workflowRef, { approvingAt: now });
-        return true;
-      });
-      if (!claimed) {
-        return NextResponse.json({ error: 'already_processed' }, { status: 409 });
-      }
-
-      // すでに `playlists` にある掲載していない再生リストの提案（巡回で取り込んだもの、§15.3）は、掲載にする（運営が手で外したものは承認できない）
-      const existingSnap = proposal.youtubePlaylistId
-        ? await adminDb.collection('playlists').doc(proposal.youtubePlaylistId as string).get()
-        : null;
-      const existingData = existingSnap?.exists ? existingSnap.data()! : null;
-      const publishExisting = !!existingData && (existingData.listingStatus ?? 'listed') !== 'listed';
-      // 提案で掲載になったことを再生リストにも残す（提案者）。掲載のあとにワークフローの更新だけ失敗しても、
-      // 次の承認で「この提案者の提案として登録済み」と分かるよう、掲載より先に書く
-      const previousProposedBy = (existingData?.proposedBy as string | null | undefined) ?? null;
-      if (publishExisting) await existingSnap!.ref.update({ proposedBy: workflow.submittedBy ?? null });
-      const result = publishExisting
-        ? await publishExistingPlaylist({ playlistId: existingSnap!.id, gameId, uid, allowHidden: false })
-        : await registerPlaylist({
-            playlistUrl: proposal.playlistUrl as string,
-            gameId,
-            channelDescription: body.channelDescription,
-            registeredBy: uid,
-            proposedBy: workflow.submittedBy as string,
-          });
-      let registered: { playlistId: string; gameName: string } | null = 'error' in result ? null : result;
-      // 前回の承認で登録まで済み、ワークフローの更新だけ失敗していた場合（この提案者の提案として登録済み）は承認として扱う
-      if ('error' in result && result.error === 'already_registered' && proposal.youtubePlaylistId) {
-        const existing = (await adminDb.collection('playlists').doc(proposal.youtubePlaylistId as string).get()).data();
-        if (existing && existing.proposedBy === workflow.submittedBy) {
-          registered = { playlistId: proposal.youtubePlaylistId as string, gameName: (existing.gameName as string) ?? '' };
-        }
-      }
-      if (!registered) {
-        // 掲載できなかったときは、先に書いた提案者を元に戻す（掲載していない再生リストに提案者を残さない）
-        if (publishExisting) await existingSnap!.ref.update({ proposedBy: previousProposedBy }).catch(() => {});
-        await workflowRef.update({ approvingAt: FieldValue.delete() });
-        const error = result as PlaylistApiError | { error: string; status: number; message?: string };
-        return NextResponse.json({ error: error.error, message: error.message }, { status: error.status });
-      }
-      updates.approvingAt = FieldValue.delete();
-      updates['proposalData.registeredPlaylistId'] = registered.playlistId;
-      if (gameId !== originalGameId) {
-        updates['proposalData.approvedGameId'] = gameId;
-        updates['proposalData.approvedGameName'] = registered.gameName;
-        updates.editHistory = [
-          ...(workflow.editHistory ?? []),
-          { editedAt: now, operatorId: uid, field: 'gameId', from: originalGameId, to: gameId },
-        ];
-      }
-    }
-    if (action === 'approve' && workflow.type === GAME_PROPOSAL_TYPE) {
-      const createdGameId = typeof body.createdGameId === 'string' ? body.createdGameId : '';
-      if (!createdGameId || !(await adminDb.collection('games').doc(createdGameId).get()).exists) {
-        return NextResponse.json({ error: 'game_not_found' }, { status: 404 });
-      }
-      updates['proposalData.createdGameId'] = createdGameId;
-      // 再生リストに付けたい提案（v1.16）は、その再生リストにこのゲームを付ける（すでに付いていれば何もしない）
-      const targetPlaylistId = (workflow.proposalData?.playlistId as string | undefined) ?? null;
-      if (targetPlaylistId) {
-        const linked = await linkPlaylistToGame(targetPlaylistId, createdGameId, 'admin', uid);
-        // 提案のあとに別の経路（ユーザーの登録・自動照合）で別のゲームが付いていた、または再生リストが無いときは、
-        // 承認として通知してしまわないよう、承認せず管理者に知らせる（すでに同じゲームが付いているのは成功）
-        const sameGame = linked === 'already_set' && (await adminDb.collection('playlists').doc(targetPlaylistId).get()).data()?.gameId === createdGameId;
-        if (linked !== 'linked' && !sameGame) {
-          return NextResponse.json({ error: linked === 'already_set' ? 'playlist_game_already_set' : linked }, { status: 409 });
-        }
-      }
-    }
-    if (action === 'reject' && workflow.type === PLAYLIST_PROPOSAL_TYPE) {
-      updates['proposalData.rejectReasonCode'] = body.rejectReasonCode;
-    }
-    // 審査結果通知（§14.4）。再生リスト登録提案と、再生リストに付けたいゲームタイトル提案（v1.16）。旧形式のゲームタイトル登録提案は対象外
-    let notification: Record<string, unknown> | null = null;
-    const gameForPlaylistId = workflow.type === GAME_PROPOSAL_TYPE ? ((workflow.proposalData?.playlistId as string | undefined) ?? null) : null;
-    if (gameForPlaylistId && workflow.submittedBy) {
-      const gameTitle = (workflow.proposalData?.gameTitle as string) ?? '';
-      notification = {
-        userId: workflow.submittedBy,
-        type: 'review_result',
-        workflowId,
-        playlistId: gameForPlaylistId,
-        playlistTitle: (workflow.proposalData?.playlistTitle as string) ?? '',
-        message:
-          action === 'approve'
-            ? `ゲームタイトル「${gameTitle}」の提案が承認され、再生リストに登録されました`
-            : `ゲームタイトル「${gameTitle}」の提案は見送りになりました（運営の判断で、既存のゲームタイトルに合わせるか、登録を見送りました）`,
-        isRead: false,
-        createdAt: now,
-      };
-    }
-    if (workflow.type === PLAYLIST_PROPOSAL_TYPE && workflow.submittedBy) {
-      const playlistTitle = (workflow.proposalData?.title as string) ?? '';
-      const registeredPlaylistId = (updates['proposalData.registeredPlaylistId'] as string | undefined) ?? null;
-      notification = {
-        userId: workflow.submittedBy,
-        type: 'review_result',
-        workflowId,
-        playlistId: action === 'approve' ? registeredPlaylistId : null,
-        playlistTitle,
-        message:
-          action === 'approve'
-            ? `再生リスト「${playlistTitle}」の提案が承認され、公開されました`
-            : `再生リスト「${playlistTitle}」の提案は見送りになりました（${rejectReasonLabel}）`,
-        isRead: false,
-        createdAt: now,
-      };
-    }
-    // 状態の確定と通知はトランザクションで一度だけ行う。並行した承認・却下（却下どうしも含む）で状態と通知が食い違わないよう、
-    // 審査中のままであること、却下なら承認処理中の印（approvingAt）が有効でないことを確かめてから書く
-    const committed = await adminDb.runTransaction(async (tx) => {
-      const snap = await tx.get(workflowRef);
-      const current = snap.data();
-      if (!current || (current.status !== 'reviewing_lv1' && current.status !== 'reviewing_lv2')) return false;
-      const approvingAt = current.approvingAt?.toMillis?.() ?? 0;
-      if (action === 'reject' && approvingAt && now.getTime() - approvingAt < APPROVING_LOCK_MS) return false;
-      tx.update(workflowRef, {
-        ...updates,
-        status: action === 'approve' ? 'approved' : 'rejected',
-        step2History: [...(current.step2History ?? []), historyEntry],
-        updatedAt: now,
-      });
-      if (notification) tx.set(adminDb.collection('notifications').doc(), notification);
-      return true;
-    });
-    if (!committed) {
-      return NextResponse.json({ error: 'already_processed' }, { status: 409 });
-    }
-    return NextResponse.json({ ok: true });
-  }
-
-  const reviewId = workflow.reportData?.reviewId as string | undefined;
-  const playlistId = workflow.reportData?.playlistId as string | undefined;
-
-  // 承認時は対象レビューを論理削除（非表示化）する（§3.1）。ドキュメントと内容は残し、承認時点の内容を
-  // reportData.hiddenReviewSnapshot にも退避する（投稿者が後でレビューを削除しても審査記録に残るように）
-  let hiddenReviewSnapshot: Record<string, unknown> | null = null;
-  if (action === 'approve' && reviewId) {
-    const reviewRef = adminDb.collection('reviews').doc(reviewId);
-    // 読み取りから非表示化までの間に本人が削除・更新しても取りこぼさないようトランザクションにする
-    const review = await adminDb.runTransaction(async (tx) => {
-      const snap = await tx.get(reviewRef);
-      const data = snap.data();
-      if (!data || data.isHidden === true) return null;
-      tx.update(reviewRef, { isHidden: true, hiddenAt: now, hiddenByWorkflowId: workflowId });
-      return data;
-    });
-    if (review) {
-      hiddenReviewSnapshot = {
-        userId: review.userId,
-        userDisplayName: review.userDisplayName ?? null,
-        starRating: review.starRating ?? null,
-        comment: review.comment ?? null,
-        hasSpoiler: review.hasSpoiler === true,
-        postedAt: review.postedAt ?? null,
-        updatedAt: review.updatedAt ?? null,
-      };
-      // users.reviewCount は表示中のレビューだけを数える
-      const userRef = adminDb.collection('users').doc(review.userId as string);
-      const userSnap = await userRef.get();
-      const currentCount = userSnap.data()?.reviewCount ?? 0;
-      if (userSnap.exists) await userRef.update({ reviewCount: Math.max(0, currentCount - 1) });
-      if (playlistId) await recalculatePlaylistScore(playlistId);
-    }
-  }
-
-  await workflowRef.update({
-    ...(hiddenReviewSnapshot ? { 'reportData.hiddenReviewSnapshot': hiddenReviewSnapshot } : {}),
-    status: action === 'approve' ? 'approved' : 'rejected',
-    step2History: [...(workflow.step2History ?? []), historyEntry],
-    updatedAt: now,
-  });
-
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, ...result.response });
 }

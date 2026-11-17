@@ -7,7 +7,7 @@ import { listMyChangeProposals } from '../../../../lib/change-proposal-server';
 
 // 自分の再生リスト登録提案の一覧（提案履歴、ページ 再生リストを追加する 仕様書 §9.4）。
 // workflows は rules 上本人も直接読めるが、運営メモ（operatorMemo）や内部向けの自由記述（step2History.comment）を
-// 渡さないよう、表示に要る項目だけを API で返す。見送り理由は定型の文言（管理 審査ワークフロー仕様書 §14.4）のみ。
+// 渡さないよう、表示に要る項目だけを API で返す。見送り理由は定型の文言（管理 審査ワークフロー仕様書 §4.2）のみ。
 // 並び順は提案日時の新しい順（submittedBy と type の等価条件のみで引き、並べ替えはメモリ上で行う。複合インデックス不要）。
 export async function GET(request: NextRequest) {
   const auth = await requireUser(request);
