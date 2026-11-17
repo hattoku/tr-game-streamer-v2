@@ -1,27 +1,23 @@
 /**
- * プロフィールページ（ページ 設定 プロフィール仕様書、まとめ機能仕様書 §9）。ログイン不要で閲覧できる。
- * 1カラムで ①ヘッダー ②統計 ③ジャンル分布 ④マイリスト ⑤レビュー履歴 ⑥まとめ ⑦保存したまとめ（本人のみ）を縦に積む。
+ * プロフィールページ（ページ 設定 プロフィール仕様書）。ログイン不要で閲覧できる。
+ * 1カラムで ①ヘッダー ②統計 ③ジャンル分布 ④マイリスト ⑤レビュー履歴を縦に積む。
  *
  * - データは GET /api/users/[userId]/profile（Admin SDK）からまとめて取る（他人の users・mylist はクライアントから読めないため）。
  *   ログイン状態の確定を待ってから IDトークン付きで取り、本人なら公開設定にかかわらず全セクションが返る（§2.1）。
  * - マイリスト・レビュー履歴は、他人のページでは公開設定OFFならセクションごと出さない（API が null を返す。§2.3）。
  * - アイコン（プロフィール画像）は ProfileHeader の編集フォームで設定する（§9.5、v1.10）。未設定は UserAvatar の人物シルエット。
- * - 保存したまとめは既存の API（/api/collections/saved）から取る。閲覧できなくなったまとめは /collections/saved 側で管理する。
- * - まとめ・保存したまとめ（⑥⑦）はまとめ機能の取り下げ（2026-11-01、プロフィール仕様書 v1.8）で COLLECTIONS_ENABLED が false の間は出さない。
  * - ヘッダーと「編集する」（§9 インライン編集）は ProfileHeader。保存後は再取得せず、返ってきた表示名・自己紹介・アイコンで差し替える。
  */
 'use client';
 
 import { useEffect, useState, type ReactNode } from 'react';
-import Link from 'next/link';
 import { notFound, useParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { CollectionCard } from '@/components/collections/CollectionCard';
 import { ProfileAccordion } from '@/components/profile/ProfileAccordion';
 import { ProfileHeader } from '@/components/profile/ProfileHeader';
 import { ProfilePlaylistCard } from '@/components/profile/ProfilePlaylistCard';
 import { SpoilerRevealButton, useHideSpoilers } from '@/components/reviews/spoiler';
-import { Button, LinkButton } from '@/components/ui/Button';
+import { Button } from '@/components/ui/Button';
 import { Card, CardTitle } from '@/components/ui/Card';
 import { StatusBadge } from '@/components/ui/Badge';
 import { StatusChip, WATCH_STATUS_LABEL } from '@/components/ui/Chip';
@@ -30,15 +26,7 @@ import { Checkbox } from '@/components/ui/Input';
 import { SkeletonText } from '@/components/ui/Skeleton';
 import { StarRating } from '@/components/ui/StarRating';
 import { Tag } from '@/components/ui/Tag';
-import { AlertIcon, InventoryIcon, LockIcon, PlusIcon, StarIcon } from '@/components/ui/icons';
-import {
-  collectionThumbnails,
-  fetchCollectionPlaylists,
-  fetchSavedCollections,
-  fromCollectionJson,
-  type CollectionData,
-} from '@/lib/collections';
-import { COLLECTIONS_ENABLED } from '@/lib/feature-flags';
+import { AlertIcon, InventoryIcon, LockIcon, StarIcon } from '@/components/ui/icons';
 import { fetchProfile, formatProfileDate, ProfileNotFoundError, type ProfileJson, type ProfileReviewJson } from '@/lib/profile';
 
 const COMMENT_EXCERPT_LENGTH = 100;
@@ -54,8 +42,6 @@ function ProfileView({ userId }: { userId: string }) {
   const [profile, setProfile] = useState<ProfileJson | null>(null);
   const [missing, setMissing] = useState(false);
   const [loadError, setLoadError] = useState(false);
-  const [saved, setSaved] = useState<CollectionData[] | null>(null);
-  const [savedThumbnailById, setSavedThumbnailById] = useState<Map<string, string>>(new Map());
   const [hideSpoilers, toggleHideSpoilers] = useHideSpoilers(user);
   const [revealedSpoilers, setRevealedSpoilers] = useState<Set<string>>(new Set());
 
@@ -79,26 +65,6 @@ function ProfileView({ userId }: { userId: string }) {
       cancelled = true;
     };
   }, [userId, user, loading]);
-
-  const isSelf = profile?.isSelf === true;
-  useEffect(() => {
-    if (!isSelf || !COLLECTIONS_ENABLED) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const viewable = (await fetchSavedCollections()).flatMap((i) => (i.collection ? [i.collection] : []));
-        const playlists = await fetchCollectionPlaylists([...new Set(viewable.flatMap((c) => c.playlistIds.slice(0, 3)))]);
-        if (cancelled) return;
-        setSaved(viewable);
-        setSavedThumbnailById(new Map(playlists.map((p) => [p.id, p.thumbnailUrl])));
-      } catch {
-        if (!cancelled) setSaved([]);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [isSelf]);
 
   if (missing) notFound();
 
@@ -130,8 +96,7 @@ function ProfileView({ userId }: { userId: string }) {
   }
 
   const { user: u, stats, genres, mylist, reviews } = profile;
-  const collections = profile.collections.map(fromCollectionJson);
-  const collectionThumbnailById = new Map(Object.entries(profile.collectionThumbnailById));
+  const isSelf = profile.isSelf === true;
 
   return (
     <div className="mx-auto flex w-full max-w-[960px] flex-col gap-8">
@@ -239,74 +204,6 @@ function ProfileView({ userId }: { userId: string }) {
         </ProfileSection>
       )}
 
-      {/* ⑥ まとめ（まとめ機能仕様書 §9.1。公開まとめのみ。他人のページで0件ならセクションごと出さない） */}
-      {COLLECTIONS_ENABLED && (isSelf || collections.length > 0) && (
-        <ProfileSection
-          title="まとめ"
-          count={collections.length}
-          trailing={
-            isSelf && (
-              <LinkButton href="/collections/new" variant="secondary" size="sm">
-                <PlusIcon size={13} />
-                作る
-              </LinkButton>
-            )
-          }
-        >
-          {collections.length === 0 ? (
-            <EmptyState
-              icon={<InventoryIcon />}
-              title="公開中のまとめはありません"
-              description={
-                <>
-                  非公開・限定公開のまとめは<Link href="/collections/mine" className="underline hover:text-text-primary">自分のまとめ</Link>で確認できます
-                </>
-              }
-              className="py-10"
-            />
-          ) : (
-            <ProfileAccordion
-              label="まとめ"
-              items={collections}
-              getKey={(c) => c.id}
-              renderItem={(c) => <CollectionCard collection={c} thumbnails={collectionThumbnails(c, collectionThumbnailById)} />}
-            />
-          )}
-        </ProfileSection>
-      )}
-
-      {/* ⑦ 保存したまとめ（まとめ機能仕様書 §9.2。本人のページのみ） */}
-      {COLLECTIONS_ENABLED && isSelf && (
-        <ProfileSection
-          title="保存したまとめ"
-          count={saved?.length}
-          trailing={
-            <LinkButton href="/collections/saved" variant="ghost" size="sm">
-              保存したまとめ一覧へ
-            </LinkButton>
-          }
-        >
-          {!saved ? (
-            <Card>
-              <SkeletonText lines={2} />
-            </Card>
-          ) : saved.length === 0 ? (
-            <EmptyState
-              icon={<InventoryIcon />}
-              title="保存したまとめはまだありません"
-              description="気になるまとめを開いて「まとめを保存する」を押すと、ここにまとまります"
-              className="py-10"
-            />
-          ) : (
-            <ProfileAccordion
-              label="保存したまとめ"
-              items={saved}
-              getKey={(c) => c.id}
-              renderItem={(c) => <CollectionCard collection={c} thumbnails={collectionThumbnails(c, savedThumbnailById)} />}
-            />
-          )}
-        </ProfileSection>
-      )}
     </div>
   );
 }

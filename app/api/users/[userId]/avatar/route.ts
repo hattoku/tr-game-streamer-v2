@@ -13,7 +13,7 @@ import {
 } from '@/lib/profile-image-server';
 
 // アイコン（プロフィール画像）の設定・解除（ページ 設定 プロフィール仕様書 §9.2・§9.5）。本人のみ。
-// 変えたら、自分の reviews・collections の非正規化コピー（userProfileImageUrl）も揃える（表示名と同じ扱い）。
+// 変えたら、自分の reviews の非正規化コピー（userProfileImageUrl）も揃える（表示名と同じ扱い）。
 // 前の画像は users を書き換えた後に消す（1人1枚だけ残る）。
 
 type Params = { params: Promise<{ userId: string }> };

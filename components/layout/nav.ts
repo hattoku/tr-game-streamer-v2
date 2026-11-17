@@ -5,13 +5,6 @@
  * （wiki/sources/2026-09-11-phase2.5-design-plan.md §4 ステップ2）。
  */
 
-import { COLLECTIONS_ENABLED } from '@/lib/feature-flags';
-
-/** まとめ（/collections）の項目。まとめ機能の取り下げ（2026-11-01、UI仕様書 v2.0）で COLLECTIONS_ENABLED が false の間は外す */
-const COLLECTIONS_HREF = '/collections';
-const withoutCollections = <T extends { href: string }>(items: T[]): T[] =>
-  COLLECTIONS_ENABLED ? items : items.filter((item) => item.href !== COLLECTIONS_HREF);
-
 export interface NavItem {
   label: string;
   href: string;
@@ -19,12 +12,11 @@ export interface NavItem {
 
 /** グローバルナビゲーション（PC、§2.4）。アクティブ判定は href のプレフィクス一致 */
 // リブランディング段階5（UI仕様書 v2.1）でチャンネルを先頭にした
-export const GLOBAL_NAV: NavItem[] = withoutCollections([
+export const GLOBAL_NAV: NavItem[] = [
   { label: 'チャンネルから探す', href: '/channels' },
   { label: '再生リストを探す', href: '/playlists' },
   { label: 'ゲームから探す', href: '/games' },
-  { label: 'まとめ', href: COLLECTIONS_HREF },
-]);
+];
 
 /** ログイン済みユーザー向けリンク（PC、§2.6） */
 export const USER_NAV: NavItem[] = [
@@ -33,12 +25,11 @@ export const USER_NAV: NavItem[] = [
 ];
 
 /** フッター「サービス」グループ（§3.3）。モバイルの「さがす」タブ列（§2.7）も同じラベルを使う */
-export const FOOTER_SERVICE_NAV: NavItem[] = withoutCollections([
+export const FOOTER_SERVICE_NAV: NavItem[] = [
   { label: 'チャンネル名から探す', href: '/channels' },
   { label: '再生リストを探す', href: '/playlists' },
   { label: 'ゲームタイトルから探す', href: '/games' },
-  { label: 'まとめを探す', href: COLLECTIONS_HREF },
-]);
+];
 
 /** モバイル「さがす」セクションのタブ列（§2.7）。2行ラベル: main を大きく、sub を小さく表示 */
 export interface SearchTab {
@@ -47,12 +38,11 @@ export interface SearchTab {
   sub: string;
 }
 
-export const SEARCH_TABS: SearchTab[] = withoutCollections([
+export const SEARCH_TABS: SearchTab[] = [
   { href: '/channels', main: 'チャンネル名', sub: 'から探す' },
   { href: '/playlists', main: '再生リスト', sub: 'を探す' },
   { href: '/games', main: 'ゲームタイトル', sub: 'から探す' },
-  { href: COLLECTIONS_HREF, main: 'まとめ', sub: 'を探す' },
-]);
+];
 
 /** 後方互換: フッターと同じ href 群 */
 export const SEARCH_TAB_NAV: NavItem[] = FOOTER_SERVICE_NAV;
@@ -106,7 +96,7 @@ export const BOTTOM_TABS: BottomTab[] = [
   // 視聴履歴はマイリスト画面上部の切り替えで行き来するため、こちらのタブをアクティブにする（2026-11-16 ユーザー決定、マイリスト仕様書 §2.4）
   { key: 'mylist', label: 'マイリスト', href: '/mylist', guestHref: '/login', prefixes: ['/mylist', '/history'] },
   // 遷移先はチャンネル（UI仕様書 v2.0 §2.7、段階5で実装）
-  { key: 'search', label: 'さがす', href: '/channels', prefixes: ['/channels', '/playlists', '/games', ...(COLLECTIONS_ENABLED ? [COLLECTIONS_HREF] : [])] },
+  { key: 'search', label: 'さがす', href: '/channels', prefixes: ['/channels', '/playlists', '/games'] },
   // 未ログイン時はアカウント作成フローへ（§2.7）
   // 遷移先は項目一覧のマイページ（2026-11-14 ユーザー決定、ページ マイページ 仕様書）。そこから辿る先のページを開いている間もアクティブにする
   {

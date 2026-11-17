@@ -467,6 +467,8 @@ YouTubeチャンネルの情報。
 ### 3.14 `collections`
 
 > **v2.0（2026-11-01）取り下げ**: まとめ機能は取り下げた（リブランディング検討 項目7）。画面・メニューから外し、`/collections*` も開けなくする（段階2）。**このコレクションと `saved_collections` のデータとコードは消さずに残す**（必要になったら戻せるように。作ったユーザーの内容も失わない）。取り下げ後は新しい書き込みをしない（API は 404 を返す）。退会時の物理削除（§7.1）は続ける。
+>
+> **v3.1（2026-11-17）コードの削除**: リファクタリング①で、まとめ機能の**コードを削除した**（ユーザー決定。ページ 再生リスト まとめ機能仕様書 v2.2）。データと `firestore.rules` は残す。下の「書き込み経路」の API Route（`app/api/collections*`）はもう無く、今は書き込む手段が無い（パスは 404）。表示名・アイコンの変更で `userDisplayName`・`userProfileImageUrl` を揃える処理も外したので、以後の変更は反映されない。戻すときは git の履歴から。
 
 ユーザーが作成した「まとめ」情報。
 
@@ -1159,6 +1161,7 @@ ai_operators ──── (1) users
 | v2.2 | 2026-11-01 | 段階3の実装。§3.2 `playlists` の掲載状態（`listingStatus` ほか）と `source`・`explorationChannelId` を実装。管理者の登録・承認は `listed`（`listingReason: admin`）で作り、既存データは移行スクリプトで `listed`（`listingReason: migration`）または `channel_off` にする。`games.playlistCount`・`channels.playlistCount`・`tags.usagePlaylistCount` は掲載中の再生リストだけを数える（コンテンツ収集機能仕様書 §10.9）。フィールドの追加・変更はなし |
 | v2.9 | 2026-11-13 | §3.30 `notifications` に `channelName`・`channelIconUrl`・`newVideoTitles`・`newVideoCount` を追加（ユーザー通知機能仕様書 v1.4）。`videos.publishedAt` を動画の投稿日時に直し（これまでは再生リストに追加された日時だった）、`videos.addedToPlaylistAt` を追加 |
 | v2.10 | 2026-11-16 | §3.1 `users.profileImageUrl` をアイコンのアップロード実装に合わせて定義（配信 API の相対 URL、本体は Storage の `avatars/{uid}/`、書き込みは API のみ）。§7.1 退会時に `avatars/{uid}/` も消す（ページ 設定 プロフィール仕様書 v1.11） |
+| v3.1 | 2026-11-17 | §3.14 まとめ機能のコード削除を注記（API Route・作成者名の揃え直しが無くなった。データとルールは残す） |
 | v3.0 | 2026-11-17 | `workflows` に詳細ページからの変更の提案（`channel_report` を追加、`game_title_edit`・`playlist_report` の `reportData` を定義）。`step2History` に `approveAction`・`gameId`・`gameName` |
 | v3.1 | 2026-11-17 | §3.21 `batch_logs` に `channelProfiles`・`channelProfileError` を追加。`channels.name`・`channels.iconUrl`、`exploration_channels.channelTitle`・`channelIconUrl`、`playlists.channelName`・`channelIconUrl` は毎日の再取得で YouTube の今の値に合わせる（YouTube定期取得仕様書 v1.11 §4.4） |
 | v2.8 | 2026-11-08 | 段階5 人気のチャンネル。§3.4 `channels.popularity`、§3.32 `featuredOrder` をピン留めの順に、§3.21 `batch_logs` に `channel_popularity`、§3.35 `playlist_viewers`・§3.36 `batch_state` を追加。§7.1 退会時の削除に `playlist_viewers` を追加（共通 人気のチャンネル 集計 仕様書） |

@@ -1,5 +1,9 @@
 # 操作ログ
 
+## [2026-11-17] ingest | 単体テスト（Vitest）を入れ、まとめ機能のコードを消す（PR #60）
+リファクタリング①。Vitest 5.1.0 を入れ `npm test`（`tests/unit/`、DB を使わない処理だけ、最初は91件）。取り下げ済みのまとめ機能のページ・API・部品・lib と `COLLECTIONS_ENABLED` を削除し、`/collections*` はファイルが無いので 404（proxy の書き換えを外した）。データとルールは残す。まとめ機能 v2.2 ほか。
+→ [[2026-11-17-unit-tests-and-collections-code-removal]]
+
 ## [2026-11-17] ingest | 配信者の名前・アイコンを毎日の再取得で取り直す（PR #59）
 `refreshNewVideos` の最初に `lib/channel-profile-refresh.ts` を追加し、`channels`・`exploration_channels`・`playlists` のチャンネルIDを `channels.list` で50件ずつ確かめ、違う名前・アイコンだけ書き換える（ユーザー決定: 毎日の巡回に組み込む）。読めないアイコンは `FallbackImage` で代わりの表示に。YouTube定期取得仕様書 v1.11。
 → [[2026-11-17-channel-profile-refresh]]

@@ -1,18 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getOptionalUid, requireUser } from '@/lib/api-auth';
 import { adminDb } from '@/lib/firebase-admin';
-import { readJsonObject, toCollectionJson } from '@/lib/collections-server';
-import { COLLECTIONS_ENABLED } from '@/lib/feature-flags';
+import { readJsonObject } from '@/lib/request-json';
 import { normalizeWatchStatus, WATCH_STATUS_ORDER } from '@/components/ui/Chip';
 import { syncUserDenormalizedFields } from '@/lib/profile-server';
 import { validateProfileInput, type ProfileJson, type ProfilePlaylistJson } from '@/lib/profile-shared';
 
-// 公開プロフィール（ページ 設定 プロフィール仕様書、まとめ機能仕様書 §9.1）。ログイン不要。
+// 公開プロフィール（ページ 設定 プロフィール仕様書）。ログイン不要。
 // users・mylist は firestore.rules で本人のみ読めるため、Admin SDK で読んで公開してよいフィールドだけを返す
 // （email 等は返さない。2026-10-12 ユーザー決定でルールは緩めない）。
 // マイリスト・レビュー履歴は本人以外には公開設定（isMylistPublic / isReviewHistoryPublic）に従い、OFF なら null。
 // 統計・ジャンル分布は公開設定にかかわらず返す（§2.1）。
-// まとめ（collections）はまとめ機能の取り下げ（2026-11-01、プロフィール仕様書 v1.8）で COLLECTIONS_ENABLED が false の間は読まず空で返す。
 // どのクエリも userId の等価条件のみ（並び替えはメモリ内）で複合インデックスは不要。
 
 const GENRES_TOP = 3;
@@ -33,12 +31,9 @@ export async function GET(request: NextRequest, { params }: Params) {
   const isMylistPublic = userData.isMylistPublic !== false;
   const isReviewHistoryPublic = userData.isReviewHistoryPublic !== false;
 
-  const [reviewSnap, mylistSnap, collectionSnap] = await Promise.all([
+  const [reviewSnap, mylistSnap] = await Promise.all([
     adminDb.collection('reviews').where('userId', '==', userId).get(),
     adminDb.collection('mylist').where('userId', '==', userId).get(),
-    COLLECTIONS_ENABLED
-      ? adminDb.collection('collections').where('userId', '==', userId).where('visibility', '==', 'public').get()
-      : null,
   ]);
 
   // 星評価かコメントがある投稿をレビューとして数える（§5.3・§8.1）。視聴ステータスだけの投稿は
@@ -49,16 +44,12 @@ export async function GET(request: NextRequest, { params }: Params) {
     .filter(({ data }) => data.isHidden !== true)
     .filter(({ data }) => data.starRating != null || !!(data.comment as string | null)?.trim());
   const mylistDocs = mylistSnap.docs.map((d) => d.data());
-  const collections = (collectionSnap?.docs ?? [])
-    .map((d) => toCollectionJson(d.id, d.data()))
-    .sort((a, b) => a.sortOrder - b.sortOrder || (b.createdAt ?? 0) - (a.createdAt ?? 0));
 
-  // 再生リストはマイリスト・レビュー・まとめサムネイルの分をまとめて1回で引く。非公開・削除済みは除外する
+  // 再生リストはマイリスト・レビューの分をまとめて1回で引く。非公開・削除済みは除外する
   const playlistIds = [
     ...new Set([
       ...reviewDocs.map((r) => r.data.playlistId as string),
       ...mylistDocs.map((m) => m.playlistId as string),
-      ...collections.flatMap((c) => c.playlistIds.slice(0, 3)),
     ]),
   ].filter(Boolean);
   const playlistSnaps = playlistIds.length
@@ -134,12 +125,6 @@ export async function GET(request: NextRequest, { params }: Params) {
           .sort((a, b) => (b.postedAt ?? 0) - (a.postedAt ?? 0))
       : null;
 
-  const collectionThumbnailById: Record<string, string> = {};
-  for (const id of collections.flatMap((c) => c.playlistIds.slice(0, 3))) {
-    const p = playlistById.get(id);
-    if (p) collectionThumbnailById[id] = p.thumbnailUrl;
-  }
-
   const body: ProfileJson = {
     user: {
       userId,
@@ -159,14 +144,12 @@ export async function GET(request: NextRequest, { params }: Params) {
     genres,
     mylist,
     reviews,
-    collections,
-    collectionThumbnailById,
   };
   return NextResponse.json(body);
 }
 
 // プロフィール編集（§9。表示名・自己紹介）。本人のみ。
-// 表示名が変わったら、自分の reviews・collections の非正規化コピー（userDisplayName）も新しい名前に揃える
+// 表示名が変わったら、自分の reviews の非正規化コピー（userDisplayName）も新しい名前に揃える
 // （2026-10-12 ユーザー決定。投稿者名・作成者名からプロフィールへリンクするため、リンク先と表示名を食い違わせない）。
 // アイコン（プロフィール画像）は multipart のため別の API（PUT/DELETE /api/users/[userId]/avatar）で保存する。
 export async function PATCH(request: NextRequest, { params }: Params) {

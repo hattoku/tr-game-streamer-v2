@@ -193,8 +193,9 @@ service cloud.firestore {
         || isSelf(resource.data.userId)
         || isAdmin();
 
-      // 書き込みは app/api/collections 配下（Admin SDK）のみ。1ユーザー10件の上限と作成者名の
+      // 書き込みは app/api/collections 配下（Admin SDK）のみだった。1ユーザー10件の上限と作成者名の
       // 非正規化コピー（userDisplayName/userProfileImageUrl）をクライアントに偽装させないため（フェーズ6ステップ4）。
+      // まとめ機能のコードは 2026-11-17 に削除した（データは残す）ので、今は書き込む経路が無い。
       allow write: if false;
     }
 
@@ -204,7 +205,7 @@ service cloud.firestore {
     match /saved_collections/{savedId} {
       // 現状の読み取りは API Route（Admin SDK）のみだが、本人分の読み取りは許可しておく。
       allow read: if isSelf(resource.data.userId) || isAdmin();
-      // collections.savedCount の増減と一体のため、書き込みは app/api/collections/[collectionId]/save のみ。
+      // collections.savedCount の増減と一体のため、書き込みは app/api/collections/[collectionId]/save のみだった（2026-11-17 に削除）。
       allow write: if false;
     }
 

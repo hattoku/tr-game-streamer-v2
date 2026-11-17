@@ -2,7 +2,7 @@
 title: proxy.ts（旧middleware.ts）
 type: entity
 date: 2026-09-09
-updated: 2026-11-14
+updated: 2026-11-17
 ---
 
 # proxy.ts（旧middleware.ts）
@@ -24,6 +24,7 @@ Next.js 16の `proxy` 規約に対応するファイル（旧 `middleware.ts`。
 - 2026-11-01、まとめ機能の取り下げで `/collections*` を存在しないパスへ書き換え、HTTP 404 の 404 ページを返すようにした
   （`lib/feature-flags.ts` の `COLLECTIONS_ENABLED` が false のとき）。page/layout の `notFound()` だけだと
   `loading.tsx` のストリーミングでステータスが 200 になるため（[[2026-11-01-rebranding-stage2-collections-withdrawn]]）。
+- 2026-11-17、まとめ機能のコードを削除し `/collections*` のページが無くなったため、この書き換えを外した（存在しないパスとして Next.js が 404 を返す。[[2026-11-17-unit-tests-and-collections-code-removal]]）。
 
 ## 関連
 - [[2026-09-09-tech-stack-upgrade]]（規約移行の経緯）

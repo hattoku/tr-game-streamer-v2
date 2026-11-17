@@ -20,8 +20,6 @@ import { cn } from '@/components/ui/cn';
 import { ChannelCard } from '@/components/playlists/ChannelCard';
 import { GameInfoCard } from '@/components/playlists/GameInfoCard';
 import { GameRegisterCard } from '@/components/playlists/GameRegisterCard';
-import { ContainingCollectionsCard } from '@/components/collections/ContainingCollectionsCard';
-import { COLLECTIONS_ENABLED } from '@/lib/feature-flags';
 import { PlaylistInfoCard } from '@/components/playlists/PlaylistInfoCard';
 import { ChangeProposalButton } from '@/components/change-proposals/ChangeProposalButton';
 import { VideoList, type VideoItem } from '@/components/playlists/VideoList';
@@ -47,7 +45,6 @@ import { IS_PROD } from '@/lib/app-env';
 // 片方をCSSで隠す」パターンで配置する（下記 reviewSection 変数参照）。
 // 関連ゲームセクション（2026-09-26、2026-10-15 に「ゲーム情報」から改称）: 右カラムの最後（モバイルもページ最後）に
 // GameInfoCard を置く。再生リストに gameId が無い（ゲーム未紐づけ）場合は表示しない。
-// まとめの発見導線（2026-10-12）: 関連ゲームの下に「この再生リストを含むまとめ」（ContainingCollectionsCard）。
 // ネタバレ対策（2026-09-26）: 配信者情報を動画リストの上へ移動し（スマホのファーストビューで
 // 動画リストを下げるため）、動画リストは約3話分の高さに抑える（VideoList 参照）。設定
 // 「先の話のサムネイルを隠す」（users.hideUpcomingThumbnails）がONなら到達済みより先の話を隠す。
@@ -1203,8 +1200,6 @@ export default function PlaylistDetailPage() {
               }}
             />
           )}
-          {/* この再生リストを含む公開まとめ（まとめ機能仕様書 §7）。0件なら何も描画しない。まとめ機能の取り下げ（2026-11-01、詳細仕様書 v1.14）で出さない */}
-          {COLLECTIONS_ENABLED && <ContainingCollectionsCard playlistId={playlistId} />}
         </div>
       </div>
 
