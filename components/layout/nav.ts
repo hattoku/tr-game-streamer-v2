@@ -50,6 +50,8 @@ export const SEARCH_TAB_NAV: NavItem[] = FOOTER_SERVICE_NAV;
 /** フッター「サポート」グループ（§3.3） */
 export const FOOTER_SUPPORT_NAV: NavItem[] = [
   { label: '初めての方へ', href: '/about' },
+  // 運営からのお知らせの一覧（管理 お知らせ管理仕様書 v2.0 §7.3）
+  { label: 'お知らせ', href: '/notices' },
   { label: '実況者・事務所の方へ', href: '/creators' },
   { label: 'お問い合わせ', href: '/contact' },
   { label: 'このサイトについて', href: '/site-info' },

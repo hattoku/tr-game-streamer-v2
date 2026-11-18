@@ -82,6 +82,13 @@
   --color-admin-border: rgba(160, 110, 245, 0.28);
   --color-admin-on-accent: #12061f;
 
+  /* 運営からのお知らせ: TOP の重要なお知らせエリア（管理 お知らせ管理仕様書 v2.0 §7.1、デザイントークン仕様書 §2.9） */
+  --color-notice-important: #f0a500;
+  --color-notice-important-text: #ffc94d;
+  --color-notice-important-bg: rgba(240, 165, 0, 0.08);
+  --color-notice-important-border: rgba(240, 165, 0, 0.45);
+  --color-notice-important-on: #000000;
+
   /* §16 奥行き・演出: 影 */
   --shadow-card: 0 6px 18px rgba(0, 0, 0, 0.45);
   --shadow-card-hover: 0 14px 32px rgba(0, 0, 0, 0.6);

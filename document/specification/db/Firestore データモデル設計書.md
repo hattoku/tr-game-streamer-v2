@@ -1,6 +1,6 @@
 # プレミテ Firestore データモデル設計書
 
-**バージョン**: v3.2  
+**バージョン**: v3.3  
 **作成日**: 2026年3月30日（更新）  
 **対象**: 開発チーム  
 **関連ドキュメント**: プレミテ企画書 / プレミテ_技術スタック仕様書 / 各機能仕様書
@@ -563,22 +563,33 @@ YouTubeチャンネルの情報。
 
 ### 3.16 `notices`
 
-管理者からユーザーへのお知らせ情報。
+運営からのお知らせ（v3.2 で作り直し。管理 お知らせ管理仕様書 v2.0 §4）。Firestore ルールでクライアントから読めるのは管理者だけ（備考を見せないため）。利用者側は API（`/api/notices/*`）から公開中のものだけを受け取る。書き込みは管理 API（Admin SDK）だけ。
 
 **パス**: `notices/{noticeId}`
 
 | フィールド | 型 | 必須 | 説明 |
 |-----------|-----|:---:|------|
-| `title` | string | ✅ | お知らせタイトル |
-| `body` | string? | — | お知らせ本文 |
-| `status` | string | ✅ | `"draft"` / `"scheduled"` / `"published"` / `"archived"` |
-| `targetPages` | string[] | ✅ | 表示対象ページのパスリスト |
-| `startAt` | Timestamp? | — | 掲載開始日時 |
-| `endAt` | Timestamp? | — | 掲載終了日時 |
-| `sendPushNotification` | boolean | ✅ | プッシュ通知送信フラグ |
-| `createdBy` | string | ✅ | 作成者のuserId |
-| `createdAt` | Timestamp | ✅ | 作成日時 |
-| `updatedAt` | Timestamp | ✅ | 最終更新日時 |
+| `title` | string | ✅ | タイトル（50文字まで） |
+| `body` | string | ✅ | 本文（2,000文字まで。下書きでは空でもよい） |
+| `attachmentType` | string | ✅ | `"none"` / `"link"`（テキストリンクのみ）/ `"image_link"`（画像付きテキストリンク）/ `"youtube"` |
+| `linkLabel` | string | ✅ | リンクの文言（`link`・`image_link` のとき。それ以外は空） |
+| `linkUrl` | string | ✅ | リンク先（`https://` か `/` で始まるサイト内のパス。`link`・`image_link` のとき） |
+| `imageFileName` | string? | — | 画像のファイル名（`image_link` のとき）。Cloud Storage `notices/{ファイル名}` |
+| `youtubeVideoId` | string? | — | YouTube 動画 ID（`youtube` のとき） |
+| `youtubeUrl` | string | ✅ | 貼られた YouTube の URL（`youtube` のとき） |
+| `notifyBell` | boolean | ✅ | ベルで通知する（公開後は変えない） |
+| `important` | boolean | ✅ | TOP の重要なお知らせに出す |
+| `importantUntil` | Timestamp? | — | 重要なお知らせに出す終わり日時（null ならチェックを外すまで） |
+| `memo` | string | ✅ | 備考（管理画面だけ、1,000文字まで） |
+| `status` | string | ✅ | `"draft"`（下書き）/ `"published"`（公開中）/ `"unpublished"`（非公開） |
+| `publishedAt` | Timestamp? | — | 最初に公開した日時（再公開でも変えない） |
+| `bellSentAt` | Timestamp? | — | ベル通知を作った日時（1回だけ作るための印） |
+| `bellSentCount` | number? | — | ベル通知を作った人数 |
+| `createdBy` / `updatedBy` | string | ✅ | 作成者・最終更新者の userId |
+| `createdAt` / `updatedAt` | Timestamp | ✅ | 作成・最終更新日時 |
+
+- インデックス: `status` 昇順 + `publishedAt` 降順（公開中の一覧）。
+- v3.1 までの `targetPages`・`startAt`・`endAt`・`sendPushNotification`・`scheduled`・`archived` は取り下げ（データは無かった）。
 
 ---
 
@@ -908,7 +919,7 @@ AI運営者（審査AI）の設定。プラットフォーム共通で1体のみ
 | フィールド | 型 | 必須 | 説明 |
 |-----------|-----|:---:|------|
 | `userId` | string | ✅ | 通知の宛先ユーザーのuserId |
-| `type` | string | ✅ | 通知種別。`"series_new_episode"`（フェーズ2）／`"inquiry_reply"`（お問い合わせ返信、フェーズ7ステップ7-3-2）／`"review_result"`（再生リスト登録提案の審査結果、v1.23） |
+| `type` | string | ✅ | 通知種別。`"series_new_episode"`（フェーズ2）／`"inquiry_reply"`（お問い合わせ返信、フェーズ7ステップ7-3-2）／`"review_result"`（再生リスト登録提案の審査結果、v1.23）／`"notice"`（運営からのお知らせ、v3.3） |
 | `workflowId` | string? | — | 対象ワークフローのドキュメントID（`review_result`のみ）。承認時は `playlistId` に登録した再生リストのIDも入れる |
 | `playlistId` | string? | — | 対象再生リストのドキュメントID（`series_new_episode`のみ） |
 | `playlistTitle` | string? | — | 再生リストタイトル（denormalized、通知本文組み立て用） |
@@ -917,6 +928,7 @@ AI運営者（審査AI）の設定。プラットフォーム共通で1体のみ
 | `newVideoTitles` | array\<string\>? | — | 新しく増えた動画のタイトル（再生リストの並び順、先頭5本まで。`series_new_episode`のみ。v2.9） |
 | `newVideoCount` | number? | — | 新しく増えた動画の本数（`series_new_episode`のみ。v2.9） |
 | `inquiryId` | string? | — | 対象お問い合わせのドキュメントID（`inquiry_reply`のみ） |
+| `noticeId` | string? | — | 対象お知らせのドキュメントID（`notice`のみ。v3.3）。`message` には公開した時点のタイトルを入れる |
 | `message` | string | ✅ | 通知本文（例：「「〇〇実況」に新しい動画が追加されました」） |
 | `isRead` | boolean | ✅ | 既読フラグ（デフォルト：`false`）。既読から未読へは戻さない |
 | `createdAt` | Timestamp | ✅ | 通知生成日時 |
@@ -1164,5 +1176,6 @@ ai_operators ──── (1) users
 | v3.1 | 2026-11-17 | §3.14 まとめ機能のコード削除を注記（API Route・作成者名の揃え直しが無くなった。データとルールは残す） |
 | v3.0 | 2026-11-17 | `workflows` に詳細ページからの変更の提案（`channel_report` を追加、`game_title_edit`・`playlist_report` の `reportData` を定義）。`step2History` に `approveAction`・`gameId`・`gameName` |
 | v3.1 | 2026-11-17 | §3.21 `batch_logs` に `channelProfiles`・`channelProfileError` を追加。`channels.name`・`channels.iconUrl`、`exploration_channels.channelTitle`・`channelIconUrl`、`playlists.channelName`・`channelIconUrl` は毎日の再取得で YouTube の今の値に合わせる（YouTube定期取得仕様書 v1.11 §4.4） |
+| v3.3 | 2026-11-17 | §3.16 `notices` を運営からのお知らせの形に作り直し（管理 お知らせ管理仕様書 v2.0 §4）。クライアントから読めるのは管理者だけに。§3.30 `notifications` に `type: "notice"`・`noticeId` を追加 |
 | v3.2 | 2026-11-17 | リファクタリング②。`games.playlistCount`・`tags.usagePlaylistCount` が掲載中の再生リストだけを数えることを明記。一般ユーザーのタグの付け外しも、掲載中の再生リストのときだけ `usagePlaylistCount` を動かすように揃えた（これまでは掲載状態を見ずに数えていたため、掲載していない再生リストにタグを付けてから掲載すると二重に数えていた） |
 | v2.8 | 2026-11-08 | 段階5 人気のチャンネル。§3.4 `channels.popularity`、§3.32 `featuredOrder` をピン留めの順に、§3.21 `batch_logs` に `channel_popularity`、§3.35 `playlist_viewers`・§3.36 `batch_state` を追加。§7.1 退会時の削除に `playlist_viewers` を追加（共通 人気のチャンネル 集計 仕様書） |
