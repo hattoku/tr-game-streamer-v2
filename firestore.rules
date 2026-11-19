@@ -281,6 +281,12 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // withdrawal_reasons — 本人が退会したときの理由（UID なし）。管理者だけが読む。書き込みは API のみ
+    match /withdrawal_reasons/{reasonId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
     match /operation_logs/{logId} {
       allow read: if isAdmin();
       allow write: if false;

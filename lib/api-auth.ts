@@ -68,17 +68,6 @@ export async function requireUser(
   return { uid: verified.uid };
 }
 
-/**
- * トークンの検証だけ行い、退会中でも通す。退会中の本人が利用を再開する API（/api/account/resume）専用
- */
-export async function requireSignedInIncludingWithdrawn(
-  request: NextRequest,
-): Promise<{ uid: string } | { errorResponse: NextResponse }> {
-  const verified = await verifyBearerToken(request);
-  if ('errorResponse' in verified) return verified;
-  return { uid: verified.uid };
-}
-
 /** ログイン必須で、管理者（owner/operator）かどうかも返す。管理者と一般ユーザーで返す内容が変わる API 向け */
 export async function requireUserWithRole(
   request: NextRequest,

@@ -227,7 +227,7 @@ export default function SettingsPage() {
           <Card>
             <CardTitle className="mb-4">退会</CardTitle>
             <p className="mb-3 text-md text-text-muted">
-              退会すると、このアカウントではログインできなくなります。データは消えないので、同じメールアドレスとパスワードでログインすれば利用を再開できます
+              退会すると、レビュー・マイリスト・視聴履歴・アカウントなどのデータがすべて消去され、元に戻せません
             </p>
             <div>
               <Button variant="secondary" size="sm" onClick={() => setWithdrawOpen(true)} disabled={isTestUser}>
