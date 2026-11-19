@@ -1,7 +1,7 @@
-// 退会（締め出し方式）とユーザー管理（2026-11-17）。
+// 本人の退会＝データの消去（2026-11-19）と、管理者による退会（締め出し方式）・ユーザー管理（2026-11-17）。
 // - 管理 ユーザー管理仕様書 §3（一覧・絞り込み・詳細・編集・備考・退会／解除・登録推移グラフ）
 // - ページ 設定 仕様書 §8（本人の退会）
-// - ページ ログイン アカウント登録・ログイン仕様書 §5.5・§5.6（退会中のログイン・再開、アカウント作成時の案内）
+// - ページ ログイン アカウント登録・ログイン仕様書 §5.5・§5.6（管理者が退会させたアカウントのログイン、退会済みアドレスの再登録）
 // 退会させるのはテスト用会員ではなく、その場で作る使い捨てアカウント（Firebase Auth の REST API。e2e/email-change.spec.ts と同じ）。
 // 最後に Auth のアカウントと users・admin_user_records を消す。
 import type { Page } from '@playwright/test';
@@ -72,74 +72,121 @@ async function login(page: Page, account: Account, password = account.password) 
   await page.getByRole('button', { name: 'ログインする' }).click();
 }
 
-test.describe('本人の退会と再開（設定 §8・ログイン §5.5）', () => {
+test.describe('本人の退会＝データの消去（設定 §8）', () => {
   let account: Account;
+  const PLAYLIST = 'e2e-withdraw-playlist';
   test.afterEach(async () => {
     if (account) await deleteAccount(account);
+    const reasons = await db().collection('withdrawal_reasons').get();
+    await Promise.all(reasons.docs.filter((d) => String(d.get('reason')).includes(E2E_MARK)).map((d) => d.ref.delete()));
   });
 
-  test('設定から退会するとログアウトされ、ログインで再開を聞かれる。「再開しない」でログアウト、「再開する」で使える', async ({ guestPage: page }) => {
+  /** 本人の作成データを一通り入れる */
+  async function seedData(uid: string) {
+    const now = new Date();
+    await db().collection('reviews').doc(`${uid}_${PLAYLIST}`).set({
+      userId: uid, playlistId: PLAYLIST, starRating: 4, comment: `${E2E_MARK}レビュー`, hasSpoiler: false,
+      helpfulCount: 0, userDisplayName: account.displayName, postedAt: now, updatedAt: now,
+    });
+    await db().collection('mylist').doc(`${uid}_${PLAYLIST}`).set({ userId: uid, playlistId: PLAYLIST, createdAt: now });
+    await db().collection('watch_history').doc(`${uid}_vid1`).set({ userId: uid, playlistId: PLAYLIST, youtubeVideoId: 'vid1', watchedAt: now });
+    await db().collection('watch_progress').doc(`${uid}_${PLAYLIST}_vid1`).set({ userId: uid, playlistId: PLAYLIST, youtubeVideoId: 'vid1', updatedAt: now });
+    await db().collection('notifications').doc(`e2e-withdraw-${uid}`).set({ userId: uid, isRead: false, createdAt: now });
+  }
+
+  test('案内→確認（チェックと「退会」の入力）を経て退会すると、データとアカウントが消え、同じアドレスで新しく作れる', async ({ guestPage: page }) => {
     account = await createAccount(page, 'self');
+    await seedData(account.uid);
     await login(page, account);
     await expect(page).toHaveURL(/\/$/);
 
-    // 退会する（理由は任意）
+    // ① 消えるものの案内
     await page.goto('/settings');
     await page.getByRole('button', { name: '退会する' }).click();
     const dialog = page.getByRole('dialog', { name: '退会しますか？' });
-    await expect(dialog.getByText('いつでも利用を再開できます', { exact: false })).toBeVisible();
+    await expect(dialog.getByText('元に戻せません', { exact: false }).first()).toBeVisible();
+    await expect(dialog.getByText('投稿したレビュー', { exact: false })).toBeVisible();
     await dialog.getByLabel('使わなくなった').check();
-    await dialog.getByRole('button', { name: '退会する' }).click();
+    await dialog.getByLabel('ご意見があればお聞かせください（任意）').fill(`${E2E_MARK}理由`);
+    await dialog.getByTestId('withdraw-next').click();
+
+    // ② 最後の確認: チェックと「退会」の入力が揃うまで押せない
+    const confirm = dialog.getByTestId('withdraw-confirm');
+    await expect(confirm).toBeDisabled();
+    await dialog.getByTestId('withdraw-understood').check();
+    await expect(confirm).toBeDisabled();
+    await dialog.getByLabel('「退会」と入力してください', { exact: false }).fill('退会');
+    await expect(confirm).toBeEnabled();
+    await confirm.click();
     await expect(page).toHaveURL(/\/$/);
-    // ログアウトされている（設定はログインページへ戻される）
+
+    // データもアカウントも消えている
+    expect((await db().collection('users').doc(account.uid).get()).exists).toBe(false);
+    for (const [name, id] of [
+      ['reviews', `${account.uid}_${PLAYLIST}`],
+      ['mylist', `${account.uid}_${PLAYLIST}`],
+      ['watch_history', `${account.uid}_vid1`],
+      ['watch_progress', `${account.uid}_${PLAYLIST}_vid1`],
+      ['notifications', `e2e-withdraw-${account.uid}`],
+    ] as const) {
+      expect((await db().collection(name).doc(id).get()).exists, name).toBe(false);
+    }
+    // 理由は uid を付けずに残る
+    const reasons = (await db().collection('withdrawal_reasons').get()).docs.filter((d) => String(d.get('reason')).includes(E2E_MARK));
+    expect(reasons).toHaveLength(1);
+    expect(JSON.stringify(reasons[0].data())).not.toContain(account.uid);
+    // ログアウトされ、同じメールアドレス・パスワードではもうログインできない
     await page.goto('/settings');
     await expect(page).toHaveURL(/\/login/);
-
-    const data = (await db().collection('users').doc(account.uid).get()).data();
-    expect(data?.accountStatus).toBe('withdrawn');
-    expect(data?.withdrawnBy).toBe('self');
-    expect(data?.withdrawReason).toBe('使わなくなった');
-
-    // 退会中は公開プロフィールが見えない
-    expect((await page.request.get(`/api/users/${account.uid}/profile`)).status()).toBe(404);
-    // 退会中のトークンではログインが要る API を使えない
-    const token = await idTokenOf(account);
-    const denied = await page.request.post('/api/account/withdraw', { headers: { Authorization: `Bearer ${token}` }, data: {} });
-    expect(denied.status()).toBe(403);
-
-    // ログイン → 再開の確認 → 再開しない
     await login(page, account);
-    const resume = page.getByRole('dialog', { name: 'このアカウントは退会済みです' });
-    await expect(resume).toBeVisible();
-    await resume.getByRole('button', { name: '再開しない（ログアウト）' }).click();
-    await expect(resume).toBeHidden();
-    await expect(page.getByRole('button', { name: 'ログインする' })).toBeVisible();
+    await expect(page.getByText('メールアドレスまたはパスワードが正しくありません')).toBeVisible();
 
-    // もう一度ログイン → 再開する
-    await login(page, account);
-    await page.getByRole('dialog', { name: 'このアカウントは退会済みです' }).getByRole('button', { name: '利用を再開する' }).click();
-    await expect(page).toHaveURL(/\/$/);
-    await expect.poll(async () => (await db().collection('users').doc(account.uid).get()).data()?.accountStatus).toBe('active');
-    expect((await page.request.get(`/api/users/${account.uid}/profile`)).status()).toBe(200);
-  });
-
-  test('アカウント作成に退会済みのアドレスを入れると、同じパスワードなら再開の確認に進み、違えば案内を出す', async ({ guestPage: page }) => {
-    account = await createAccount(page, 'signup');
-    const token = await idTokenOf(account);
-    expect((await page.request.post('/api/account/withdraw', { headers: { Authorization: `Bearer ${token}` }, data: {} })).ok()).toBeTruthy();
-
+    // 同じメールアドレスで新しくアカウントを作れる（以前のデータは戻らない）
     await page.goto('/login?mode=signup');
     await page.getByLabel('メールアドレス').fill(account.email);
-    await page.getByLabel('パスワード', { exact: true }).fill('wrong-password-123');
-    await page.getByLabel('パスワード（確認）').fill('wrong-password-123');
-    await page.getByLabel('私は13歳以上です').check();
-    await page.getByRole('button', { name: 'アカウントを作成する' }).click();
-    await expect(page.getByText('以前のパスワードでログインすると利用を再開できます', { exact: false })).toBeVisible();
-
     await page.getByLabel('パスワード', { exact: true }).fill(account.password);
     await page.getByLabel('パスワード（確認）').fill(account.password);
+    await page.getByLabel('私は13歳以上です').check();
     await page.getByRole('button', { name: 'アカウントを作成する' }).click();
-    await expect(page.getByRole('dialog', { name: 'このアカウントは退会済みです' })).toBeVisible();
+    await expect(page).toHaveURL(/\/$/);
+    const recreated = await idTokenOf(account);
+    expect(recreated).toBeTruthy();
+    const me = (await db().collection('users').where('email', '==', account.email).get()).docs;
+    expect(me).toHaveLength(1);
+    expect((await db().collection('reviews').where('userId', '==', me[0].id).get()).size).toBe(0);
+    // 後片づけ用に、作り直した方の UID を持たせる
+    account = { ...account, uid: me[0].id };
+  });
+
+  test('確認（confirm）が無い退会 API は断る。「戻る」で手続きを取りやめられる', async ({ guestPage: page }) => {
+    account = await createAccount(page, 'self-confirm');
+    const token = await idTokenOf(account);
+    const denied = await page.request.post('/api/account/withdraw', { headers: { Authorization: `Bearer ${token}` }, data: {} });
+    expect(denied.status()).toBe(400);
+    expect((await db().collection('users').doc(account.uid).get()).exists).toBe(true);
+
+    await login(page, account);
+    await page.goto('/settings');
+    await page.getByRole('button', { name: '退会する' }).click();
+    const dialog = page.getByRole('dialog', { name: '退会しますか？' });
+    await dialog.getByTestId('withdraw-next').click();
+    await dialog.getByRole('button', { name: '戻る' }).click();
+    await expect(dialog.getByTestId('withdraw-next')).toBeVisible();
+    await dialog.getByRole('button', { name: 'キャンセル' }).click();
+    await expect(dialog).toBeHidden();
+    expect((await db().collection('users').doc(account.uid).get()).exists).toBe(true);
+  });
+
+  test('管理者が退会させたアカウントの退会済みアドレスでは、再登録できず「すでに登録されています」と出る', async ({ guestPage: page }) => {
+    account = await createAccount(page, 'signup');
+    await db().collection('users').doc(account.uid).update({ accountStatus: 'withdrawn', withdrawnBy: 'admin' });
+    await page.goto('/login?mode=signup');
+    await page.getByLabel('メールアドレス').fill(account.email);
+    await page.getByLabel('パスワード', { exact: true }).fill(account.password);
+    await page.getByLabel('パスワード（確認）').fill(account.password);
+    await page.getByLabel('私は13歳以上です').check();
+    await page.getByRole('button', { name: 'アカウントを作成する' }).click();
+    await expect(page.getByText('このメールアドレスはすでに登録されています')).toBeVisible();
   });
 });
 
@@ -188,8 +235,9 @@ test.describe('管理画面のユーザー管理（ユーザー管理 §3）', (
     const blocked = guestPage.getByRole('dialog', { name: 'このアカウントではログインできません' });
     await expect(blocked).toBeVisible();
     await expect(blocked.getByRole('button', { name: '利用を再開する' })).toHaveCount(0);
+    // 再開の API は無い（本人の退会はデータごと消去する方式。2026-11-19）
     const token = await idTokenOf(account);
-    expect((await guestPage.request.post('/api/account/resume', { headers: { Authorization: `Bearer ${token}` } })).status()).toBe(403);
+    expect((await guestPage.request.post('/api/account/resume', { headers: { Authorization: `Bearer ${token}` } })).status()).toBe(404);
     // 右上の×（aria-label「閉じる」）と区別するため、ボタンの並びの中から選ぶ
     await blocked.getByTestId('withdrawn-by-admin').getByRole('button', { name: '閉じる' }).click();
     await expect(guestPage.getByRole('button', { name: 'ログインする' })).toBeVisible();
