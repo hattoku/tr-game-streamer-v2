@@ -11,6 +11,7 @@ import { AuthProvider } from '../contexts/AuthContext';
 import { ToastProvider } from '../components/ui/Toast';
 import { LayoutProvider } from '../components/layout/LayoutContext';
 import { TestModeWidget } from '../components/layout/TestModeWidget';
+import { WithdrawnAccountGate } from '../components/layout/WithdrawnAccountGate';
 
 export const metadata: Metadata = {
   title: { default: 'プレミテ', template: '%s | プレミテ' },
@@ -57,6 +58,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <LayoutProvider>
             <ToastProvider>
               {children}
+              {/* 退会中のアカウントでログインしたときの再開の確認（ページ ログイン 仕様書 §5.5・§5.6） */}
+              <WithdrawnAccountGate />
               {/* NEXT_PUBLIC_TEST_MODE=true かつ本番以外のビルドでのみ描画される（UI仕様書 §7、lib/app-env.ts） */}
               <TestModeWidget />
             </ToastProvider>

@@ -73,7 +73,8 @@ export function ReviewList({
   useEffect(() => {
     const q = query(collection(db, 'reviews'), where('playlistId', '==', playlistId));
     return onSnapshot(q, (snap) => {
-      const list: ReviewItem[] = snap.docs.map((d) => {
+      // 投稿者が退会中のレビューは出さない（退会中は隠し、再開で戻す。2026-11-17 ユーザー決定）
+      const list: ReviewItem[] = snap.docs.filter((d) => d.data().isAuthorWithdrawn !== true).map((d) => {
         const data = d.data();
         return {
           id: d.id,

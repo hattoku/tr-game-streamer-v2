@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
+import { accountStatusOf, withdrawnByOf, type AccountStatus, type WithdrawnBy } from '../lib/account-status-shared';
 
 // role: "user" | "operator" | "owner" | "ai_operator"（firestore.rules参照）。
 // Firebase Auth Custom Claimsを正とする。未設定（サインアップ直後、init-user API呼び出し前）
@@ -17,6 +18,13 @@ interface AuthContextValue {
   displayName: string | null;
   /** users/{uid}.profileImageUrl（ヘッダー・マイページのアイコン用。未設定・未取得・未ログイン時は null） */
   profileImageUrl: string | null;
+  /**
+   * users/{uid} の状態（退会中か）。未ログインと、ログイン直後でまだ読めていない間は null。
+   * 退会中なら components/layout/WithdrawnAccountGate.tsx が再開の確認を出す
+   */
+  accountStatus: AccountStatus | null;
+  /** 退会させた者（退会中のときだけ） */
+  withdrawnBy: WithdrawnBy | null;
   loading: boolean;
   refreshRole: () => Promise<void>;
 }
@@ -26,6 +34,8 @@ const AuthContext = createContext<AuthContextValue>({
   role: null,
   displayName: null,
   profileImageUrl: null,
+  accountStatus: null,
+  withdrawnBy: null,
   loading: true,
   refreshRole: async () => {},
 });
@@ -35,6 +45,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [role, setRole] = useState<Role>(null);
   const [displayName, setDisplayName] = useState<string | null>(null);
   const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
+  const [accountStatus, setAccountStatus] = useState<AccountStatus | null>(null);
+  const [withdrawnBy, setWithdrawnBy] = useState<WithdrawnBy | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -61,16 +73,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       (snap) => {
         setDisplayName((snap.data()?.displayName as string | undefined) ?? null);
         setProfileImageUrl((snap.data()?.profileImageUrl as string | undefined) || null);
+        // users がまだ無い（アカウント作成直後）は利用中として扱う
+        setAccountStatus(accountStatusOf(snap.data()));
+        setWithdrawnBy(withdrawnByOf(snap.data()));
       },
       () => {
         setDisplayName(null);
         setProfileImageUrl(null);
+        setAccountStatus('active');
+        setWithdrawnBy(null);
       },
     );
     return () => {
       unsubscribe();
       setDisplayName(null);
       setProfileImageUrl(null);
+      setAccountStatus(null);
+      setWithdrawnBy(null);
     };
   }, [user]);
 
@@ -83,7 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, role, displayName, profileImageUrl, loading, refreshRole }}>
+    <AuthContext.Provider value={{ user, role, displayName, profileImageUrl, accountStatus, withdrawnBy, loading, refreshRole }}>
       {children}
     </AuthContext.Provider>
   );
