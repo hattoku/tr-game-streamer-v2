@@ -9,7 +9,6 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
 import { ChannelListCard } from '@/components/channels/ChannelListCard';
 import { LoadError } from '@/components/playlists/PlaylistListSection';
 import { fetchChannelPage, useCatalogQuery, useDebouncedValue } from '@/lib/catalog';
@@ -23,6 +22,8 @@ import { Skeleton, SkeletonText } from '@/components/ui/Skeleton';
 import { SelectMenu } from '@/components/ui/DropdownMenu';
 import { SearchIcon, UserIcon, XIcon } from '@/components/ui/icons';
 import { cn } from '@/components/ui/cn';
+import { LoginGateLink } from '@/components/layout/LoginGateLink';
+import { LOGIN_PROMPTS } from '@/components/layout/login-prompts';
 
 type SortKey = ChannelSort;
 const SORT_OPTIONS: Array<{ value: SortKey; label: string }> = [
@@ -144,9 +145,13 @@ export default function ChannelsPage() {
           {/* 探しているチャンネルが無いときの入口（ページ チャンネルを申請する 仕様書 §3）。空状態を含め常に一覧の下に出す */}
           <p className="text-md text-text-muted" data-testid="channel-apply-hint">
             探しているチャンネルが見つからないときは、チャンネルを申請できます →{' '}
-            <Link href="/propose?type=channel" className="text-text-primary underline underline-offset-[3px] hover:text-text-secondary">
+            <LoginGateLink
+              href="/propose?type=channel"
+              prompt={LOGIN_PROMPTS.applyChannel}
+              className="text-text-primary underline underline-offset-[3px] hover:text-text-secondary"
+            >
               チャンネルを申請する
-            </Link>
+            </LoginGateLink>
           </p>
         </div>
 

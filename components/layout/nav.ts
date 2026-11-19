@@ -5,6 +5,8 @@
  * （wiki/sources/2026-09-11-phase2.5-design-plan.md §4 ステップ2）。
  */
 
+import type { LoginPromptKey } from './login-prompts';
+
 export interface NavItem {
   label: string;
   href: string;
@@ -84,28 +86,31 @@ export type BottomTabKey = 'home' | 'mylist' | 'search' | 'mypage';
 export interface BottomTab {
   key: BottomTabKey;
   label: string;
-  /** ログイン済み時の遷移先 */
+  /** 遷移先 */
   href: string;
-  /** 未ログイン時の遷移先（省略時は href と同じ） */
-  guestHref?: string;
+  /**
+   * 未ログイン時に押したとき、遷移せずに出すログイン要求モーダルの種類（components/layout/login-prompts.ts）。
+   * 省略時は未ログインでもそのまま遷移する。モーダルからアカウント作成・ログインしたあとは href へ戻す
+   */
+  guestPrompt?: LoginPromptKey;
   /** アクティブ判定のプレフィクス */
   prefixes: string[];
 }
 
 export const BOTTOM_TABS: BottomTab[] = [
   { key: 'home', label: 'ホーム', href: '/', prefixes: [] },
-  // マイリスト（2026-09-12 ユーザー決定で「タイムライン」を置き換え）。未ログイン時はログインページへ
+  // マイリスト（2026-09-12 ユーザー決定で「タイムライン」を置き換え）。未ログイン時はログイン要求モーダルを出す（2026-11-17 アカウント作成導線の改善）
   // 視聴履歴はマイリスト画面上部の切り替えで行き来するため、こちらのタブをアクティブにする（2026-11-16 ユーザー決定、マイリスト仕様書 §2.4）
-  { key: 'mylist', label: 'マイリスト', href: '/mylist', guestHref: '/login', prefixes: ['/mylist', '/history'] },
+  { key: 'mylist', label: 'マイリスト', href: '/mylist', guestPrompt: 'mylist', prefixes: ['/mylist', '/history'] },
   // 遷移先はチャンネル（UI仕様書 v2.0 §2.7、段階5で実装）
   { key: 'search', label: 'さがす', href: '/channels', prefixes: ['/channels', '/playlists', '/games'] },
-  // 未ログイン時はアカウント作成フローへ（§2.7）
+  // 未ログイン時はログイン要求モーダルを出す（§2.7。v2.8 までは押すとすぐアカウント作成フローへ移っていた）
   // 遷移先は項目一覧のマイページ（2026-11-14 ユーザー決定、ページ マイページ 仕様書）。そこから辿る先のページを開いている間もアクティブにする
   {
     key: 'mypage',
     label: 'マイページ',
     href: '/mypage',
-    guestHref: SIGNUP_HREF,
+    guestPrompt: 'mypage',
     prefixes: ['/mypage', '/notifications', '/playlists/proposals', '/contact/history', '/settings', '/profile'],
   },
 ];
