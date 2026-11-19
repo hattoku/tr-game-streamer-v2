@@ -8,6 +8,8 @@ import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import { Card, SectionHeading } from '@/components/ui/Card';
 import { LinkButton } from '@/components/ui/Button';
+import { LoginGateLink } from '@/components/layout/LoginGateLink';
+import { LOGIN_PROMPTS } from '@/components/layout/login-prompts';
 
 export const metadata: Metadata = { title: '実況者・事務所の方へ' };
 
@@ -42,9 +44,9 @@ export default function CreatorsPage() {
 
       <Section title="掲載を申請したいとき" id="apply">
         <p>まだ掲載していないご自身（または所属タレント）のチャンネルの掲載を申請できます。</p>
-        <LinkButton href="/propose?type=channel&as=creator" variant="primary" className="w-fit">
+        <LoginGateLink href="/propose?type=channel&as=creator" variant="primary" size="md" className="w-fit" prompt={LOGIN_PROMPTS.applyChannel}>
           掲載を申請する
-        </LinkButton>
+        </LoginGateLink>
         <p className="text-md text-text-muted">申請にはログインが必要です。アカウントを作らずに申請したい場合は、お問い合わせからでも受け付けます。</p>
       </Section>
 

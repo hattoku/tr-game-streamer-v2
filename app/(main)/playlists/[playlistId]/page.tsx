@@ -30,6 +30,7 @@ import { ReviewSection } from '@/components/reviews/ReviewSection';
 import { useOwnReview, type MylistState } from '@/components/reviews/useOwnReview';
 import { PlaylistFinishedModal, type FinishedPromptSections } from '@/components/reviews/PlaylistFinishedModal';
 import { LoginRequiredModal } from '@/components/layout/LoginRequiredModal';
+import { LOGIN_PROMPTS } from '@/components/layout/login-prompts';
 import { TagEditModal } from '@/components/tags/TagEditModal';
 import { fetchTagsMap, resolveTags, type ResolvedTag } from '@/lib/tags';
 import { normalizeWatchStatus } from '@/components/ui/Chip';
@@ -1218,7 +1219,7 @@ export default function PlaylistDetailPage() {
       <LoginRequiredModal
         open={finishedLoginOpen}
         onOpenChange={setFinishedLoginOpen}
-        title="ログインすると、完走の記録やレビューができます"
+        prompt={LOGIN_PROMPTS.playlistFinished}
       />
     </div>
   );
