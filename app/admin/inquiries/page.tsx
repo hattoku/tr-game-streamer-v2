@@ -1,7 +1,7 @@
 /**
  * お問い合わせ一覧（/admin/inquiries）。管理 お問い合わせ管理仕様書 §3 準拠。
  *
- * `inquiries` を全件クライアント取得し（並び替え・絞り込み・20件ページングはクライアント側。
+ * `inquiries` を全件クライアント取得し（lib/inquiry-admin.ts。並び替え・絞り込み・20件ページングはクライアント側。
  * /admin/workflows と同じ簡易実装方針で複合インデックス不要）、受付日時の降順で並べる。
  * フェーズ7ステップ7-3-1の決定により、日付範囲の絞り込み（§3.2）と 20/50/100件の表示件数切替（§3.5）は
  * 作らない（件数が少ないうちは不要。仕様書 実装注記参照）。
@@ -10,8 +10,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { collection, getDocs } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { fetchInquiryRows, type AdminInquiryRow } from '@/lib/inquiry-admin';
 import {
   INQUIRY_CATEGORIES,
   INQUIRY_STATUSES,
@@ -30,18 +29,7 @@ import { Tag } from '@/components/ui/Tag';
 import { StatusBadge } from '@/components/ui/Badge';
 import { CommentIcon } from '@/components/ui/icons';
 
-interface InquiryRow {
-  id: string;
-  category: string;
-  status: string;
-  userName: string | null;
-  isGuest: boolean;
-  email: string;
-  body: string;
-  submittedAt: number;
-  /** ユーザーが返信して運営がまだ返していない（管理 お問い合わせ管理仕様書 §1.1、7-3-2） */
-  awaitingAdminReply: boolean;
-}
+type InquiryRow = AdminInquiryRow;
 
 const PAGE_SIZE = 20;
 
@@ -64,23 +52,7 @@ export default function AdminInquiriesPage() {
   useEffect(() => {
     (async () => {
       try {
-        const snap = await getDocs(collection(db, 'inquiries'));
-        const list = snap.docs
-          .map((d): InquiryRow => {
-            const data = d.data();
-            return {
-              id: d.id,
-              category: (data.category as string) ?? 'other',
-              status: (data.status as string) ?? 'open',
-              userName: (data.userName as string | null) ?? null,
-              isGuest: data.isGuest === true,
-              email: (data.email as string) ?? '',
-              body: (data.body as string) ?? '',
-              submittedAt: data.submittedAt?.toMillis?.() ?? 0,
-              awaitingAdminReply: data.awaitingAdminReply === true,
-            };
-          })
-          .sort((a, b) => b.submittedAt - a.submittedAt);
+        const list = await fetchInquiryRows();
         setRows(list);
       } catch {
         setLoadError(true);

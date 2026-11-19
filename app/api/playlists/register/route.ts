@@ -4,7 +4,8 @@ import { adminDb } from '../../../../lib/firebase-admin';
 import { fetchValidPlaylist, registerPlaylist } from '../../../../lib/playlist-registration';
 import { publishExistingPlaylist } from '../../../../lib/propose-server';
 import { restoreChannelPlaylists } from '../../../../lib/listing-server';
-import { activateListingChannel, getListingChannel, importChannelAfterResponse } from '../../../../lib/channel-application-server';
+import { activateListingChannel, getListingChannel } from '../../../../lib/channel-application-server';
+import { sweepChannelAfterResponse } from '../../../../lib/channel-sweep-run';
 
 // 再生リストの本登録API（管理者専用。ページ 提案する 仕様書 §9）。プレビュー時の情報をそのまま信用せず、
 // YouTube APIとFirestoreの状態をサーバー側で取り直してから書き込む（lib/playlist-registration.ts）。
@@ -75,7 +76,7 @@ export async function POST(request: NextRequest) {
     // 上で元の状態に戻した結果すでに掲載中になっていれば、それで済み（完了画面の表示用に今の値を返す）
     const now = (await existing.ref.get()).data()!;
     if (activated && now.listingStatus === 'listed') {
-      if (explorationChannelId) importChannelAfterResponse(explorationChannelId, auth.uid, '再生リスト登録でのチャンネル同時掲載');
+      if (explorationChannelId) sweepChannelAfterResponse(explorationChannelId, auth.uid, '再生リスト登録でのチャンネル同時掲載の取り込み');
       return NextResponse.json({
         playlistId: existing.id,
         title: (now.title as string) ?? '',
@@ -88,7 +89,7 @@ export async function POST(request: NextRequest) {
     }
     const result = await publishExistingPlaylist({ playlistId: existing.id, gameId, uid: auth.uid, allowHidden: true });
     if ('error' in result) return NextResponse.json({ error: result.error }, { status: result.status });
-    if (activated && explorationChannelId) importChannelAfterResponse(explorationChannelId, auth.uid, '再生リスト登録でのチャンネル同時掲載');
+    if (activated && explorationChannelId) sweepChannelAfterResponse(explorationChannelId, auth.uid, '再生リスト登録でのチャンネル同時掲載の取り込み');
     return NextResponse.json(result);
   }
 
@@ -105,6 +106,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: result.error, message: result.message }, { status: result.status });
   }
   // チャンネルを新しく掲載したら、ほかの再生リストを1回取り込む（応答のあと。失敗しても登録は取り消さない）
-  if (activated && explorationChannelId) importChannelAfterResponse(explorationChannelId, auth.uid, '再生リスト登録でのチャンネル同時掲載');
+  if (activated && explorationChannelId) sweepChannelAfterResponse(explorationChannelId, auth.uid, '再生リスト登録でのチャンネル同時掲載の取り込み');
   return NextResponse.json(result);
 }

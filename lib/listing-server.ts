@@ -1,10 +1,13 @@
 // 再生リストの掲載状態を切り替える処理（サーバー専用）。
 // 管理_Ai運営者 コンテンツ収集機能仕様書 §10.4・§10.6・§10.11、収集候補レビューUI仕様書 §8.3・§9.3・§9.5。
 // 掲載中（listed）だけを件数（games.playlistCount・channels.playlistCount・tags.usagePlaylistCount）に数えるので、
-// listed に入る・出るときは件数も一緒に直す。状態と件数は1件ずつトランザクションで変え、同時に操作しても二重に数えない。
+// listed に入る・出るときは件数も一緒に直す（増減は lib/listing-counts.ts）。状態と件数は1件ずつトランザクションで変え、
+// 同時に操作しても二重に数えない。
 import { FieldValue, type DocumentData, type Transaction } from 'firebase-admin/firestore';
 import { adminDb } from './firebase-admin';
-import { matchTitleTagNames } from './exploration-rules';
+import { matchTitleTagNames } from './playlist-title-rules';
+import { playlistCountDeltas, playlistCountStateOf } from './listing-counts';
+import { prepareCountWrites, readerOf } from './listing-counts-server';
 import { fetchOperatorTagIdsByName } from './operator-tags';
 import { fetchAndStoreAllVideos } from './playlist-videos';
 import { YouTubeApiError } from './youtube';
@@ -24,48 +27,12 @@ export type ListingChangeError =
 
 export type ListingChangeResult = { ok: true; changed: boolean; fetchedVideos: boolean } | { ok: false; error: ListingChangeError };
 
-interface LiveRefs {
-  gameRef: FirebaseFirestore.DocumentReference | null;
-  tagRefs: FirebaseFirestore.DocumentReference[];
-}
-
-/** 件数を直すゲーム・タグのうち、存在するものだけ（消されたドキュメントを update するとトランザクションごと失敗するため）。書き込みの前に呼ぶ */
-async function readLiveRefs(tx: Transaction, data: DocumentData, tagIds: string[]): Promise<LiveRefs> {
-  const gameId = data.gameId as string | null | undefined;
-  const refs = [...(gameId ? [adminDb.collection('games').doc(gameId)] : []), ...tagIds.map((id) => adminDb.collection('tags').doc(id))];
-  const snaps = refs.length > 0 ? await tx.getAll(...refs) : [];
-  const live = snaps.filter((s) => s.exists).map((s) => s.ref);
-  return { gameRef: gameId ? (live.find((r) => r.path === `games/${gameId}`) ?? null) : null, tagRefs: live.filter((r) => r.parent.id === 'tags') };
-}
-
-/** 件数を増やす・減らす（listed に入る・出るとき）。読み取りは呼び出し側で済ませておく（トランザクションは読み取りが先） */
-function applyCountDelta(
-  tx: Transaction,
-  data: DocumentData,
-  live: LiveRefs,
-  delta: 1 | -1,
-  channelSnap: FirebaseFirestore.DocumentSnapshot | null,
-) {
-  if (live.gameRef) tx.update(live.gameRef, { playlistCount: FieldValue.increment(delta) });
-  for (const ref of live.tagRefs) tx.update(ref, { usagePlaylistCount: FieldValue.increment(delta) });
-  const channelId = data.channelId as string | undefined;
-  if (!channelId || !channelSnap) return;
-  if (channelSnap.exists) {
-    tx.update(channelSnap.ref, { playlistCount: FieldValue.increment(delta) });
-  } else if (delta === 1) {
-    // 巡回で取り込んだチャンネルは、初めて掲載するときに channels のドキュメントを作る（登録と同じ形。lib/playlist-registration.ts）
-    tx.set(channelSnap.ref, {
-      youtubeChannelId: channelId,
-      name: (data.channelName as string) ?? '',
-      iconUrl: (data.channelIconUrl as string) ?? '',
-      description: null,
-      isAiGeneratedDescription: false,
-      subscriberCount: null,
-      playlistCount: 1,
-      registeredAt: new Date(),
-      lastFetchedAt: null,
-    });
-  }
+/** 掲載状態を変える前後の件数の書き込みを用意する（読み取りなので、トランザクションの書き込みより先に呼ぶ） */
+function prepareListingCounts(tx: Transaction, before: DocumentData, after: DocumentData) {
+  return prepareCountWrites(readerOf(tx), playlistCountDeltas(playlistCountStateOf(before), playlistCountStateOf(after)), {
+    // 巡回で取り込んだチャンネルは、初めて掲載するときに channels のドキュメントを作る（登録と同じ形）
+    channelSeed: { name: (before.channelName as string) ?? '', iconUrl: (before.channelIconUrl as string) ?? '' },
+  });
 }
 
 /** タグのうち、存在するものだけ（消されたタグの usagePlaylistCount を update するとトランザクションごと失敗するため） */
@@ -136,9 +103,8 @@ export async function listPlaylist(
     const current = snap.data()!;
     if (current.listingStatus === 'channel_off') return { ok: false, error: 'channel_off' } as const;
     if (current.listingStatus === 'listed') return { ok: true, changed: false, fetchedVideos: fetched !== null } as const;
-    const channelSnap = current.channelId ? await tx.get(adminDb.collection('channels').doc(current.channelId as string)) : null;
     const playlistTagIds = [...new Set([...((current.playlistTagIds as string[] | undefined) ?? []), ...requestedTags])];
-    const live = await readLiveRefs(tx, current, playlistTagIds);
+    const counts = await prepareListingCounts(tx, current, { ...current, listingStatus: 'listed', playlistTagIds });
 
     const playlistTagsFixed = [...new Set([...((current.playlistTagsFixed as string[] | undefined) ?? []), ...requestedTags])];
     const update: Record<string, unknown> = {
@@ -161,7 +127,7 @@ export async function listPlaylist(
       });
     }
     tx.update(ref, update);
-    applyCountDelta(tx, current, live, 1, channelSnap);
+    counts.write(tx);
     return { ok: true, changed: true, fetchedVideos: fetched !== null } as const;
   });
 }
@@ -181,12 +147,10 @@ export async function unlistPlaylist(
     if (!snap.exists) return { ok: false, error: 'not_found' } as const;
     const current = snap.data()!;
     if (current.listingStatus === 'channel_off') return { ok: false, error: 'channel_off' } as const;
-    const wasListed = current.listingStatus === 'listed';
-    const channelSnap = wasListed && current.channelId ? await tx.get(adminDb.collection('channels').doc(current.channelId as string)) : null;
     if (current.listingStatus === target && current.listingSetBy === params.setBy && current.listingReason === params.reason) return { ok: true, changed: false, fetchedVideos: false } as const;
-    const live = wasListed ? await readLiveRefs(tx, current, (current.playlistTagIds as string[] | undefined) ?? []) : null;
+    const counts = await prepareListingCounts(tx, current, { ...current, listingStatus: target });
     tx.update(ref, { listingStatus: target, listingReason: params.reason, listingSetBy: params.setBy, listingSetAt: new Date(), previousListingStatus: null });
-    if (wasListed) applyCountDelta(tx, current, live!, -1, channelSnap);
+    counts.write(tx);
     return { ok: true, changed: true, fetchedVideos: false } as const;
   });
 }
@@ -220,9 +184,7 @@ export async function turnChannelOff(explorationChannelId: string, youtubeChanne
         }
         return false;
       }
-      const wasListed = current.listingStatus === 'listed';
-      const channelSnap = wasListed && current.channelId ? await tx.get(adminDb.collection('channels').doc(current.channelId as string)) : null;
-      const live = wasListed ? await readLiveRefs(tx, current, (current.playlistTagIds as string[] | undefined) ?? []) : null;
+      const counts = await prepareListingCounts(tx, current, { ...current, listingStatus: 'channel_off' });
       tx.update(doc.ref, {
         listingStatus: 'channel_off',
         listingReason: reason,
@@ -232,7 +194,7 @@ export async function turnChannelOff(explorationChannelId: string, youtubeChanne
         previousListingReason: current.listingReason ?? null,
         previousListingSetBy: current.listingSetBy ?? 'admin',
       });
-      if (live) applyCountDelta(tx, current, live, -1, channelSnap);
+      counts.write(tx);
       return true;
     });
     if (done) changed++;
@@ -262,8 +224,7 @@ export async function restoreChannelPlaylists(explorationChannelId: string, yout
         reason = 'confirm';
         setBy = 'auto';
       }
-      const channelSnap = target === 'listed' && current.channelId ? await tx.get(adminDb.collection('channels').doc(current.channelId as string)) : null;
-      const live = target === 'listed' ? await readLiveRefs(tx, current, (current.playlistTagIds as string[] | undefined) ?? []) : null;
+      const counts = await prepareListingCounts(tx, current, { ...current, listingStatus: target });
       tx.update(doc.ref, {
         youtubeDataRemovedAt: FieldValue.delete(),
         listingStatus: target,
@@ -274,7 +235,7 @@ export async function restoreChannelPlaylists(explorationChannelId: string, yout
         previousListingReason: null,
         previousListingSetBy: null,
       });
-      if (live) applyCountDelta(tx, current, live, 1, channelSnap);
+      counts.write(tx);
       return target;
     });
     if (result) restored++;

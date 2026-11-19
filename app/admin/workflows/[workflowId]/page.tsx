@@ -1,22 +1,18 @@
 /**
- * 審査ワークフロー詳細（/admin/workflows/[workflowId]）。管理_審査ワークフロー仕様書 §8-9,11 準拠。
+ * 審査ワークフロー詳細（/admin/workflows/[workflowId]）。管理 審査ワークフロー仕様書 §5.2。
  *
- * フェーズ6ステップ3の決定（operator/owner共通）により、以下を簡略化する:
- * - STEP1/STEP2の二段階審査フロー・審査者一覧・AI運営者表示は作らない（AI運営者・ジャンル別
- *   アサインが未実装のため）。現在ステータス＋「承認する」「却下する」の単一ステップとする。
- * 対象typeは通報（`review_report`）と提案（`playlist_register`・`game_title_register`、フェーズ7ステップ7-4）と、
- * 詳細ページからの変更の提案（`game_title_edit`・`channel_report`・`playlist_report`、§16）。
+ * 二段階の審査（STEP1/STEP2）・審査者一覧・AI運営者の表示は作らない（仕様書 §7）。今の状態＋「承認する」「却下する」の1段。
  * ここではワークフローを購読して種別ごとの詳細（components/admin/workflows/）に振り分けるだけ。
- * 運営メモ・承認・却下はいずれも管理者の書き込みをAdmin SDK経由に寄せる既存方針
- * （app/api/admin/channels/[channelId]/route.ts と同じ）に合わせ、API Route（PATCH）で行う。
+ * 種別を足すときは、この表と API 側の表（lib/workflow-decisions.ts）に1行ずつ足す。
+ * 運営メモ・承認・却下は PATCH /api/admin/workflows/[workflowId]（lib/workflow-admin.ts の callWorkflowApi）で行う。
  */
 'use client';
 
 import { useEffect, useState } from 'react';
 import { notFound, useParams, useRouter } from 'next/navigation';
-import { doc, onSnapshot, type DocumentData } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { subscribeWorkflow, type WorkflowDoc } from '@/lib/workflow-admin';
 import { GAME_PROPOSAL_TYPE, PLAYLIST_PROPOSAL_TYPE } from '@/lib/proposal-shared';
+import { REVIEW_REPORT_TYPE } from '@/lib/report-reasons';
 import { Card, SectionHeading } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { SkeletonText } from '@/components/ui/Skeleton';
@@ -29,23 +25,23 @@ import { CHANNEL_APPLICATION_TYPE } from '@/lib/channel-application-shared';
 import { CHANGE_PROPOSAL_TYPES, isChangeProposalType } from '@/lib/change-proposal-shared';
 import { ChangeProposalDetail } from '@/components/admin/workflows/ChangeProposalDetail';
 
-const SUPPORTED_TYPES = new Set(['review_report', PLAYLIST_PROPOSAL_TYPE, GAME_PROPOSAL_TYPE, CHANNEL_APPLICATION_TYPE, ...CHANGE_PROPOSAL_TYPES]);
+const SUPPORTED_TYPES = new Set<string>([REVIEW_REPORT_TYPE, PLAYLIST_PROPOSAL_TYPE, GAME_PROPOSAL_TYPE, CHANNEL_APPLICATION_TYPE, ...CHANGE_PROPOSAL_TYPES]);
 
 export default function AdminWorkflowDetailPage() {
   const { workflowId } = useParams<{ workflowId: string }>();
   const router = useRouter();
 
-  const [data, setData] = useState<DocumentData | null>(null);
+  const [data, setData] = useState<WorkflowDoc | null>(null);
   const [missing, setMissing] = useState(false);
 
   useEffect(() => {
     if (!workflowId) return;
-    return onSnapshot(doc(db, 'workflows', workflowId), (snap) => {
-      if (!snap.exists() || !SUPPORTED_TYPES.has(snap.data().type as string)) {
+    return subscribeWorkflow(workflowId, (workflow) => {
+      if (!workflow || !SUPPORTED_TYPES.has(workflow.type as string)) {
         setMissing(true);
         return;
       }
-      setData(snap.data());
+      setData(workflow);
     });
   }, [workflowId]);
 

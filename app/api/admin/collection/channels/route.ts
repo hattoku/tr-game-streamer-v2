@@ -3,7 +3,7 @@ import { requireAdmin } from '@/lib/api-auth';
 import { adminDb } from '@/lib/firebase-admin';
 import { addCollectionQuotaUsage, checkCollectionQuota } from '@/lib/collection-quota';
 import { NAME_SEARCH_COST } from '@/lib/collection-quota-shared';
-import { exploreChannels } from '@/lib/exploration-server';
+import { sweepChannelNow } from '@/lib/channel-sweep-run';
 import { fetchOperatorTagIdsByName } from '@/lib/operator-tags';
 import { restoreChannelPlaylists, turnChannelOff } from '@/lib/listing-server';
 import {
@@ -16,7 +16,7 @@ import {
   type ChannelDetail,
 } from '@/lib/youtube';
 
-// 掲載チャンネル（探索対象チャンネル）の管理API（管理者専用。管理_Ai運営者 コンテンツ収集機能仕様書 v3.0 §3.1、
+// 掲載チャンネルの管理API（管理者専用。管理_Ai運営者 コンテンツ収集機能仕様書 v3.0 §3.1、
 // 収集候補レビューUI仕様書 v2.0 §6）。exploration_channels への書き込みはこのAPIからのみ行う（rules で write 不可）。
 // action:
 //   add           { lines }            1行1件。URL・@ハンドル・UC...は即特定して active、それ以外は名前として unresolved
@@ -31,7 +31,8 @@ import {
 //   set_tags      { id, tagIds }       チャンネル単位タグ（運営者タグのみ）
 //   set_mode      { id, publishMode }  掲載方法（confirm／auto）
 //   set_order     { id, featuredOrder } 「人気のチャンネル」・チャンネル一覧の人気順のピン留め（小さいほど先。null で外す。段階5）
-// チャンネルを登録済み（active）にしたときは、そのチャンネルをその場で1回巡回する（コンテンツ収集機能仕様書 §10.3）。
+// チャンネルを登録済み（active）にしたときは、そのチャンネルをその場で1回巡回する（コンテンツ収集機能仕様書 §10.3。
+// lib/channel-sweep-run.ts の sweepChannelNow。失敗しても登録は成功として扱い、毎日の巡回が拾う）。
 const MAX_RESOLVE_PER_REQUEST = 40;
 const MAX_LINES_PER_REQUEST = 200;
 
@@ -76,19 +77,6 @@ async function findActiveDuplicate(youtubeChannelId: string, selfId?: string): P
   const snap = await adminDb.collection('exploration_channels').where('youtubeChannelId', '==', youtubeChannelId).get();
   const dup = snap.docs.find((d) => d.id !== selfId && (d.data().status === 'active' || d.data().status === 'opted_out'));
   return dup?.id ?? null;
-}
-
-/** 登録済みにした直後の巡回。失敗しても登録は成功として扱う（毎日の巡回が拾う）。収集の枠の使用量は exploreChannels が記録する */
-async function sweepNow(explorationChannelId: string, uid: string): Promise<{ newPlaylists: number } | null> {
-  try {
-    const quota = await checkCollectionQuota(1);
-    if (!quota.ok) return null;
-    const summary = await exploreChannels({ trigger: 'manual', executedBy: uid, explorationChannelId });
-    return { newPlaylists: summary.candidatesFound };
-  } catch (e) {
-    console.error('掲載チャンネルのその場の巡回に失敗', explorationChannelId, e);
-    return null;
-  }
 }
 
 export async function POST(request: NextRequest) {
@@ -172,7 +160,7 @@ export async function POST(request: NextRequest) {
     }
     let swept = 0;
     for (const id of toSweep.slice(0, MAX_SWEEP_ON_ADD)) {
-      if (await sweepNow(id, auth.uid)) swept++;
+      if (await sweepChannelNow(id, auth.uid)) swept++;
     }
     return NextResponse.json({ addedActive, addedNames, duplicates, notFound, swept });
   }
@@ -236,7 +224,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'duplicate_channel' }, { status: 409 });
     }
     await ref.update(activeFields(candidate, now, data));
-    return NextResponse.json({ ok: true, sweep: await sweepNow(id, auth.uid) });
+    return NextResponse.json({ ok: true, sweep: await sweepChannelNow(id, auth.uid) });
   }
 
   if (action === 'set_ref') {
@@ -259,7 +247,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'duplicate_channel' }, { status: 409 });
     }
     await ref.update(activeFields(detail, now, data));
-    return NextResponse.json({ ok: true, sweep: await sweepNow(id, auth.uid) });
+    return NextResponse.json({ ok: true, sweep: await sweepChannelNow(id, auth.uid) });
   }
 
   const note = str(body.note)?.slice(0, 500) ?? null;
@@ -297,7 +285,7 @@ export async function POST(request: NextRequest) {
       updatedAt: now,
     });
     const restored = await restoreChannelPlaylists(id, youtubeChannelId);
-    return NextResponse.json({ ok: true, ...restored, sweep: await sweepNow(id, auth.uid) });
+    return NextResponse.json({ ok: true, ...restored, sweep: await sweepChannelNow(id, auth.uid) });
   }
 
   if (action === 'set_mode') {

@@ -100,7 +100,8 @@ export async function purgeStalePlaylists(monitored: Set<string>, now: Date): Pr
     }
   }
 
-  // 収集候補（段階3までの承認待ち）。巡回に取り込まれたものは取り込み時に消すので、残りは30日で消す
+  // 収集候補（段階3までの承認待ち。もう作られない）の残りを30日で消す。巡回はもう収集候補を読まない（2026-11-17）。
+  // 本番は段階4以降のデプロイ（2026-11-11）から30日で残りが消えるので、それを確かめたらこの処理も外してよい
   const candidates = await adminDb.collection('collection_candidates').where('collectedAt', '<', new Date(cutoff)).limit(PURGE_LIMIT).get();
   for (let i = 0; i < candidates.docs.length; i += 400) {
     const batch = adminDb.batch();

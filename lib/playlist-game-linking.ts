@@ -1,11 +1,12 @@
 // ゲーム未設定（playlists.gameId = null）の再生リストにゲームを付ける・外す共通処理（サーバー専用。
 // 収集候補レビューUI仕様書 v2.5 §3.9・§6.5、データモデル設計書 v1.28 の playlists.gameHint / gameSetBy / gameSetAt）。
-// 付け外しでは playlists.gameId / gameName / gameGenreIds と games.playlistCount を必ず一緒に直す。
+// 付け外しでは playlists.gameId / gameName / gameGenreIds と games.playlistCount を必ず一緒に直す（増減は lib/listing-counts.ts）。
 // 履歴は playlist_game_changes に残す（クライアントからは読み書きできない。管理画面の「戻す」の元）。
 import { FieldValue } from 'firebase-admin/firestore';
 import { adminDb } from '@/lib/firebase-admin';
-import { guessGame, normalizeForMatch } from '@/lib/exploration-rules';
-import { countsAsListed } from '@/lib/listing';
+import { guessGame, normalizeForMatch } from '@/lib/playlist-title-rules';
+import { playlistCountDeltas, playlistCountStateOf } from '@/lib/listing-counts';
+import { prepareCountWrites, readerOf } from '@/lib/listing-counts-server';
 
 export type GameSetBy = 'admin' | 'auto' | 'user';
 
@@ -68,6 +69,9 @@ export async function linkPlaylistToGame(playlistId: string, gameId: string, by:
     if (by === 'user' && ((playlistSnap.data()!.rejectedGameIds as string[] | undefined) ?? []).includes(gameId)) return 'rejected_game';
     if (counterRef && ((counterSnap?.data()?.count as number | undefined) ?? 0) >= USER_DAILY_LINK_LIMIT) return 'daily_limit';
     const game = gameSnap.data()!;
+    const playlist = playlistSnap.data()!;
+    // 掲載していない再生リストは件数に数えない（コンテンツ収集機能仕様書 §10.7）
+    const counts = await prepareCountWrites(readerOf(tx), playlistCountDeltas(playlistCountStateOf(playlist), playlistCountStateOf({ ...playlist, gameId })));
     const now = new Date();
     if (counterRef) tx.set(counterRef, { userId, date: todayKey(), count: FieldValue.increment(1), updatedAt: now }, { merge: true });
     tx.update(playlistRef, {
@@ -77,8 +81,7 @@ export async function linkPlaylistToGame(playlistId: string, gameId: string, by:
       gameSetBy: by,
       gameSetAt: now,
     });
-    // 掲載していない再生リストは件数に数えない（コンテンツ収集機能仕様書 §10.7）
-    if (countsAsListed(playlistSnap.data()!)) tx.update(gameRef, { playlistCount: FieldValue.increment(1) });
+    counts.write(tx);
     tx.set(adminDb.collection('playlist_game_changes').doc(), { playlistId, from: null, to: gameId, by, userId, at: now });
     return 'linked';
   });
@@ -90,10 +93,10 @@ export async function unlinkPlaylistGame(playlistId: string, userId: string | nu
   return adminDb.runTransaction(async (tx) => {
     const playlistSnap = await tx.get(playlistRef);
     if (!playlistSnap.exists) return 'playlist_not_found';
-    const gameId = playlistSnap.data()!.gameId as string | null;
+    const playlist = playlistSnap.data()!;
+    const gameId = playlist.gameId as string | null;
     if (!gameId) return 'not_set';
-    const gameRef = adminDb.collection('games').doc(gameId);
-    const gameSnap = await tx.get(gameRef);
+    const counts = await prepareCountWrites(readerOf(tx), playlistCountDeltas(playlistCountStateOf(playlist), playlistCountStateOf({ ...playlist, gameId: null })));
     const now = new Date();
     tx.update(playlistRef, {
       gameId: null,
@@ -103,7 +106,7 @@ export async function unlinkPlaylistGame(playlistId: string, userId: string | nu
       gameSetAt: null,
       rejectedGameIds: FieldValue.arrayUnion(gameId),
     });
-    if (gameSnap.exists && countsAsListed(playlistSnap.data()!)) tx.update(gameRef, { playlistCount: FieldValue.increment(-1) });
+    counts.write(tx);
     tx.set(adminDb.collection('playlist_game_changes').doc(), { playlistId, from: gameId, to: null, by: 'admin', userId, at: now });
     return 'unlinked';
   });
@@ -127,7 +130,7 @@ export async function changePlaylistGame(
     const playlist = playlistSnap.data()!;
     const fromGameId = (playlist.gameId as string | null) ?? null;
     if (fromGameId === toGameId) return 'unchanged';
-    const fromSnap = fromGameId ? await tx.get(adminDb.collection('games').doc(fromGameId)) : null;
+    const counts = await prepareCountWrites(readerOf(tx), playlistCountDeltas(playlistCountStateOf(playlist), playlistCountStateOf({ ...playlist, gameId: toGameId })));
     const game = toSnap.data()!;
     const now = new Date();
     tx.update(playlistRef, {
@@ -138,10 +141,7 @@ export async function changePlaylistGame(
       gameSetAt: now,
       ...(fromGameId ? { rejectedGameIds: FieldValue.arrayUnion(fromGameId) } : {}),
     });
-    if (countsAsListed(playlist)) {
-      if (fromSnap?.exists) tx.update(fromSnap.ref, { playlistCount: FieldValue.increment(-1) });
-      tx.update(toRef, { playlistCount: FieldValue.increment(1) });
-    }
+    counts.write(tx);
     tx.set(adminDb.collection('playlist_game_changes').doc(), { playlistId, from: fromGameId, to: toGameId, by: 'admin', userId, at: now });
     return 'changed';
   });

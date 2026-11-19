@@ -1,4 +1,4 @@
-// 詳細ページからの変更の提案（サーバー専用）。ページ 詳細ページからの変更提案 仕様書、管理 審査ワークフロー仕様書 §16。
+// 詳細ページからの変更の提案（サーバー専用）。ページ 詳細ページからの変更提案 仕様書、管理 審査ワークフロー仕様書 §4.5。
 // - 送信（submitChangeProposal）: 回数・重複・対象の状態をここで確かめ、1人の提案を workflows の1件にする
 // - 審査（decideChangeProposal）: 同じ対象（reportData.targetKey）の審査中の提案をまとめて承認・却下し、報告した全員に通知する
 // workflows の読み取りは等価条件だけ（submittedBy、reportData.targetKey）で行い、種別・状態・日付はメモリで絞る（複合インデックスを増やさない）。
@@ -9,6 +9,8 @@ import { getProposalChannelState } from './channel-application-server';
 import { unlistPlaylist, turnChannelOff } from './listing-server';
 import { changePlaylistGame } from './playlist-game-linking';
 import { MAX_GAME_TITLE_LENGTH } from './proposal-shared';
+import { decidedStatus, decisionHistoryEntry, isPendingStatus, reviewResultNotification } from './workflow-shared';
+import { ALREADY_PROCESSED, claimApproving, releaseApproving, type WorkflowDecisionHandler } from './workflow-server';
 import {
   CHANGE_APPROVE_ACTIONS,
   CHANGE_PROPOSAL_DAILY_LIMIT,
@@ -25,8 +27,6 @@ import {
   type ChangeTargetType,
 } from './change-proposal-shared';
 
-const PENDING = new Set(['reviewing_lv1', 'reviewing_lv2']);
-const APPROVING_LOCK_MS = 2 * 60 * 1000;
 
 export type ChangeApiError = { error: string; status: number };
 
@@ -41,7 +41,7 @@ function str(v: unknown): string {
 /** この人の審査中の提案のうち、対象が同じもの（重複の判定・詳細ページのモーダル用） */
 export async function findMyPendingChange(uid: string, targetKey: string): Promise<DocumentSnapshot | null> {
   const snap = await adminDb.collection('workflows').where('reportData.targetKey', '==', targetKey).get();
-  return snap.docs.find((d) => d.data().submittedBy === uid && PENDING.has(d.data().status as string)) ?? null;
+  return snap.docs.find((d) => d.data().submittedBy === uid && isPendingStatus(d.data().status)) ?? null;
 }
 
 interface TargetSnapshot {
@@ -152,7 +152,7 @@ export async function submitChangeProposal(uid: string, body: Record<string, unk
   const blocked = await adminDb.runTransaction(async (tx) => {
     const mine = await tx.get(adminDb.collection('workflows').where('submittedBy', '==', uid));
     const mineChanges = mine.docs.filter((d) => CHANGE_PROPOSAL_TYPES.includes(d.data().type as string));
-    if (mineChanges.some((d) => d.data().reportData?.targetKey === reportData.targetKey && PENDING.has(d.data().status as string))) {
+    if (mineChanges.some((d) => d.data().reportData?.targetKey === reportData.targetKey && isPendingStatus(d.data().status))) {
       return { error: 'already_proposed', status: 409 };
     }
     if (mineChanges.filter((d) => (d.data().submittedAt?.toMillis?.() ?? 0) >= since).length >= CHANGE_PROPOSAL_DAILY_LIMIT) {
@@ -169,7 +169,7 @@ export async function submitChangeProposal(uid: string, body: Record<string, unk
 async function pendingGroup(targetKey: string): Promise<DocumentSnapshot[]> {
   const snap = await adminDb.collection('workflows').where('reportData.targetKey', '==', targetKey).get();
   return snap.docs
-    .filter((d) => PENDING.has(d.data().status as string) && CHANGE_PROPOSAL_TYPES.includes(d.data().type as string))
+    .filter((d) => isPendingStatus(d.data().status) && CHANGE_PROPOSAL_TYPES.includes(d.data().type as string))
     .sort((a, b) => (a.data()!.submittedAt?.toMillis?.() ?? 0) - (b.data()!.submittedAt?.toMillis?.() ?? 0));
 }
 
@@ -209,52 +209,33 @@ async function runApproveAction(
 }
 
 /**
- * 同じ対象の審査中の提案をまとめて承認・却下する（管理 審査ワークフロー仕様書 §16）。
+ * 同じ対象の審査中の提案をまとめて承認・却下する（管理 審査ワークフロー仕様書 §4.5）。
  * 承認は選んだ処理（approveAction）を実行してから、まとめた全件を承認済みにし、報告した全員に通知する。
  */
-export async function decideChangeProposal(params: {
-  workflowId: string;
-  workflow: DocumentData;
-  action: 'approve' | 'reject';
-  uid: string;
-  comment: string | null;
-  rejectReasonCode: unknown;
-  approveAction: unknown;
-  gameId: unknown;
-}): Promise<{ ok: true; count: number } | ChangeApiError> {
-  const { workflowId, workflow, action, uid, comment } = params;
+export const decideChangeProposal: WorkflowDecisionHandler = async ({ workflowRef, workflowId, workflow, action, uid, comment, body }) => {
   const report = (workflow.reportData ?? {}) as Record<string, unknown>;
   const targetType = report.targetType as ChangeTargetType;
   const targetId = report.targetId as string;
   const targetKey = report.targetKey as string;
   if (!CHANGE_APPROVE_ACTIONS[targetType] || !targetId || !targetKey) return { error: 'invalid_workflow', status: 400 };
 
-  const rejectLabel = changeRejectReasonLabel(params.rejectReasonCode);
+  const rejectLabel = changeRejectReasonLabel(body.rejectReasonCode);
   if (action === 'reject' && !rejectLabel) return { error: 'reject_reason_required', status: 400 };
-  const approveAction = (action === 'approve' ? params.approveAction : 'none') as ChangeApproveAction;
+  const approveAction = (action === 'approve' ? body.approveAction : 'none') as ChangeApproveAction;
   if (!CHANGE_APPROVE_ACTIONS[targetType].includes(approveAction)) return { error: 'invalid_action', status: 400 };
-  const gameId = approveAction === 'relink' ? (validId(params.gameId) ? params.gameId : null) : null;
+  const gameId = approveAction === 'relink' ? (validId(body.gameId) ? body.gameId : null) : null;
   if (approveAction === 'relink' && !gameId) return { error: 'game_required', status: 400 };
 
   const now = new Date();
-  const primaryRef = adminDb.collection('workflows').doc(workflowId);
+  const primaryRef = workflowRef;
   // 同時に承認・却下しないよう、この画面の提案（primary）に処理中の印を先に取る
-  const claimed = await adminDb.runTransaction(async (tx) => {
-    const snap = await tx.get(primaryRef);
-    const current = snap.data();
-    if (!current || !PENDING.has(current.status as string)) return false;
-    const approvingAt = current.approvingAt?.toMillis?.() ?? 0;
-    if (approvingAt && now.getTime() - approvingAt < APPROVING_LOCK_MS) return false;
-    tx.update(primaryRef, { approvingAt: now });
-    return true;
-  });
-  if (!claimed) return { error: 'already_processed', status: 409 };
+  if (!(await claimApproving(primaryRef, now))) return ALREADY_PROCESSED;
 
   try {
     if (action === 'approve') {
       const done = await runApproveAction(targetType, targetId, approveAction, gameId, uid);
       if ('error' in done) {
-        await primaryRef.update({ approvingAt: FieldValue.delete() });
+        await releaseApproving(primaryRef);
         return done;
       }
     }
@@ -264,54 +245,44 @@ export async function decideChangeProposal(params: {
     const group = (await pendingGroup(targetKey)).filter((d) => (d.data()!.submittedAt?.toMillis?.() ?? 0) <= now.getTime());
     const ids = new Set([workflowId, ...group.map((d) => d.id)]);
     const refs = [...ids].map((id) => adminDb.collection('workflows').doc(id));
-    const historyEntry = {
-      executedAt: now,
-      operatorId: uid,
-      isAI: false,
-      action: action === 'approve' ? 'approved' : 'rejected',
-      comment,
-      approveAction: action === 'approve' ? approveAction : null,
-      gameId,
-      gameName,
-    };
+    const historyEntry = decisionHistoryEntry({ now, uid, action, comment, extra: { approveAction: action === 'approve' ? approveAction : null, gameId, gameName } });
 
     const count = await adminDb.runTransaction(async (tx) => {
       const snaps = await tx.getAll(...refs);
       let n = 0;
       for (const snap of snaps) {
         const current = snap.data();
-        if (!current || !PENDING.has(current.status as string)) continue;
+        if (!current || !isPendingStatus(current.status)) continue;
         const name = (current.reportData?.targetName as string) ?? (report.targetName as string) ?? '';
         tx.update(snap.ref, {
-          status: action === 'approve' ? 'approved' : 'rejected',
+          status: decidedStatus(action),
           step2History: [...(current.step2History ?? []), historyEntry],
           'reportData.decisionId': workflowId,
-          'reportData.rejectReasonCode': action === 'reject' ? params.rejectReasonCode : null,
+          'reportData.rejectReasonCode': action === 'reject' ? body.rejectReasonCode : null,
           approvingAt: FieldValue.delete(),
           updatedAt: now,
         });
         if (current.submittedBy) {
-          tx.set(adminDb.collection('notifications').doc(), {
-            userId: current.submittedBy,
-            type: 'review_result',
-            workflowId: snap.id,
-            playlistId: null,
-            playlistTitle: '',
-            message: changeResultMessage(targetType, name, action, rejectLabel),
-            isRead: false,
-            createdAt: now,
-          });
+          tx.set(
+            adminDb.collection('notifications').doc(),
+            reviewResultNotification({
+              userId: current.submittedBy as string,
+              workflowId: snap.id,
+              now,
+              message: changeResultMessage(targetType, name, action, rejectLabel),
+            }),
+          );
         }
         n++;
       }
       return n;
     });
-    return { ok: true, count };
+    return { ok: true, response: { count } };
   } catch (e) {
-    await primaryRef.update({ approvingAt: FieldValue.delete() }).catch(() => undefined);
+    await releaseApproving(primaryRef).catch(() => undefined);
     throw e;
   }
-}
+};
 
 /** 提案履歴（GET /api/playlists/proposals）に並べる「変更の提案」 */
 export async function listMyChangeProposals(uid: string) {

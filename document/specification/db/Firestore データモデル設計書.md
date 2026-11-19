@@ -1,6 +1,6 @@
 # プレミテ Firestore データモデル設計書
 
-**バージョン**: v3.1  
+**バージョン**: v3.3  
 **作成日**: 2026年3月30日（更新）  
 **対象**: 開発チーム  
 **関連ドキュメント**: プレミテ企画書 / プレミテ_技術スタック仕様書 / 各機能仕様書
@@ -302,7 +302,7 @@ YouTubeチャンネルの情報。
 | `themeIds` | string[] | ✅ | 紐づくテーマIDリスト（`themes` コレクション） |
 | `gameTagIds` | string[] | ✅ | 付与されたタグIDリスト |
 | `gameTagsFixed` | string[] | ✅ | 固定タグIDリスト |
-| `playlistCount` | number | ✅ | 紐づく再生リスト数（集計キャッシュ） |
+| `playlistCount` | number | ✅ | 紐づく再生リスト数（集計キャッシュ）。掲載中（`listed`）だけを数える（v3.2 で明記。増減は `lib/listing-counts.ts`） |
 | `createdAt` | Timestamp | ✅ | マスタへの登録日時 |
 | `updatedAt` | Timestamp | ✅ | 最終更新日時 |
 
@@ -351,7 +351,7 @@ YouTubeチャンネルの情報。
 | `tagId` | string | ✅ | タグID（ドキュメントIDと同一、`TAG-{連番}` 形式） |
 | `name` | string | ✅ | タグ名 |
 | `origin` | string | ✅ | 出自：`"operator"` / `"user"` |
-| `usagePlaylistCount` | number | ✅ | 再生リストへの付与件数（集計キャッシュ） |
+| `usagePlaylistCount` | number | ✅ | 再生リストへの付与件数（集計キャッシュ）。掲載中（`listed`）の再生リストだけを数える（v3.2 で明記。一般ユーザーのタグ編集も同じ。増減は `lib/listing-counts.ts`） |
 | `usageGameCount` | number | ✅ | ゲームタイトルへの付与件数（集計キャッシュ） |
 | `createdAt` | Timestamp | ✅ | 登録日時 |
 | `createdBy` | string? | — | 作成者のuserId（ユーザータグのみ。運営者タグはnull） |
@@ -382,7 +382,7 @@ YouTubeチャンネルの情報。
 | `commentScore` | number? | — | コメント有無による乗数（変数C。あり: `1.0` / なし: `0.5`。共通 信頼度スコアリングシステム仕様書 §3.3に準拠） |
 | `userDisplayName` | string | ✅ | 投稿者の表示名の非正規化コピー（投稿・更新時点のスナップショット）。`users`は本人・管理者以外読めないルールのため、レビュー一覧での表示にはこちらを参照する（HANDOFF.md未解決事項1の対応）。プロフィールで表示名を変更すると `PATCH /api/users/[userId]/profile` が本人の全レビュー分を新しい名前に揃える |
 | `userProfileImageUrl` | string? | — | 投稿者のプロフィール画像URLの非正規化コピー（同上。アイコンを替える・外すと `PUT`／`DELETE /api/users/[userId]/avatar` が本人の全レビュー分を揃える） |
-| `isHidden` | boolean? | — | 通報承認による非表示（論理削除）フラグ。`true` のレビューは一覧・集計・スコアから除外する（管理 審査ワークフロー仕様書 §3.1）。未設定は `false` 扱い。書き込みは Admin SDK のみ（本人のクライアント更新の許可フィールドに含めない） |
+| `isHidden` | boolean? | — | 通報承認による非表示（論理削除）フラグ。`true` のレビューは一覧・集計・スコアから除外する（管理 審査ワークフロー仕様書 §4.1）。未設定は `false` 扱い。書き込みは Admin SDK のみ（本人のクライアント更新の許可フィールドに含めない） |
 | `hiddenAt` | Timestamp? | — | 非表示にした日時 |
 | `hiddenByWorkflowId` | string? | — | 非表示の根拠となった `workflows` のドキュメントID |
 | `postedAt` | Timestamp | ✅ | 初回投稿日時 |
@@ -519,13 +519,13 @@ YouTubeチャンネルの情報。
 
 | フィールド | 型 | 必須 | 説明 |
 |-----------|-----|:---:|------|
-| `type` | string | ✅ | `"playlist_register"` / `"game_title_register"` / `"game_title_edit"` / `"playlist_report"` / `"review_report"` / `"channel_application"`（チャンネル申請、v2.0・段階6。審査ワークフロー仕様書 §15）／`"channel_report"`（チャンネルの報告、v3.0。審査ワークフロー仕様書 §16） |
+| `type` | string | ✅ | `"playlist_register"` / `"game_title_register"` / `"game_title_edit"` / `"playlist_report"` / `"review_report"` / `"channel_application"`（チャンネル申請、v2.0・段階6。審査ワークフロー仕様書 §4.4）／`"channel_report"`（チャンネルの報告、v3.0。審査ワークフロー仕様書 §4.5） |
 | `status` | string | ✅ | `"reviewing_lv1"` / `"reviewing_lv2"` / `"approved"` / `"rejected"` |
 | `submittedBy` | string | ✅ | 起票したユーザーのuserId |
 | `genreId` | string? | — | 関連ジャンルID（STEP1審査者特定に使用） |
 | `step1AssignedOperatorIds` | string[] | ✅ | STEP1にアサインされた運営者のuserIdリスト |
 | `proposalData` | map? | — | 提案データ（種別により異なる。下記「`proposalData` の構造」） |
-| `reportData` | map? | — | 通報データ（種別により異なる）。`review_report` は `targetType`・`reviewId`・`playlistId`・`reason`・`detail` を持ち、承認時に `hiddenReviewSnapshot`（承認時点のレビュー内容: `userId`・`userDisplayName`・`starRating`・`comment`・`hasSpoiler`・`postedAt`・`updatedAt`）を追記する（管理 審査ワークフロー仕様書 §3.1）。v3.0: 詳細ページからの変更の提案（`game_title_edit`・`channel_report`・`playlist_report`）は `targetType`（`game`／`channel`／`playlist`）・`targetId`・`targetKey`（`"{targetType}:{targetId}"`。同じ対象をまとめて引く）・`targetName`・`targetThumbnailUrl`（提案時点）・`reason`（チャンネル・再生リスト）・`fields`（ゲームの違う項目の配列）・`detail`・`duplicateGameId`／`duplicateGameName`・`proposedGameId`／`proposedGameName`／`proposedGameTitle`（再生リストの「ゲームが違う」）・`currentGameId`／`currentGameName` を持ち、審査で `decisionId`・`rejectReasonCode` を追記する（ページ 詳細ページからの変更提案 仕様書 §10.1、管理 審査ワークフロー仕様書 §16） |
+| `reportData` | map? | — | 通報データ（種別により異なる）。`review_report` は `targetType`・`reviewId`・`playlistId`・`reason`・`detail` を持ち、承認時に `hiddenReviewSnapshot`（承認時点のレビュー内容: `userId`・`userDisplayName`・`starRating`・`comment`・`hasSpoiler`・`postedAt`・`updatedAt`）を追記する（管理 審査ワークフロー仕様書 §4.1）。v3.0: 詳細ページからの変更の提案（`game_title_edit`・`channel_report`・`playlist_report`）は `targetType`（`game`／`channel`／`playlist`）・`targetId`・`targetKey`（`"{targetType}:{targetId}"`。同じ対象をまとめて引く）・`targetName`・`targetThumbnailUrl`（提案時点）・`reason`（チャンネル・再生リスト）・`fields`（ゲームの違う項目の配列）・`detail`・`duplicateGameId`／`duplicateGameName`・`proposedGameId`／`proposedGameName`／`proposedGameTitle`（再生リストの「ゲームが違う」）・`currentGameId`／`currentGameName` を持ち、審査で `decisionId`・`rejectReasonCode` を追記する（ページ 詳細ページからの変更提案 仕様書 §10.1、管理 審査ワークフロー仕様書 §4.5） |
 | `step1History` | map[] | ✅ | STEP1の審査履歴（配列） |
 | `step1Errors` | map[] | ✅ | AI審査エラー記録（配列） |
 | `step2History` | map[] | ✅ | STEP2の審査履歴（配列） |
@@ -539,9 +539,9 @@ YouTubeチャンネルの情報。
 
 | 種別 | フィールド |
 |------|-----------|
-| `playlist_register` | `playlistUrl`・`youtubePlaylistId`・`title`・`thumbnailUrl`・`itemCount`・`channelId`・`channelName`・`channelIconUrl`（提案時点の YouTube の情報）・`gameId`・`gameName`（新しいゲームタイトルとして提案した場合はどちらも null で、`newGameTitle`・`newGameNote`（null 可）を持つ）。承認時に `registeredPlaylistId`、ゲームタイトルを差し替えて承認した場合は `approvedGameId`・`approvedGameName` を追記。v1.23: 新しいゲームタイトルの場合は `newGamePlatforms`（string[]、任意）と `newGameRakuten`（楽天ブックスの候補から選んだ場合の `itemUrl`・`title`（元の商品名）・`imageUrl`・`hardware`・`booksGenreId`、それ以外は null）。却下時に `rejectReasonCode`（定型の見送り理由、管理 審査ワークフロー仕様書 §14.4） |
+| `playlist_register` | `playlistUrl`・`youtubePlaylistId`・`title`・`thumbnailUrl`・`itemCount`・`channelId`・`channelName`・`channelIconUrl`（提案時点の YouTube の情報）・`gameId`・`gameName`（新しいゲームタイトルとして提案した場合はどちらも null で、`newGameTitle`・`newGameNote`（null 可）を持つ）。承認時に `registeredPlaylistId`、ゲームタイトルを差し替えて承認した場合は `approvedGameId`・`approvedGameName` を追記。v1.23: 新しいゲームタイトルの場合は `newGamePlatforms`（string[]、任意）と `newGameRakuten`（楽天ブックスの候補から選んだ場合の `itemUrl`・`title`（元の商品名）・`imageUrl`・`hardware`・`booksGenreId`、それ以外は null）。却下時に `rejectReasonCode`（定型の見送り理由、管理 審査ワークフロー仕様書 §4.2） |
 | `playlist_register`（v2.0 の追記） | 提案できるのは掲載チャンネル（`exploration_channels.status == active`）の再生リストだけ（ページ 再生リストを追加する 仕様書 §10）。ゲームタイトルは任意: ゲームが分からない提案は `gameId`・`newGameTitle` がどちらも null で `noGame: true` を持つ（承認ではゲーム未設定で登録できる）。既に `playlists` にあるが掲載していない再生リスト（`listed` 以外）の掲載の提案は `existingListingStatus`（提案時点の掲載状態）を持ち、承認で `listed`（`listingSetBy: admin`）にする。2026-11-16（ページ 提案する 仕様書）: `existingListingReason`（提案時点の掲載の理由）、`proposeReason`（公開してほしい理由、任意・200文字。対象外を選んだときだけ）を追加。運営が手で外したもの（`listingSetBy: admin`）は提案できない |
-| `channel_application`（v2.0・段階6） | `channelUrl`（入力されたURL・@ハンドル）・`youtubeChannelId`・`channelTitle`・`channelIconUrl`（申請時点の YouTube の情報）・`applicantType`（`"creator"`＝本人・事務所／`"viewer"`＝視聴者の推薦。自己申告。**2026-11-15 までの申請だけが持つ。2026-11-16 以降は区分を聞かず記録もしない**（ユーザー決定。ページ 提案する 仕様書 §6.1）。残っている値も画面では使わない）・`reason`（任意、200文字まで）。承認時に `explorationChannelId`（掲載した `exploration_channels` のID）を追記。却下時に `rejectReasonCode`（審査ワークフロー仕様書 §15.4）。同じチャンネルの審査中の申請があるときは新しい申請を受け付けない（2026-11-04 ユーザー決定、v2.6）。`channelUrl` には入力をそのまま入れる（再生リストURLから特定した場合も入力したURL）。`subscriberCount`（申請時点の登録者数、非公開は null）も持つ（v2.6） |
+| `channel_application`（v2.0・段階6） | `channelUrl`（入力されたURL・@ハンドル）・`youtubeChannelId`・`channelTitle`・`channelIconUrl`（申請時点の YouTube の情報）・`applicantType`（`"creator"`＝本人・事務所／`"viewer"`＝視聴者の推薦。自己申告。**2026-11-15 までの申請だけが持つ。2026-11-16 以降は区分を聞かず記録もしない**（ユーザー決定。ページ 提案する 仕様書 §6.1）。残っている値も画面では使わない）・`reason`（任意、200文字まで）。承認時に `explorationChannelId`（掲載した `exploration_channels` のID）を追記。却下時に `rejectReasonCode`（審査ワークフロー仕様書 §4.4）。同じチャンネルの審査中の申請があるときは新しい申請を受け付けない（2026-11-04 ユーザー決定、v2.6）。`channelUrl` には入力をそのまま入れる（再生リストURLから特定した場合も入力したURL）。`subscriberCount`（申請時点の登録者数、非公開は null）も持つ（v2.6） |
 | `game_title_register` | `playlistUrl`・`gameTitle`・`note`（null 可）。承認時に `createdGameId`（登録したゲームタイトルのID）を追記。v1.22 の改訂（同日）以降は、再生リストの追加では新規作成しない（新しいゲームタイトルは `playlist_register` の `newGameTitle` で提案する）。**v2.4 から、登録済みでゲーム未設定の再生リストに付けたいゲームタイトルの提案としてのみ作る**: `gameTitle`・`note`（null 可）・`playlistId`（対象の再生リストID）・`playlistTitle`（`playlistUrl` は持たない）。承認時は `createdGameId` を追記し、その再生リストにゲームを付けて提案者に通知する |
 
 **`editHistory` 要素の構造**（v1.22 時点では再生リスト登録提案のゲームタイトル差し替えのみ）: `editedAt`（Timestamp）・`operatorId`・`field`（`"gameId"`）・`from`・`to`
@@ -563,22 +563,33 @@ YouTubeチャンネルの情報。
 
 ### 3.16 `notices`
 
-管理者からユーザーへのお知らせ情報。
+運営からのお知らせ（v3.2 で作り直し。管理 お知らせ管理仕様書 v2.0 §4）。Firestore ルールでクライアントから読めるのは管理者だけ（備考を見せないため）。利用者側は API（`/api/notices/*`）から公開中のものだけを受け取る。書き込みは管理 API（Admin SDK）だけ。
 
 **パス**: `notices/{noticeId}`
 
 | フィールド | 型 | 必須 | 説明 |
 |-----------|-----|:---:|------|
-| `title` | string | ✅ | お知らせタイトル |
-| `body` | string? | — | お知らせ本文 |
-| `status` | string | ✅ | `"draft"` / `"scheduled"` / `"published"` / `"archived"` |
-| `targetPages` | string[] | ✅ | 表示対象ページのパスリスト |
-| `startAt` | Timestamp? | — | 掲載開始日時 |
-| `endAt` | Timestamp? | — | 掲載終了日時 |
-| `sendPushNotification` | boolean | ✅ | プッシュ通知送信フラグ |
-| `createdBy` | string | ✅ | 作成者のuserId |
-| `createdAt` | Timestamp | ✅ | 作成日時 |
-| `updatedAt` | Timestamp | ✅ | 最終更新日時 |
+| `title` | string | ✅ | タイトル（50文字まで） |
+| `body` | string | ✅ | 本文（2,000文字まで。下書きでは空でもよい） |
+| `attachmentType` | string | ✅ | `"none"` / `"link"`（テキストリンクのみ）/ `"image_link"`（画像付きテキストリンク）/ `"youtube"` |
+| `linkLabel` | string | ✅ | リンクの文言（`link`・`image_link` のとき。それ以外は空） |
+| `linkUrl` | string | ✅ | リンク先（`https://` か `/` で始まるサイト内のパス。`link`・`image_link` のとき） |
+| `imageFileName` | string? | — | 画像のファイル名（`image_link` のとき）。Cloud Storage `notices/{ファイル名}` |
+| `youtubeVideoId` | string? | — | YouTube 動画 ID（`youtube` のとき） |
+| `youtubeUrl` | string | ✅ | 貼られた YouTube の URL（`youtube` のとき） |
+| `notifyBell` | boolean | ✅ | ベルで通知する（公開後は変えない） |
+| `important` | boolean | ✅ | TOP の重要なお知らせに出す |
+| `importantUntil` | Timestamp? | — | 重要なお知らせに出す終わり日時（null ならチェックを外すまで） |
+| `memo` | string | ✅ | 備考（管理画面だけ、1,000文字まで） |
+| `status` | string | ✅ | `"draft"`（下書き）/ `"published"`（公開中）/ `"unpublished"`（非公開） |
+| `publishedAt` | Timestamp? | — | 最初に公開した日時（再公開でも変えない） |
+| `bellSentAt` | Timestamp? | — | ベル通知を作った日時（1回だけ作るための印） |
+| `bellSentCount` | number? | — | ベル通知を作った人数 |
+| `createdBy` / `updatedBy` | string | ✅ | 作成者・最終更新者の userId |
+| `createdAt` / `updatedAt` | Timestamp | ✅ | 作成・最終更新日時 |
+
+- インデックス: `status` 昇順 + `publishedAt` 降順（公開中の一覧）。
+- v3.1 までの `targetPages`・`startAt`・`endAt`・`sendPushNotification`・`scheduled`・`archived` は取り下げ（データは無かった）。
 
 ---
 
@@ -908,7 +919,7 @@ AI運営者（審査AI）の設定。プラットフォーム共通で1体のみ
 | フィールド | 型 | 必須 | 説明 |
 |-----------|-----|:---:|------|
 | `userId` | string | ✅ | 通知の宛先ユーザーのuserId |
-| `type` | string | ✅ | 通知種別。`"series_new_episode"`（フェーズ2）／`"inquiry_reply"`（お問い合わせ返信、フェーズ7ステップ7-3-2）／`"review_result"`（再生リスト登録提案の審査結果、v1.23） |
+| `type` | string | ✅ | 通知種別。`"series_new_episode"`（フェーズ2）／`"inquiry_reply"`（お問い合わせ返信、フェーズ7ステップ7-3-2）／`"review_result"`（再生リスト登録提案の審査結果、v1.23）／`"notice"`（運営からのお知らせ、v3.3） |
 | `workflowId` | string? | — | 対象ワークフローのドキュメントID（`review_result`のみ）。承認時は `playlistId` に登録した再生リストのIDも入れる |
 | `playlistId` | string? | — | 対象再生リストのドキュメントID（`series_new_episode`のみ） |
 | `playlistTitle` | string? | — | 再生リストタイトル（denormalized、通知本文組み立て用） |
@@ -917,6 +928,7 @@ AI運営者（審査AI）の設定。プラットフォーム共通で1体のみ
 | `newVideoTitles` | array\<string\>? | — | 新しく増えた動画のタイトル（再生リストの並び順、先頭5本まで。`series_new_episode`のみ。v2.9） |
 | `newVideoCount` | number? | — | 新しく増えた動画の本数（`series_new_episode`のみ。v2.9） |
 | `inquiryId` | string? | — | 対象お問い合わせのドキュメントID（`inquiry_reply`のみ） |
+| `noticeId` | string? | — | 対象お知らせのドキュメントID（`notice`のみ。v3.3）。`message` には公開した時点のタイトルを入れる |
 | `message` | string | ✅ | 通知本文（例：「「〇〇実況」に新しい動画が追加されました」） |
 | `isRead` | boolean | ✅ | 既読フラグ（デフォルト：`false`）。既読から未読へは戻さない |
 | `createdAt` | Timestamp | ✅ | 通知生成日時 |
@@ -1140,7 +1152,7 @@ ai_operators ──── (1) users
 | v1.17 | 2026-10-12 | フェーズ6ステップ4-3（まとめの保存機能）。3.14.1 `saved_collections` を追加（保存記録、書き込みはAPI Routeのみ、まとめ削除時に連動削除）。6章のルール方針に追記 |
 | v1.18 | 2026-10-12 | フェーズ6ステップ5-2。`users.isMylistPublic`/`isReviewHistoryPublic` の既定値を実装（`true`）に合わせて修正。`reviews`/`collections` の `userDisplayName` がプロフィールでの表示名変更時に揃えられることを追記 |
 | v1.19 | 2026-10-14 | フェーズ7ステップ7-3-1（お問い合わせ）。3.17 `inquiries` をフォーム仕様に合わせて改訂（`subject` 削除、`body`・`relatedUrls` 追加、`status` を4状態に、`userName` をゲスト null 可に）、書き込み経路（API Route のみ）を明記。6章のルール方針に追記 |
-| v1.20 | 2026-10-24 | 通報承認時のレビュー処理を論理削除に変更（管理 審査ワークフロー仕様書 v9.0 §3.1）。`reviews` に `isHidden`・`hiddenAt`・`hiddenByWorkflowId` を追加。`workflows.reportData.hiddenReviewSnapshot` に承認時点のレビュー内容を退避する |
+| v1.20 | 2026-10-24 | 通報承認時のレビュー処理を論理削除に変更（管理 審査ワークフロー仕様書 v9.0 §4.1）。`reviews` に `isHidden`・`hiddenAt`・`hiddenByWorkflowId` を追加。`workflows.reportData.hiddenReviewSnapshot` に承認時点のレビュー内容を退避する |
 | v1.21 | 2026-10-24 | フェーズ7ステップ7-3-2（お問い合わせ履歴）。§3.17 `inquiries` に `lastAdminMessageAt`・`userLastReadAt`・`awaitingAdminReply` を追加し、送信者本人の読み取りを API 経由に変更。§3.30 `notifications` に `inquiry_reply` 種別と `inquiryId` を追加 |
 | v1.22 | 2026-10-25 | フェーズ7ステップ7-4（一般ユーザーの提案フロー）。§3.15 `workflows` に `proposalData`（`playlist_register`・`game_title_register`）と `editHistory` の構造を定義し、提案の作成を API 経由に限定。`playlists.proposedBy` を追加 |
 | v1.23 | 2026-10-25 | 再生リスト提案フローの作り込み。`workflows` の本人による直接読み取りを通報（`review_report`）に限定（提案は運営メモ・内部メモを含むため提案履歴 API 経由）。`games.aliases`（別名）、`workflows.proposalData` に `newGamePlatforms`・`newGameRakuten`・`rejectReasonCode`、`notifications` に `review_result` 種別と `workflowId` を追加 |
@@ -1164,4 +1176,6 @@ ai_operators ──── (1) users
 | v3.1 | 2026-11-17 | §3.14 まとめ機能のコード削除を注記（API Route・作成者名の揃え直しが無くなった。データとルールは残す） |
 | v3.0 | 2026-11-17 | `workflows` に詳細ページからの変更の提案（`channel_report` を追加、`game_title_edit`・`playlist_report` の `reportData` を定義）。`step2History` に `approveAction`・`gameId`・`gameName` |
 | v3.1 | 2026-11-17 | §3.21 `batch_logs` に `channelProfiles`・`channelProfileError` を追加。`channels.name`・`channels.iconUrl`、`exploration_channels.channelTitle`・`channelIconUrl`、`playlists.channelName`・`channelIconUrl` は毎日の再取得で YouTube の今の値に合わせる（YouTube定期取得仕様書 v1.11 §4.4） |
+| v3.3 | 2026-11-17 | §3.16 `notices` を運営からのお知らせの形に作り直し（管理 お知らせ管理仕様書 v2.0 §4）。クライアントから読めるのは管理者だけに。§3.30 `notifications` に `type: "notice"`・`noticeId` を追加 |
+| v3.2 | 2026-11-17 | リファクタリング②。`games.playlistCount`・`tags.usagePlaylistCount` が掲載中の再生リストだけを数えることを明記。一般ユーザーのタグの付け外しも、掲載中の再生リストのときだけ `usagePlaylistCount` を動かすように揃えた（これまでは掲載状態を見ずに数えていたため、掲載していない再生リストにタグを付けてから掲載すると二重に数えていた） |
 | v2.8 | 2026-11-08 | 段階5 人気のチャンネル。§3.4 `channels.popularity`、§3.32 `featuredOrder` をピン留めの順に、§3.21 `batch_logs` に `channel_popularity`、§3.35 `playlist_viewers`・§3.36 `batch_state` を追加。§7.1 退会時の削除に `playlist_viewers` を追加（共通 人気のチャンネル 集計 仕様書） |

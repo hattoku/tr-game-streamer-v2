@@ -1,7 +1,7 @@
 // 楽天ブックスの商品とゲーム名の照合（lib/rakuten-shared.ts の matchRakutenItem）と、ゲーム名の抜き出し（extractGameQuery）。
 // 管理 AI運営者向け収集候補レビューUI仕様書 v2.3 §3.7 の確認項目。画面を使わない（関数を直接呼ぶ）。
 import { expect, test } from '@playwright/test';
-import { extractGameQuery, findExcludeWord } from '../lib/exploration-rules';
+import { extractGameQuery, findExcludeWord } from '../lib/playlist-title-rules';
 import { matchRakutenItem } from '../lib/rakuten-shared';
 
 const pick = (gameTitle: string, ...titles: string[]) => matchRakutenItem(titles.map((title) => ({ title })), gameTitle)?.title ?? null;

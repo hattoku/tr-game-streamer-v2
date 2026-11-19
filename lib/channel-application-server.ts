@@ -1,11 +1,10 @@
 // チャンネル申請（段階6）と、再生リスト提案の「掲載チャンネルか」の分岐で使うサーバー側処理。
-// ページ チャンネルを申請する 仕様書（§4・§5・§8）、管理 審査ワークフロー仕様書 §15.2・§15.4、
+// ページ チャンネルを申請する 仕様書（§4・§5・§8）、管理 審査ワークフロー仕様書 §4.4、
 // ページ 再生リストを追加する 仕様書 §10.1。
 // 掲載チャンネルの一覧（`exploration_channels`）の管理APIは収集の段階4の担当なので、ここでは状態を読むのと、
 // 申請の承認で掲載チャンネルに加える（publishMode: confirm）ことだけを行う。
-import type { DocumentReference, DocumentSnapshot } from 'firebase-admin/firestore';
+import type { DocumentSnapshot } from 'firebase-admin/firestore';
 import { FieldValue } from 'firebase-admin/firestore';
-import { after } from 'next/server';
 import { adminDb } from './firebase-admin';
 import {
   extractPlaylistId,
@@ -21,15 +20,15 @@ import {
 import {
   CHANNEL_APPLICATION_TYPE,
   channelApplicationRejectReasonLabel,
+  channelApplicationResultMessage,
   type ApplyChannelState,
 } from './channel-application-shared';
 import { todayJst } from './collection-quota-shared';
-import { exploreChannels } from './exploration-server';
-import { checkCollectionQuota } from './collection-quota';
+import { sweepChannelAfterResponse } from './channel-sweep-run';
+import { decisionHistoryEntry, isPendingStatus, reviewResultNotification } from './workflow-shared';
+import { ALREADY_PROCESSED, claimApproving, commitDecision, releaseApproving, type WorkflowDecisionHandler } from './workflow-server';
 
 export type ChannelApiError = { error: string; status: number; message?: string };
-
-const PENDING_STATUSES = new Set(['reviewing_lv1', 'reviewing_lv2']);
 
 /**
  * 申請画面の入力（チャンネルURL・@ハンドル・UC…・再生リストURL・動画URL）からチャンネルを特定する（仕様書 §4、ページ 提案する 仕様書 §6.1）。
@@ -94,7 +93,7 @@ async function findPendingApplications(youtubeChannelId: string): Promise<Docume
     .where('type', '==', CHANNEL_APPLICATION_TYPE)
     .where('proposalData.youtubeChannelId', '==', youtubeChannelId)
     .get();
-  return snap.docs.filter((d) => PENDING_STATUSES.has(d.data().status as string));
+  return snap.docs.filter((d) => isPendingStatus(d.data().status));
 }
 
 /** 今日（日本時間）この人が送った申請の数。見送られた申請も数える（仕様書 §8） */
@@ -129,21 +128,13 @@ export async function checkApplyChannel(youtubeChannelId: string, uid: string): 
   return { state: 'ok', pendingIsMine: false, channelPageId: null };
 }
 
-// ---- 審査（管理 審査ワークフロー仕様書 §15.2） ----
+// ---- 審査（管理 審査ワークフロー仕様書 §4.4） ----
 
-// 承認処理中の印（approvingAt）の有効期間。再生リスト登録提案の承認と同じ
-const APPROVING_LOCK_MS = 2 * 60 * 1000;
-
-/**
- * チャンネル申請の承認・却下。承認では掲載チャンネル（exploration_channels）に active で加え、
- * そのチャンネルの再生リストを1回取り込む（取り込みの失敗は承認を取り消さない）。
- * 承認・却下とも申請者にサイト内通知（review_result）を作る。
- */
 /**
  * YouTube チャンネルを掲載チャンネル（`exploration_channels`、status: active、掲載方法「確認してから掲載」）にする。
- * チャンネル申請の承認（審査ワークフロー仕様書 §15.2）と、管理者の直接登録でチャンネルも同時に掲載するとき
+ * チャンネル申請の承認（審査ワークフロー仕様書 §4.4）と、管理者の直接登録でチャンネルも同時に掲載するとき
  * （ページ 提案する 仕様書 §9）に使う。同じ YouTube チャンネルの既存ドキュメント（未特定・確認待ち・掲載しない）があればそれを使う。
- * 戻り値は掲載チャンネルのドキュメントID。取り込み（exploreChannels）は呼び出し側で行う。
+ * 戻り値は掲載チャンネルのドキュメントID。取り込み（lib/channel-sweep-run.ts の sweepChannelAfterResponse）は呼び出し側で行う。
  */
 export async function activateListingChannel(params: {
   youtubeChannelId: string;
@@ -199,58 +190,31 @@ export async function activateListingChannel(params: {
   return ref.id;
 }
 
-/** 掲載チャンネルに加えたあと、そのチャンネルの再生リストを1回取り込む（応答のあとに実行。失敗しても元の操作は取り消さない） */
-export function importChannelAfterResponse(explorationChannelId: string, uid: string, label: string): void {
-  after(async () => {
-    try {
-      const quota = await checkCollectionQuota(1);
-      if (quota.ok) await exploreChannels({ trigger: 'manual', executedBy: uid, explorationChannelId });
-    } catch (e) {
-      console.error(`${label}の取り込みに失敗`, e);
-    }
-  });
-}
-
-export async function decideChannelApplication(params: {
-  workflowRef: DocumentReference;
-  workflow: FirebaseFirestore.DocumentData;
-  workflowId: string;
-  action: 'approve' | 'reject';
-  uid: string;
-  comment: string | null;
-  rejectReasonCode: unknown;
-}): Promise<{ ok: true; /** 取り込みを予約した（応答のあとに実行。結果は見ない） */ imported: boolean } | ChannelApiError> {
-  const { workflowRef, workflow, workflowId, action, uid, comment } = params;
+/**
+ * チャンネル申請の承認・却下（lib/workflow-decisions.ts から呼ぶ）。承認では掲載チャンネル（exploration_channels）に active で加え、
+ * そのチャンネルの再生リストを1回取り込む（取り込みの失敗は承認を取り消さない）。却下は定型の見送り理由が必須。
+ * 承認・却下とも申請者にサイト内通知（review_result）を作る。応答の `imported` は取り込みを予約したか（応答のあとに実行。結果は見ない）
+ */
+export const decideChannelApplication: WorkflowDecisionHandler = async ({ workflowRef, workflowId, workflow, action, uid, comment, body }) => {
   const proposal = (workflow.proposalData ?? {}) as Record<string, unknown>;
   const youtubeChannelId = typeof proposal.youtubeChannelId === 'string' ? proposal.youtubeChannelId : '';
   const channelTitle = (proposal.channelTitle as string) ?? '';
   const now = new Date();
 
-  const rejectReasonLabel = channelApplicationRejectReasonLabel(params.rejectReasonCode);
+  const rejectReasonLabel = channelApplicationRejectReasonLabel(body.rejectReasonCode);
   if (action === 'reject' && !rejectReasonLabel) return { error: 'reject_reason_required', status: 400 };
   if (!youtubeChannelId) return { error: 'invalid_workflow', status: 400 };
 
   const updates: Record<string, unknown> = {};
-  let imported = false;
   let newlyActivatedId: string | null = null;
 
   if (action === 'approve') {
     // 同時承認で二重に掲載チャンネルを作らないよう、承認処理中の印を先に取る
-    const claimed = await adminDb.runTransaction(async (tx) => {
-      const snap = await tx.get(workflowRef);
-      const current = snap.data();
-      if (!current || !PENDING_STATUSES.has(current.status as string)) return false;
-      const approvingAt = current.approvingAt?.toMillis?.() ?? 0;
-      if (approvingAt && now.getTime() - approvingAt < APPROVING_LOCK_MS) return false;
-      tx.update(workflowRef, { approvingAt: now });
-      return true;
-    });
-    if (!claimed) return { error: 'already_processed', status: 409 };
-
+    if (!(await claimApproving(workflowRef, now))) return ALREADY_PROCESSED;
     try {
       const { status, doc, docs } = await getListingChannel(youtubeChannelId);
       if (status === 'opted_out') {
-        await workflowRef.update({ approvingAt: FieldValue.delete() });
+        await releaseApproving(workflowRef);
         return { error: 'channel_opted_out', status: 409 };
       }
       if (status === 'active' && doc) {
@@ -271,54 +235,35 @@ export async function decideChannelApplication(params: {
         updates['proposalData.explorationChannelId'] = newlyActivatedId;
       }
     } catch (e) {
-      await workflowRef.update({ approvingAt: FieldValue.delete() }).catch(() => undefined);
+      await releaseApproving(workflowRef).catch(() => undefined);
       throw e;
     }
     updates.approvingAt = FieldValue.delete();
   } else {
-    updates['proposalData.rejectReasonCode'] = params.rejectReasonCode;
+    updates['proposalData.rejectReasonCode'] = body.rejectReasonCode;
   }
 
   const notification = workflow.submittedBy
-    ? {
-        userId: workflow.submittedBy,
-        type: 'review_result',
+    ? reviewResultNotification({
+        userId: workflow.submittedBy as string,
         workflowId,
-        playlistId: null,
-        playlistTitle: '',
-        message:
-          action === 'approve'
-            ? `チャンネル「${channelTitle}」の申請が承認されました。再生リストは運営の確認のあと順に公開します`
-            : `チャンネル「${channelTitle}」の申請は見送りになりました（${rejectReasonLabel}）`,
-        isRead: false,
-        createdAt: now,
-      }
+        now,
+        message: channelApplicationResultMessage(channelTitle, action, rejectReasonLabel),
+      })
     : null;
 
-  const historyEntry = { executedAt: now, operatorId: uid, isAI: false, action: action === 'approve' ? 'approved' : 'rejected', comment };
-  const committed = await adminDb.runTransaction(async (tx) => {
-    const snap = await tx.get(workflowRef);
-    const current = snap.data();
-    if (!current || !PENDING_STATUSES.has(current.status as string)) return false;
-    const approvingAt = current.approvingAt?.toMillis?.() ?? 0;
-    if (action === 'reject' && approvingAt && now.getTime() - approvingAt < APPROVING_LOCK_MS) return false;
-    tx.update(workflowRef, {
-      ...updates,
-      status: action === 'approve' ? 'approved' : 'rejected',
-      step2History: [...(current.step2History ?? []), historyEntry],
-      updatedAt: now,
-    });
-    if (notification) tx.set(adminDb.collection('notifications').doc(), notification);
-    return true;
+  const committed = await commitDecision({
+    ref: workflowRef,
+    action,
+    now,
+    updates,
+    historyEntry: decisionHistoryEntry({ now, uid, action, comment }),
+    notification,
   });
-  if (!committed) return { error: 'already_processed', status: 409 };
+  if (!committed) return ALREADY_PROCESSED;
 
-  // 掲載チャンネルに加えたら、再生リストを1回取り込む（§15.2）。再生リストの多いチャンネルでも承認の応答が
+  // 掲載チャンネルに加えたら、再生リストを1回取り込む。再生リストの多いチャンネルでも承認の応答が
   // タイムアウトしないよう、応答のあとに実行する。失敗しても承認は取り消さない（次の巡回で拾う）
-  if (newlyActivatedId) {
-    const explorationChannelId = newlyActivatedId;
-    imported = true;
-    importChannelAfterResponse(explorationChannelId, uid, 'チャンネル申請の承認後');
-  }
-  return { ok: true, imported };
-}
+  if (newlyActivatedId) sweepChannelAfterResponse(newlyActivatedId, uid, 'チャンネル申請の承認後の取り込み');
+  return { ok: true, response: { imported: !!newlyActivatedId } };
+};

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { FieldValue } from 'firebase-admin/firestore';
 import { requireAdmin } from '@/lib/api-auth';
 import { adminDb } from '@/lib/firebase-admin';
 import { autoLinkAfterGameChange } from '@/lib/playlist-game-linking';
+import { gameMasterCountDeltas } from '@/lib/listing-counts';
+import { writeGameMasterCounts } from '@/lib/listing-counts-server';
 import { parseGameInput, resolveGameInput, validateGameTitle } from '@/lib/admin-game-input';
 
 // Firestoreのbatchは1回500件まで。playlistsの同期件数が多い場合に備えて余裕を持って分割する
@@ -71,18 +72,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     updatedAt: new Date(),
   });
 
-  if (genreChanged) {
-    if (prevGenreId) batch.update(adminDb.collection('genres').doc(prevGenreId), { gameTitleCount: FieldValue.increment(-1) });
-    if (resolved.genreId) batch.update(adminDb.collection('genres').doc(resolved.genreId), { gameTitleCount: FieldValue.increment(1) });
-  }
-  const nextThemeSet = new Set(resolved.themeIds);
-  const prevThemeSet = new Set(prevThemeIds);
-  for (const id of prevThemeIds) {
-    if (!nextThemeSet.has(id)) batch.update(adminDb.collection('themes').doc(id), { gameTitleCount: FieldValue.increment(-1) });
-  }
-  for (const id of resolved.themeIds) {
-    if (!prevThemeSet.has(id)) batch.update(adminDb.collection('themes').doc(id), { gameTitleCount: FieldValue.increment(1) });
-  }
+  writeGameMasterCounts(
+    batch,
+    gameMasterCountDeltas({ genreId: prevGenreId, themeIds: prevThemeIds }, { genreId: resolved.genreId, themeIds: resolved.themeIds }),
+  );
   await batch.commit();
 
   // denormalized フィールドの同期（変更があった項目だけ）

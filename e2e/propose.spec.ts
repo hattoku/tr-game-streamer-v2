@@ -1,4 +1,4 @@
-// 提案するページ（/propose）の確認項目。ページ 提案する 仕様書 v1.0（§2〜§9）、管理 審査ワークフロー仕様書 §15.3。
+// 提案するページ（/propose）の確認項目。ページ 提案する 仕様書 v1.0（§2〜§9）、管理 審査ワークフロー仕様書 §4.2。
 // 掲載チャンネル・チャンネル・再生リストは Admin SDK で直接作る（YouTube に無い ID。名前は [E2E] で始まる）。終了時に自分で消す。
 // 掲載チャンネルの名前検索はサーバーで1分キャッシュするので、検索のテストは最大90秒待つ。
 // データを書き換えるテストは desktop だけで行う（desktop・mobile が同じ会員で同じ再生リストを奪い合わないように）。
@@ -250,7 +250,7 @@ test('§9 管理者: 見出しは「追加する」、運営が外したもの�
   }
 });
 
-test('審査 §15.3 すでにある再生リストの提案を承認すると公開され、ゲーム未設定でも承認できる', async ({ userPage, adminPage }, testInfo) => {
+test('審査 §4.2 すでにある再生リストの提案を承認すると公開され、ゲーム未設定でも承認できる', async ({ userPage, adminPage }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop', 'データを書き換えるため desktop のみ');
   test.setTimeout(150_000);
   const seed = await seedChannelWithPlaylists();

@@ -6,8 +6,7 @@
 
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
-import { collection, getCountFromServer, query, where } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { countListing } from '@/lib/collection-admin';
 
 export function usePendingListingCount(enabled: boolean): number {
   const pathname = usePathname();
@@ -16,9 +15,9 @@ export function usePendingListingCount(enabled: boolean): number {
   useEffect(() => {
     if (!enabled) return;
     let cancelled = false;
-    getCountFromServer(query(collection(db, 'playlists'), where('listingStatus', '==', 'unconfirmed')))
-      .then((snap) => {
-        if (!cancelled) setCount(snap.data().count);
+    countListing('unconfirmed')
+      .then((n) => {
+        if (!cancelled) setCount(n);
       })
       .catch((e) => console.error('確認待ち件数の取得に失敗', e));
     return () => {

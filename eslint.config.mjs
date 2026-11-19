@@ -42,4 +42,20 @@ export default defineConfig([
   // .ts では jsx を有効にしない（ジェネリクス `<T>` が JSX と衝突するため）
   { files: ['**/*.{ts,mts,cts}'], languageOptions: languageOptions(['typescript']), plugins, rules },
   { files: ['**/*.tsx'], languageOptions: languageOptions(['typescript', 'jsx']), plugins, rules },
+  // 管理画面・審査画面の部品は Firestore を直接読まない（2026-11-17 リファクタリング③）。読み込みは lib/*-admin.ts・lib/admin-reads.ts、
+  // 管理 API の呼び出しは lib/admin-api.ts に置く（決まりは lib/admin-api.ts の冒頭）
+  {
+    files: ['app/admin/**/*.{ts,tsx}', 'components/admin/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            { name: 'firebase/firestore', message: '管理画面の読み込みは lib/*-admin.ts・lib/admin-reads.ts に置いてください（lib/admin-api.ts の冒頭）' },
+            { name: '@/lib/firebase', message: '管理 API は lib/admin-api.ts、読み込みは lib/*-admin.ts から呼んでください' },
+          ],
+        },
+      ],
+    },
+  },
 ]);

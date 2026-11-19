@@ -1,5 +1,17 @@
 # 操作ログ
 
+## [2026-11-18] ingest | 運営からのお知らせ（PR #65）
+管理 `/admin/notices` でお知らせを作り、TOP の一番上（重要）・一番下（最新3件）・`/notices`・通知の「お知らせ」タブに出す。初めての公開でベル通知（1回だけ、ID `notice_{noticeId}_{uid}`、失敗したら下書きに戻す）。`notices` のルールは管理者だけ・利用者は API 経由、インデックス追加。メール送信は DNS の準備後。管理 お知らせ管理仕様書 v2.0 ほか。
+→ [[2026-11-18-admin-notices]]
+
+## [2026-11-17] ingest | 提案・審査フローと仕様書を整理する（PR #62）
+リファクタリング③。`PATCH /api/admin/workflows/[workflowId]` は共通の確認だけにし、承認・却下は `lib/workflow-decisions.ts` から種別ごとの `*-server.ts` へ。管理画面の Bearer fetch を `lib/admin-api.ts` に寄せ、Firestore の直接 import を ESLint で禁止。審査ワークフロー仕様書を v14.0（今の実装だけ）に書き直し、未実装は `構想/`、取り下げは `取り下げ/` へ。
+→ [[2026-11-17-workflow-api-split-and-spec-cleanup]]
+
+## [2026-11-17] ingest | 収集フローを整理する（PR #61）
+リファクタリング②。件数の増減を `lib/listing-counts.ts`（計算）・`listing-counts-server.ts`（書き込み）に寄せ、登録・掲載切り替え・ゲーム付け外し・タグ・ジャンル件数がここを通る。巡回の入口を `sweepChannels` に揃え、`exploration-server`→`channel-sweep-run`、API `explore`→`sweep`、`exploration-rules`→`playlist-title-rules` に改名。`collection_candidates` の読み込みを削除。コンテンツ収集機能仕様書 v4.7。
+→ [[2026-11-17-collection-flow-refactoring]]
+
 ## [2026-11-17] ingest | 単体テスト（Vitest）を入れ、まとめ機能のコードを消す（PR #60）
 リファクタリング①。Vitest 5.1.0 を入れ `npm test`（`tests/unit/`、DB を使わない処理だけ、最初は91件）。取り下げ済みのまとめ機能のページ・API・部品・lib と `COLLECTIONS_ENABLED` を削除し、`/collections*` はファイルが無いので 404（proxy の書き換えを外した）。データとルールは残す。まとめ機能 v2.2 ほか。
 → [[2026-11-17-unit-tests-and-collections-code-removal]]

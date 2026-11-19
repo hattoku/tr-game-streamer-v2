@@ -11,7 +11,7 @@ export const LISTED: ListingStatus = 'listed';
 /** 掲載状態を決めた者 */
 export type ListingSetBy = 'auto' | 'admin';
 
-/** 入った経路（`playlists.source`）。段階3では分かる範囲だけ付ける */
+/** 入った経路（`playlists.source`）。`collection_candidate` は段階3までの収集候補の承認で入ったもの（もう新しくは付かない。移行で付けた値を読むため残す） */
 export type PlaylistSource = 'channel_sweep' | 'user_proposal' | 'admin' | 'collection_candidate';
 
 /**

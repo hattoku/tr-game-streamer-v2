@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { FieldValue } from 'firebase-admin/firestore';
 import { requireAdmin } from '@/lib/api-auth';
 import { adminDb } from '@/lib/firebase-admin';
 import { autoLinkAfterGameChange } from '@/lib/playlist-game-linking';
 import { parseGameInput, resolveGameInput, validateGameTitle } from '@/lib/admin-game-input';
+import { gameMasterCountDeltas } from '@/lib/listing-counts';
+import { writeGameMasterCounts } from '@/lib/listing-counts-server';
 
 // ゲームタイトルの新規登録API（管理者専用。フェーズ4.5ステップ2）。
 // genre/theme/platforms等は管理者の手入力（管理 マスタ管理仕様書 §7.1 の暫定手入力版）。
@@ -54,12 +55,7 @@ export async function POST(request: NextRequest) {
     updatedAt: now,
   });
 
-  if (resolved.genreId) {
-    batch.update(adminDb.collection('genres').doc(resolved.genreId), { gameTitleCount: FieldValue.increment(1) });
-  }
-  for (const id of resolved.themeIds) {
-    batch.update(adminDb.collection('themes').doc(id), { gameTitleCount: FieldValue.increment(1) });
-  }
+  writeGameMasterCounts(batch, gameMasterCountDeltas(null, { genreId: resolved.genreId, themeIds: resolved.themeIds }));
 
   await batch.commit();
   // ゲーム未設定の再生リストのうち、このゲームに合うものを付ける（v2.4 §3.9）

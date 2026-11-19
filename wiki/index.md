@@ -2,7 +2,7 @@
 title: Wiki索引
 type: meta
 date: 2026-09-08
-updated: 2026-11-17
+updated: 2026-11-18
 ---
 
 
@@ -100,6 +100,9 @@ tr-game-streamer-v2 の**コーディング支援用**Wiki（実装の変更履�
 - [[2026-11-17-email-change]] — 設定ページからメールアドレスを変更（新しいアドレス＋確認用＋現在のパスワード、再認証→サーバーで使用中か確認→`verifyBeforeUpdateEmail` で確認メール）。`users.email` のミラーは sync API で Auth に合わせる（PR #58）
 - [[2026-11-17-channel-profile-refresh]] — 配信者の名前・アイコンを毎日の再取得の最初に `channels.list` で取り直し、違うものだけ書き換える（30日ルール対応）。読めないアイコンは代わりの表示に（`FallbackImage`）（PR #59）
 - [[2026-11-17-unit-tests-and-collections-code-removal]] — 単体テスト（Vitest、`npm test`、`tests/unit/`、DB を使わない処理だけ）を入れ、取り下げたまとめ機能のコードを削除。`/collections*` はファイルが無いので 404、proxy の書き換えを外した。データとルールは残す（PR #60）
+- [[2026-11-17-collection-flow-refactoring]] — 収集フローの整理。件数の増減を `lib/listing-counts*.ts` の1か所に寄せ、巡回の入口を `sweepChannels` に揃え、「探索」を「掲載チャンネル」に改名（`channel-sweep-run`・`/api/admin/collection/sweep`・`playlist-title-rules`）。DB 名は変えない（PR #61）
+- [[2026-11-17-workflow-api-split-and-spec-cleanup]] — 提案・審査フローの整理。審査 API を種別ごとのファイルに分け（`workflow-decisions`・`workflow-shared`・`workflow-server`）、管理画面の fetch を `lib/admin-api.ts` に、Firestore の直接読み込みを ESLint で禁止。審査ワークフロー仕様書 v14.0、仕様書を `構想/`・`取り下げ/` に分けた（PR #62）
+- [[2026-11-18-admin-notices]] — 運営からのお知らせ。管理 `/admin/notices`（添付の種類・ベル通知・重要の終わり日時・TOP/メールのプレビュー・下書き→公開→非公開）、TOP の一番上に重要なお知らせ・一番下に最新3件、`/notices` 一覧・詳細、通知画面の「お知らせ」タブ。メール送信は後日（PR #65）
 
 ## Entities
 - [[proxy]] — proxy.ts（旧middleware.ts、Next.js 16のproxy規約対応）。stgゲート。`/collections*` の 404 書き換えは 2026-11-17 にまとめのコード削除で外した

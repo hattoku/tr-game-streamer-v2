@@ -63,6 +63,10 @@ export function CardChildArea({ className, children, ...rest }: ComponentProps<'
 }
 
 /** ページ・セクション見出し（§3.2 font-size-heading、§3.3 bold） */
-export function SectionHeading({ className, children, as: Tag = 'h1' }: { className?: string; children: ReactNode; as?: 'h1' | 'h2' }) {
-  return <Tag className={cn('text-heading font-bold text-text-primary', className)}>{children}</Tag>;
+export function SectionHeading({ className, children, as: Tag = 'h1', id }: { className?: string; children: ReactNode; as?: 'h1' | 'h2'; id?: string }) {
+  return (
+    <Tag id={id} className={cn('text-heading font-bold text-text-primary', className)}>
+      {children}
+    </Tag>
+  );
 }

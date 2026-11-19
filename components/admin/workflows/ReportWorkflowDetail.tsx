@@ -1,28 +1,19 @@
 /**
  * 審査ワークフロー詳細のうち、レビューコメント通報（type: "review_report"、フェーズ6ステップ3）。
- * 承認すると対象レビューを論理削除（非表示化）する（管理_審査ワークフロー仕様書 §3.1）。
+ * 承認すると対象レビューを論理削除（非表示化）する（管理 審査ワークフロー仕様書 §4.1）。
  */
 'use client';
 
 import { useEffect, useState } from 'react';
-import { doc, getDoc, onSnapshot, type DocumentData } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { callWorkflowApi, fetchPlaylistTitle, subscribeReportedReview, type WorkflowDoc } from '@/lib/workflow-admin';
+import { isPendingStatus, type DecisionAction, type WorkflowStatus } from '@/lib/workflow-shared';
 import { reportReasonLabel } from '@/lib/report-reasons';
 import { Card, CardDivider } from '@/components/ui/Card';
 import { Skeleton, SkeletonText } from '@/components/ui/Skeleton';
 import { StarRating } from '@/components/ui/StarRating';
 import { Tag } from '@/components/ui/Tag';
 import { useToast } from '@/components/ui/Toast';
-import {
-  callWorkflowApi,
-  isPendingStatus,
-  WorkflowDecisionButtons,
-  WorkflowDecisionModal,
-  WorkflowHeader,
-  WorkflowMemo,
-  type DecisionAction,
-  type WorkflowStatus,
-} from './shared';
+import { WorkflowDecisionButtons, WorkflowDecisionModal, WorkflowHeader, WorkflowMemo } from './shared';
 
 interface TargetReview {
   comment: string | null;
@@ -31,7 +22,7 @@ interface TargetReview {
   isHidden?: boolean;
 }
 
-export function ReportWorkflowDetail({ workflowId, data }: { workflowId: string; data: DocumentData }) {
+export function ReportWorkflowDetail({ workflowId, data }: { workflowId: string; data: WorkflowDoc }) {
   const { toast } = useToast();
   const status = (data.status as WorkflowStatus) ?? 'reviewing_lv1';
   const reason = (data.reportData?.reason as string) ?? null;
@@ -39,7 +30,7 @@ export function ReportWorkflowDetail({ workflowId, data }: { workflowId: string;
   const reviewId = (data.reportData?.reviewId as string) ?? '';
   const playlistId = (data.reportData?.playlistId as string) ?? '';
   const snapshot = data.reportData?.hiddenReviewSnapshot;
-  /** 承認時に退避したレビュー内容（審査ワークフロー仕様書 §3.1）。投稿者が後で削除しても残る */
+  /** 承認時に退避したレビュー内容（審査ワークフロー仕様書 §4.1）。投稿者が後で削除しても残る */
   const hiddenSnapshot: TargetReview | null = snapshot
     ? {
         comment: (snapshot.comment as string) ?? null,
@@ -54,27 +45,13 @@ export function ReportWorkflowDetail({ workflowId, data }: { workflowId: string;
 
   useEffect(() => {
     if (!playlistId) return;
-    getDoc(doc(db, 'playlists', playlistId)).then((snap) => {
-      setPlaylistTitle((snap.data()?.title as string) ?? '(削除済みの再生リスト)');
-    });
+    fetchPlaylistTitle(playlistId).then((title) => setPlaylistTitle(title ?? '(削除済みの再生リスト)'));
   }, [playlistId]);
 
   useEffect(() => {
     if (!reviewId) return;
     // 承認で isHidden が立つのを即時に反映するため購読する
-    return onSnapshot(doc(db, 'reviews', reviewId), (snap) => {
-      if (!snap.exists()) {
-        setTargetReview(null);
-        return;
-      }
-      const review = snap.data();
-      setTargetReview({
-        comment: (review.comment as string) ?? null,
-        starRating: (review.starRating as number) ?? null,
-        userDisplayName: (review.userDisplayName as string) ?? 'ユーザー',
-        isHidden: review.isHidden === true,
-      });
-    });
+    return subscribeReportedReview(reviewId, setTargetReview);
   }, [reviewId]);
 
   async function handleDecision(action: DecisionAction, comment: string | null): Promise<boolean> {

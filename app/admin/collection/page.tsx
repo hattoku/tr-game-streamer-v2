@@ -9,8 +9,6 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { collection, getDocs } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
 import { Card, SectionHeading } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Chip } from '@/components/ui/Chip';
@@ -31,20 +29,22 @@ import { ChannelAvatar } from '@/components/admin/collection/ChannelAvatar';
 import { LinkedGameModal } from '@/components/admin/collection/LinkedGameModal';
 import { fetchTagsMap, type TagInfo } from '@/lib/tags';
 import { packageImageSrc } from '@/lib/package-image';
-import { matchTitleTagNames } from '@/lib/exploration-rules';
+import { matchTitleTagNames } from '@/lib/playlist-title-rules';
 import { DEFAULT_LISTING_RULES, describeListingReason, MAX_RULE_WORD_LENGTH, type ListingRules } from '@/lib/listing-rules';
+import { postAdminApi } from '@/lib/admin-api';
+import { fetchChannelPageIds, fetchGameOptions } from '@/lib/admin-reads';
 import { COLLECTION_DAILY_QUOTA_LIMIT } from '@/lib/collection-quota-shared';
 import {
   countListing,
   fetchCollectionQuotaUsedToday,
-  fetchExplorationChannels,
+  fetchListingChannels,
   fetchLastCollectionBatch,
   fetchListingPlaylists,
+  fetchListingRules,
   formatDateTime,
-  postAdminApi,
   quotaExceededMessage,
   type CollectionBatchLog,
-  type ExplorationChannel,
+  type ListingChannel,
   type ListingPlaylist,
   type ListingTab,
 } from '@/lib/collection-admin';
@@ -89,7 +89,7 @@ export default function AdminListingConfirmPage() {
   // プレミテ内のチャンネルページ（channels/{youtubeChannelId}）があるチャンネル。掲載した再生リストが1件も無いとまだ無い
   const [channelPageIds, setChannelPageIds] = useState<Set<string>>(new Set());
   const [tagsMap, setTagsMap] = useState<Map<string, TagInfo>>(new Map());
-  const [channels, setChannels] = useState<Map<string, ExplorationChannel>>(new Map());
+  const [channels, setChannels] = useState<Map<string, ListingChannel>>(new Map());
   const [lastBatch, setLastBatch] = useState<CollectionBatchLog | null>(null);
   const [quotaUsed, setQuotaUsed] = useState<number | null>(null);
 
@@ -122,25 +122,20 @@ export default function AdminListingConfirmPage() {
   }
 
   async function loadMeta() {
-    const [channelList, batch, used, channelPagesSnap] = await Promise.all([
-      fetchExplorationChannels(),
+    const [channelList, batch, used, channelPages] = await Promise.all([
+      fetchListingChannels(),
       fetchLastCollectionBatch(),
       fetchCollectionQuotaUsedToday(),
-      getDocs(collection(db, 'channels')),
+      fetchChannelPageIds(),
     ]);
     setChannels(new Map(channelList.map((c) => [c.id, c])));
-    setChannelPageIds(new Set(channelPagesSnap.docs.map((d) => d.id)));
+    setChannelPageIds(channelPages);
     setLastBatch(batch);
     setQuotaUsed(used);
   }
 
   async function loadGames() {
-    const gamesSnap = await getDocs(collection(db, 'games'));
-    setGames(
-      gamesSnap.docs
-        .map((d) => ({ id: d.id, title: (d.data().title as string) ?? '', packageImageUrl: (d.data().packageImageUrl as string) ?? null, aliases: (d.data().aliases as string[] | undefined) ?? [] }))
-        .sort((a, b) => a.title.localeCompare(b.title, 'ja')),
-    );
+    setGames(await fetchGameOptions());
   }
 
   useEffect(() => {
@@ -216,10 +211,10 @@ export default function AdminListingConfirmPage() {
   async function handleSweep() {
     setSweeping(true);
     try {
-      const res = await postAdminApi<{ processedChannels?: number; candidatesFound?: number; autoListed?: number; remaining?: number }>('/api/admin/collection/explore', {});
+      const res = await postAdminApi<{ processedChannels?: number; newPlaylistCount?: number; autoListed?: number; remaining?: number }>('/api/admin/collection/sweep', {});
       if (res.status === 429) toast({ type: 'error', message: quotaExceededMessage(res.body.remaining) });
       else if (!res.ok) toast({ type: 'error', message: '巡回に失敗しました' });
-      else toast({ type: 'success', message: `${res.body.processedChannels ?? 0}チャンネルを巡回し、新しい再生リストを${res.body.candidatesFound ?? 0}件取り込みました（自動で掲載 ${res.body.autoListed ?? 0}件）` });
+      else toast({ type: 'success', message: `${res.body.processedChannels ?? 0}チャンネルを巡回し、新しい再生リストを${res.body.newPlaylistCount ?? 0}件取り込みました（自動で掲載 ${res.body.autoListed ?? 0}件）` });
       await reloadAll();
     } catch {
       toast({ type: 'error', message: '通信エラーが発生しました。時間をおいて再試行してください' });
@@ -316,7 +311,7 @@ export default function AdminListingConfirmPage() {
       <Card className="flex flex-wrap items-center justify-between gap-3" data-testid="sweep-status">
         <div className="flex flex-col gap-1 text-md text-text-secondary">
           <p>
-            最終巡回: {lastBatch ? `${formatDateTime(lastBatch.executedAt)}（${lastBatch.trigger === 'cron' ? '毎日の自動' : '手動'}。${lastBatch.processedChannels}チャンネル、新しい再生リスト ${lastBatch.candidatesFound}件）` : 'まだありません'}
+            最終巡回: {lastBatch ? `${formatDateTime(lastBatch.executedAt)}（${lastBatch.trigger === 'cron' ? '毎日の自動' : '手動'}。${lastBatch.processedChannels}チャンネル、新しい再生リスト ${lastBatch.newPlaylistCount}件）` : 'まだありません'}
           </p>
           <p className="text-text-tertiary">
             本日のYouTube API消費（コンテンツ収集分）: {quotaUsed ?? '-'} / {COLLECTION_DAILY_QUOTA_LIMIT.toLocaleString('ja-JP')} ユニット
@@ -573,16 +568,7 @@ function RulesModal({ open, onOpenChange, onRejudged }: { open: boolean; onOpenC
 
   useEffect(() => {
     if (!open) return;
-    (async () => {
-      const { doc, getDoc } = await import('firebase/firestore');
-      const snap = await getDoc(doc(db, 'app_settings', 'listing_rules'));
-      const d = snap.data();
-      setRules({
-        excludedWords: Array.isArray(d?.excludedWords) ? d.excludedWords : DEFAULT_LISTING_RULES.excludedWords,
-        nonGameWords: Array.isArray(d?.nonGameWords) ? d.nonGameWords : DEFAULT_LISTING_RULES.nonGameWords,
-        minVideoCount: typeof d?.minVideoCount === 'number' ? d.minVideoCount : DEFAULT_LISTING_RULES.minVideoCount,
-      });
-    })();
+    (async () => setRules(await fetchListingRules()))();
   }, [open]);
 
   function addWord(kind: 'excludedWords' | 'nonGameWords', input: string, clear: () => void) {

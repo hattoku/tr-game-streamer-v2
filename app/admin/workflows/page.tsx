@@ -1,25 +1,19 @@
 /**
- * 審査ワークフロー一覧（/admin/workflows）。管理_審査ワークフロー仕様書 §7 準拠。
+ * 審査ワークフロー一覧（/admin/workflows）。管理 審査ワークフロー仕様書 §5.1。
  *
- * §7.1 どおり「通報」「提案」の2セクション構成（通報を上に置く）。各セクションがステータスタブと
- * ページングを独立して持つ。通報はレビューコメント通報と詳細ページからの変更の提案（§16、対象ごとに1行）、提案は
- * 再生リスト登録提案・ゲームタイトル登録提案（フェーズ7ステップ7-4。ゲームタイトル編集提案は投稿経路が無い）。
- * 絞り込み条件（審査種別・ジャンル・提出日）は件数が少ないうちは不要として省略。要確認フラグ列は
- * AI運営者が未実装のため省略。
+ * 「通報」「提案」の2セクション構成（通報を上に置く）。各セクションがステータスタブと
+ * ページングを独立して持つ。通報はレビューコメント通報と詳細ページからの変更の提案（対象ごとに1行）、提案は
+ * 再生リスト登録提案・ゲームタイトル登録提案・チャンネル申請。絞り込み条件（審査種別・ジャンル・提出日）と
+ * 要確認フラグ列は作らない（仕様書 §7）。
  *
- * `workflows`はtypeの等価条件（提案は in）のみでクライアント取得し（複合インデックス不要）、ステータスタブ・
- * 提出日時順ソート・20件ページングはクライアント側で行う（/channels等と同じ簡易実装方針）。
+ * 読み込みは lib/workflow-admin.ts（type の等価条件だけで読み、ステータスタブ・提出日時順・20件ページングは画面側）。
  */
 'use client';
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import Link from 'next/link';
-import { collection, getDocs, doc, getDoc, query, where } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
-import { reportReasonLabel } from '@/lib/report-reasons';
-import { CHANNEL_APPLICATION_TYPE } from '@/lib/channel-application-shared';
-import { GAME_PROPOSAL_TYPE, PROPOSAL_TYPE_LABEL, PROPOSAL_TYPES } from '@/lib/proposal-shared';
-import { CHANGE_PROPOSAL_TYPES, CHANGE_TARGET_LABEL, describeChangeReason, type ChangeTargetType } from '@/lib/change-proposal-shared';
+import { fetchProposalRows, fetchReportRows, type WorkflowRow } from '@/lib/workflow-admin';
+import { isPendingStatus as isPending, workflowStatusLabel } from '@/lib/workflow-shared';
 import { Card, SectionHeading } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Pagination } from '@/components/ui/Pagination';
@@ -27,23 +21,6 @@ import { SkeletonText } from '@/components/ui/Skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { Tag } from '@/components/ui/Tag';
 import { AlertIcon, InventoryIcon } from '@/components/ui/icons';
-
-type WorkflowStatus = 'reviewing_lv1' | 'reviewing_lv2' | 'approved' | 'rejected';
-
-interface WorkflowRow {
-  id: string;
-  /** 一覧の1行に出す説明 */
-  summary: string;
-  status: WorkflowStatus;
-  submittedAt: number;
-}
-
-const STATUS_LABEL: Record<WorkflowStatus, string> = {
-  reviewing_lv1: '審査中',
-  reviewing_lv2: '審査中',
-  approved: '承認',
-  rejected: '却下',
-};
 
 type Filter = 'all' | 'pending' | 'approved' | 'rejected';
 
@@ -54,98 +31,13 @@ function formatDate(ms: number): string {
   return new Date(ms).toLocaleString('ja-JP');
 }
 
-function isPending(status: WorkflowStatus): boolean {
-  return status === 'reviewing_lv1' || status === 'reviewing_lv2';
-}
-
-async function fetchReportRows(): Promise<WorkflowRow[]> {
-  const snap = await getDocs(query(collection(db, 'workflows'), where('type', '==', 'review_report')));
-  const playlistIds = [...new Set(snap.docs.map((d) => d.data().reportData?.playlistId as string).filter(Boolean))];
-  const playlistTitles = new Map<string, string>();
-  await Promise.all(
-    playlistIds.map(async (id) => {
-      const playlistSnap = await getDoc(doc(db, 'playlists', id));
-      playlistTitles.set(id, (playlistSnap.data()?.title as string) ?? '(削除済みの再生リスト)');
-    }),
-  );
-  return snap.docs.map((d): WorkflowRow => {
-    const data = d.data();
-    const playlistId = (data.reportData?.playlistId as string) ?? '';
-    const playlistTitle = playlistTitles.get(playlistId) ?? '(削除済みの再生リスト)';
-    return {
-      id: d.id,
-      summary: `${reportReasonLabel((data.reportData?.reason as string) ?? null)} — 「${playlistTitle}」のレビュー`,
-      status: (data.status as WorkflowStatus) ?? 'reviewing_lv1',
-      submittedAt: data.submittedAt?.toMillis?.() ?? 0,
-    };
-  });
-}
-
-/**
- * 詳細ページからの変更の提案（管理 審査ワークフロー仕様書 §16）。対象ごとに1行にまとめ、人数を出す。
- * 審査中は同じ対象（reportData.targetKey）、処理済みは同じ処理（reportData.decisionId）でまとめる。行のリンク先はまとめのうち最も古い提案。
- */
-async function fetchChangeRows(): Promise<WorkflowRow[]> {
-  const snap = await getDocs(query(collection(db, 'workflows'), where('type', 'in', CHANGE_PROPOSAL_TYPES)));
-  const groups = new Map<string, Array<{ id: string; data: Record<string, unknown> & { reportData?: Record<string, unknown> }; submittedAt: number }>>();
-  for (const d of snap.docs) {
-    const data = d.data();
-    const status = data.status as WorkflowStatus;
-    const key = isPending(status) ? `pending:${data.reportData?.targetKey}` : `decided:${data.reportData?.decisionId ?? d.id}`;
-    const list = groups.get(key) ?? [];
-    list.push({ id: d.id, data, submittedAt: data.submittedAt?.toMillis?.() ?? 0 });
-    groups.set(key, list);
-  }
-  return [...groups.values()].map((list): WorkflowRow => {
-    list.sort((a, b) => a.submittedAt - b.submittedAt);
-    const first = list[0];
-    const r = first.data.reportData ?? {};
-    const targetType = r.targetType as ChangeTargetType;
-    // いちばん多い理由（ゲームは選んだ項目のうち最も多いもの）
-    const tally = new Map<string, number>();
-    for (const item of list) {
-      const ir = item.data.reportData ?? {};
-      for (const key of targetType === 'game' ? ((ir.fields as string[] | undefined) ?? []) : [ir.reason as string]) tally.set(key, (tally.get(key) ?? 0) + 1);
-    }
-    const top = [...tally.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
-    const reasonText = targetType === 'game' ? describeChangeReason('game', null, top ? [top] : []) : describeChangeReason(targetType, top, null);
-    return {
-      id: first.id,
-      summary: `変更の提案（${CHANGE_TARGET_LABEL[targetType] ?? ''}）${list.length}人 — ${reasonText} — 「${(r.targetName as string) ?? ''}」`,
-      status: (first.data.status as WorkflowStatus) ?? 'reviewing_lv1',
-      submittedAt: first.submittedAt,
-    };
-  });
-}
-
-async function fetchProposalRows(): Promise<WorkflowRow[]> {
-  const snap = await getDocs(query(collection(db, 'workflows'), where('type', 'in', [...PROPOSAL_TYPES])));
-  return snap.docs.map((d): WorkflowRow => {
-    const data = d.data();
-    const type = data.type as string;
-    const name =
-      type === GAME_PROPOSAL_TYPE
-        ? (data.proposalData?.gameTitle as string)
-        : type === CHANNEL_APPLICATION_TYPE
-          ? (data.proposalData?.channelTitle as string)
-          : (data.proposalData?.title as string);
-    return {
-      id: d.id,
-      summary: `${PROPOSAL_TYPE_LABEL[type] ?? type} — 「${name ?? ''}」`,
-      status: (data.status as WorkflowStatus) ?? 'reviewing_lv1',
-      submittedAt: data.submittedAt?.toMillis?.() ?? 0,
-    };
-  });
-}
-
 export default function AdminWorkflowsPage() {
   const [reportRows, setReportRows] = useState<WorkflowRow[] | null>(null);
   const [proposalRows, setProposalRows] = useState<WorkflowRow[] | null>(null);
 
   useEffect(() => {
-    const byNewest = (rows: WorkflowRow[]) => rows.sort((a, b) => b.submittedAt - a.submittedAt);
-    Promise.all([fetchReportRows(), fetchChangeRows()]).then(([reports, changes]) => setReportRows(byNewest([...reports, ...changes])));
-    fetchProposalRows().then((rows) => setProposalRows(byNewest(rows)));
+    fetchReportRows().then(setReportRows);
+    fetchProposalRows().then(setProposalRows);
   }, []);
 
   return (
@@ -258,7 +150,7 @@ function WorkflowSection({
                   <Card interactive flush>
                     <Link href={`/admin/workflows/${r.id}`} className="flex w-full flex-col gap-1 px-4 py-3 md:px-[18px] md:py-[14px]">
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <Tag emphasis={isPending(r.status)}>{STATUS_LABEL[r.status]}</Tag>
+                        <Tag emphasis={isPending(r.status)}>{workflowStatusLabel(r.status)}</Tag>
                         <time className="text-sm text-text-muted">{formatDate(r.submittedAt)}</time>
                       </div>
                       <p className="text-base text-text-primary">{r.summary}</p>
