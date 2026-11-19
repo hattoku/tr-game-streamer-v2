@@ -15,6 +15,7 @@ const GUEST_PAGES: PageCase[] = [
   { path: '/terms', heading: '利用規約' },
   { path: '/privacy', heading: 'プライバシーポリシー' },
   { path: '/contact', heading: 'お問い合わせ' },
+  { path: '/notices', heading: '運営からのお知らせ' },
   { path: '/login', heading: 'ログイン' },
 ];
 
@@ -32,6 +33,8 @@ const ADMIN_PAGES: PageCase[] = [
   { path: '/admin', heading: 'ダッシュボード' },
   { path: '/admin/workflows', heading: '審査ワークフロー' },
   { path: '/admin/inquiries', heading: 'お問い合わせ' },
+  { path: '/admin/notices', heading: 'お知らせ' },
+  { path: '/admin/notices/new', heading: 'お知らせを作る' },
   { path: '/admin/collection', heading: 'コンテンツ収集' },
   { path: '/admin/collection/channels', heading: '掲載チャンネル' },
 ];

@@ -11,12 +11,16 @@ interface SectionHeaderRowProps {
   title: string;
   viewAllHref: string;
   nav?: { atStart: boolean; atEnd: boolean; onPrev: () => void; onNext: () => void } | null;
+  /** 見出しの id（section の aria-labelledby から指すとき） */
+  headingId?: string;
 }
 
-export function SectionHeaderRow({ title, viewAllHref, nav }: SectionHeaderRowProps) {
+export function SectionHeaderRow({ title, viewAllHref, nav, headingId }: SectionHeaderRowProps) {
   return (
     <div className="flex items-center justify-between gap-3">
-      <SectionHeading as="h2">{title}</SectionHeading>
+      <SectionHeading as="h2" id={headingId}>
+        {title}
+      </SectionHeading>
       <div className="flex items-center gap-2">
         {nav && (
           <div className="hidden items-center gap-1 md:flex">

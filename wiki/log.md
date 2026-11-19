@@ -1,5 +1,9 @@
 # 操作ログ
 
+## [2026-11-18] ingest | 運営からのお知らせ（PR #65）
+管理 `/admin/notices` でお知らせを作り、TOP の一番上（重要）・一番下（最新3件）・`/notices`・通知の「お知らせ」タブに出す。初めての公開でベル通知（1回だけ、ID `notice_{noticeId}_{uid}`、失敗したら下書きに戻す）。`notices` のルールは管理者だけ・利用者は API 経由、インデックス追加。メール送信は DNS の準備後。管理 お知らせ管理仕様書 v2.0 ほか。
+→ [[2026-11-18-admin-notices]]
+
 ## [2026-11-17] ingest | 提案・審査フローと仕様書を整理する（PR #62）
 リファクタリング③。`PATCH /api/admin/workflows/[workflowId]` は共通の確認だけにし、承認・却下は `lib/workflow-decisions.ts` から種別ごとの `*-server.ts` へ。管理画面の Bearer fetch を `lib/admin-api.ts` に寄せ、Firestore の直接 import を ESLint で禁止。審査ワークフロー仕様書を v14.0（今の実装だけ）に書き直し、未実装は `構想/`、取り下げは `取り下げ/` へ。
 → [[2026-11-17-workflow-api-split-and-spec-cleanup]]

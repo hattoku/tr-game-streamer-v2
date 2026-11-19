@@ -21,7 +21,7 @@ import { FallbackImage } from '@/components/ui/FallbackImage';
 // 通知一覧ページ。document/specification/page/ページ ユーザー通知機能仕様書.md §5 準拠。
 // フェーズ2.5ステップ6でデザイン適用（wiki/sources/2026-09-11-phase2.5-design-plan.md §4）。
 // - 見出し＋「すべて既読にする」（§5.2, §5.6）
-// - フィルタタブは実装済み種別のみ: すべて／未読／再生リスト新着（§5.3。お知らせは依拠する機能が未実装のためタブを出さない）
+// - フィルタタブ: すべて／未読／再生リスト新着／お知らせ（§5.3。お知らせは運営からのお知らせのベル通知、管理 お知らせ管理仕様書 v2.0 §7.5）
 // - お問い合わせ返信・審査結果はここに出さない。ヘッダーのユーザーアイコンの件数と、メニューの
 //   「お問い合わせ履歴」「提案履歴」の未読数で知らせる（§4.3。components/layout/UserDropdown.tsx）
 // - カード: 種別ラベル・本文・日時（相対表示、title に絶対時刻）。未読ドットは日時の左に出す（左端に列を取らない、§5.4）。クリックで個別既読＋遷移（§5.4）
@@ -43,6 +43,8 @@ interface NotificationItem {
   message: string;
   isRead: boolean;
   playlistId: string | null;
+  /** お知らせ: お知らせの ID（遷移先 /notices/[noticeId]） */
+  noticeId: string | null;
   createdAt: number;
   /** 再生リスト新着: 配信者名・アイコン（古い通知では空。再生リストから補う） */
   channelName: string;
@@ -108,6 +110,7 @@ export default function NotificationsPage() {
         message: d.data().message ?? '',
         isRead: d.data().isRead ?? false,
         playlistId: d.data().playlistId ?? null,
+        noticeId: d.data().noticeId ?? null,
         createdAt: d.data().createdAt?.toMillis?.() ?? 0,
         channelName: d.data().channelName ?? '',
         channelIconUrl: d.data().channelIconUrl ?? '',
@@ -170,6 +173,7 @@ export default function NotificationsPage() {
       all: list.length,
       unread: list.filter((n) => !n.isRead).length,
       series_new_episode: list.filter((n) => n.type === 'series_new_episode').length,
+      notice: list.filter((n) => n.type === 'notice').length,
     };
   }, [items]);
 
@@ -198,8 +202,9 @@ export default function NotificationsPage() {
         toast({ type: 'error', message: '既読にできませんでした' });
       }
     }
-    // 遷移先（§2.1）: 再生リスト新着は該当再生リストの動画プレーヤーページ
+    // 遷移先（§2.1）: 再生リスト新着は該当再生リストの動画プレーヤーページ、お知らせはお知らせ詳細
     if (n.type === 'series_new_episode' && n.playlistId) router.push(`/playlists/${n.playlistId}`);
+    if (n.type === 'notice' && n.noticeId) router.push(`/notices/${n.noticeId}`);
   }
 
   async function handleMarkAllRead() {
@@ -237,11 +242,11 @@ export default function NotificationsPage() {
       </div>
 
       {items.length === 0 ? (
-        <EmptyState icon={<BellIcon />} title="通知はまだありません" description="マイリストに登録した再生リストに新しい動画が追加されると、ここでお知らせします" />
+        <EmptyState icon={<BellIcon />} title="通知はまだありません" description="マイリストに登録した再生リストに新しい動画が追加されたときや、運営からのお知らせがあるときに、ここでお知らせします" />
       ) : (
         <>
           <Tabs value={filter} onValueChange={(v) => changeFilter(v as Filter)}>
-            <TabsList aria-label="通知の絞り込み">
+            <TabsList aria-label="通知の絞り込み" scrollable>
               <TabsTrigger value="all" count={counts.all}>
                 すべて
               </TabsTrigger>
@@ -250,6 +255,9 @@ export default function NotificationsPage() {
               </TabsTrigger>
               <TabsTrigger value="series_new_episode" count={counts.series_new_episode}>
                 再生リスト新着
+              </TabsTrigger>
+              <TabsTrigger value="notice" count={counts.notice}>
+                お知らせ
               </TabsTrigger>
             </TabsList>
           </Tabs>
