@@ -57,7 +57,8 @@ describe('filterUsers', () => {
   });
   it('状態・種別で絞り込む', () => {
     expect(filterUsers(rows, { ...DEFAULT_USER_FILTER, status: 'withdrawn' }).map((r) => r.uid)).toEqual(['b']);
-    expect(filterUsers(rows, { ...DEFAULT_USER_FILTER, role: 'admin' }).map((r) => r.uid)).toEqual(['c']);
+    expect(filterUsers(rows, { ...DEFAULT_USER_FILTER, role: 'owner' }).map((r) => r.uid)).toEqual(['c']);
+    expect(filterUsers(rows, { ...DEFAULT_USER_FILTER, role: 'operator' }).map((r) => r.uid)).toEqual([]);
     expect(filterUsers(rows, { ...DEFAULT_USER_FILTER, role: 'user' }).map((r) => r.uid)).toEqual(['a', 'b']);
   });
   it('登録日の範囲（両端を含む）と最終ログイン日の範囲（未ログインは外す）', () => {

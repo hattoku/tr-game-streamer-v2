@@ -1,6 +1,7 @@
 // ユーザー管理（/admin/users 配下）で使う小さな表示部品
 import { StatusBadge } from '@/components/ui/Badge';
-import { Tag } from '@/components/ui/Tag';
+import { TAG_BASE_CLASS } from '@/components/ui/Tag';
+import { cn } from '@/components/ui/cn';
 import type { AccountStatus, UserRoleLabel, WithdrawnBy } from '@/lib/account-status-shared';
 
 export function formatDateTime(iso: string | null): string {
@@ -15,13 +16,15 @@ export function formatDateTime(iso: string | null): string {
   });
 }
 
-/** 状態（利用中／退会済み）。退会済みは誰が退会させたかを添える */
+/** 状態（利用中＝緑／退会済み＝赤）。色だけに頼らないよう文言も添える。退会済みは誰が退会させたかを添える */
 export function StatusTag({ status, withdrawnBy }: { status: AccountStatus; withdrawnBy: WithdrawnBy | null }) {
-  if (status === 'active') return <Tag>利用中</Tag>;
+  if (status === 'active') {
+    return <span className={cn(TAG_BASE_CLASS, 'border border-brand-watching/40 bg-brand-watching-bg text-brand-watching')}>利用中</span>;
+  }
   return (
-    <Tag emphasis>
+    <span className={cn(TAG_BASE_CLASS, 'border border-brand-primary/50 bg-brand-primary/15 text-brand-primary')}>
       退会済み{withdrawnBy === 'admin' ? '（運営）' : withdrawnBy === 'self' ? '（本人）' : ''}
-    </Tag>
+    </span>
   );
 }
 

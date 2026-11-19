@@ -77,7 +77,7 @@ export interface AdminUserDetailJson extends AdminUserRowJson {
 // ---------------------------------------------------------------------------
 
 export type StatusFilter = 'all' | 'active' | 'withdrawn';
-export type RoleFilter = 'all' | 'user' | 'admin';
+export type RoleFilter = 'all' | 'user' | 'owner' | 'operator';
 export type SortKey = 'createdDesc' | 'createdAsc' | 'lastLoginDesc' | 'lastLoginAsc' | 'nameAsc';
 
 export interface UserFilter {
@@ -130,8 +130,7 @@ export function filterUsers(rows: AdminUserRowJson[], filter: UserFilter): Admin
   const result = rows.filter((r) => {
     if (keyword && !r.displayName.toLowerCase().includes(keyword) && !(r.email ?? '').toLowerCase().includes(keyword)) return false;
     if (filter.status !== 'all' && r.accountStatus !== filter.status) return false;
-    if (filter.role === 'user' && r.role !== 'user') return false;
-    if (filter.role === 'admin' && r.role === 'user') return false;
+    if (filter.role !== 'all' && r.role !== filter.role) return false;
     if (!inRange(r.createdAt, filter.createdFrom, filter.createdTo)) return false;
     if (!inRange(r.lastLoginAt, filter.lastLoginFrom, filter.lastLoginTo)) return false;
     return true;
