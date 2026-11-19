@@ -5,6 +5,7 @@ import { readJsonObject } from '@/lib/request-json';
 import { normalizeWatchStatus, WATCH_STATUS_ORDER } from '@/components/ui/Chip';
 import { syncUserDenormalizedFields } from '@/lib/profile-server';
 import { validateProfileInput, type ProfileJson, type ProfilePlaylistJson } from '@/lib/profile-shared';
+import { isHiddenUser } from '@/lib/account-status-shared';
 
 // 公開プロフィール（ページ 設定 プロフィール仕様書）。ログイン不要。
 // users・mylist は firestore.rules で本人のみ読めるため、Admin SDK で読んで公開してよいフィールドだけを返す
@@ -23,7 +24,8 @@ export async function GET(request: NextRequest, { params }: Params) {
   const { userId } = await params;
   const userSnap = await adminDb.collection('users').doc(userId).get();
   const userData = userSnap.data();
-  if (!userSnap.exists || !userData || userData.isBanned === true) {
+  // 退会中（2026-11-17。退会中は他の人から隠す）・BAN のユーザーは無いものとして扱う
+  if (!userSnap.exists || !userData || isHiddenUser(userData)) {
     return NextResponse.json({ error: 'not_found' }, { status: 404 });
   }
 
@@ -170,7 +172,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
   const userRef = adminDb.collection('users').doc(userId);
   const userData = (await userRef.get()).data();
-  if (!userData || userData.isBanned === true) return NextResponse.json({ error: 'not_found' }, { status: 404 });
+  if (!userData || isHiddenUser(userData)) return NextResponse.json({ error: 'not_found' }, { status: 404 });
   await userRef.update({ displayName, bio });
 
   if (userData.displayName !== displayName) {

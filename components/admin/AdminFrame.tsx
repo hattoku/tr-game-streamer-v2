@@ -24,6 +24,7 @@ const ADMIN_NAV = [
   { label: 'お問い合わせ', href: '/admin/inquiries' },
   { label: 'お知らせ', href: '/admin/notices' },
   { label: 'コンテンツ収集', href: '/admin/collection' },
+  { label: 'ユーザー', href: '/admin/users' },
 ] as const;
 
 function AdminNav({ pathname, pendingCount, className }: { pathname: string; pendingCount: number; className?: string }) {

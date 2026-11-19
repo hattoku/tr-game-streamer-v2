@@ -45,12 +45,13 @@ export async function computeWatchDepth(
 /**
  * 再生リストスコア（信頼度加重平均）の再計算。共通 信頼度スコアリングシステム仕様書 §5。
  * レビューの作成・更新・削除・「参考になった」の増減のいずれの後にも呼び出す。
- * 通報承認で非表示になったレビュー（isHidden）はスコア・件数のどちらにも数えない（同仕様書 §5.5）。
+ * 通報承認で非表示になったレビュー（isHidden）と、投稿者が退会中のレビュー（isAuthorWithdrawn。2026-11-17）は
+ * スコア・件数のどちらにも数えない（同仕様書 §5.5）。
  * サーバー専用（API Routeからのみimportすること）。
  */
 export async function recalculatePlaylistScore(playlistId: string): Promise<void> {
   const reviewsSnap = await adminDb.collection('reviews').where('playlistId', '==', playlistId).get();
-  const visibleReviews = reviewsSnap.docs.map((d) => d.data()).filter((r) => r.isHidden !== true);
+  const visibleReviews = reviewsSnap.docs.map((d) => d.data()).filter((r) => r.isHidden !== true && r.isAuthorWithdrawn !== true);
 
   let weightedSum = 0;
   let weightTotal = 0;

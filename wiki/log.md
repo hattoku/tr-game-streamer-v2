@@ -1,5 +1,13 @@
 # 操作ログ
 
+## [2026-11-19] ingest | メール内リンクの受け口 /auth/action とメールアドレス変更の流れ表示（PR #63）
+`/auth/action` を追加（メール変更の完了・取り消し・パスワード再設定・メール確認）し、変更モーダルに3段の流れを表示。件名は末尾「 | プレミテ」に統一。Firebase のアクション URL は `EMAIL_TEMPLATE_UPDATE_NOT_ALLOWED` で変えられず未切り替え（メール側は別チケット）。
+→ [[2026-11-19-auth-action-page]]
+
+## [2026-11-19] ingest | ユーザー管理と退会（PR #64）
+退会を物理削除から「アカウントを残してログインできなくする」に変更（`users.accountStatus`・`withdrawnBy`）。ログイン時に `WithdrawnAccountGate` が再開を聞く（管理者の退会は再開不可）。API（`requireUser`）とルール（`isActiveAccount`）で締め出し、レビューは `isAuthorWithdrawn` でスコアから外す。管理 `/admin/users` に一覧・絞り込み・登録推移グラフ・詳細（編集・備考・退会／解除）。管理 ユーザー管理仕様書 v3.0 ほか。
+→ [[2026-11-19-user-management-and-withdrawal]]
+
 ## [2026-11-18] ingest | 運営からのお知らせ（PR #65）
 管理 `/admin/notices` でお知らせを作り、TOP の一番上（重要）・一番下（最新3件）・`/notices`・通知の「お知らせ」タブに出す。初めての公開でベル通知（1回だけ、ID `notice_{noticeId}_{uid}`、失敗したら下書きに戻す）。`notices` のルールは管理者だけ・利用者は API 経由、インデックス追加。メール送信は DNS の準備後。管理 お知らせ管理仕様書 v2.0 ほか。
 → [[2026-11-18-admin-notices]]

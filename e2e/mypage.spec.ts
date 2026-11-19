@@ -73,7 +73,7 @@ test.describe('ボトムタブ（§4）', () => {
     await expect(nav.getByRole('link', { name: 'さがす' })).toHaveAttribute('aria-current', 'page');
   });
 
-  // 未ログインはその場でログイン要求モーダル（UI仕様書 §2.7・§5.2 v2.10、アカウント作成導線の改善）。アカウント作成後はマイページへ戻る
+  // 未ログインはその場でログイン要求モーダル（UI仕様書 §2.7・§5.2 v2.11、アカウント作成導線の改善）。アカウント作成後はマイページへ戻る
   test('未ログインの「マイページ」タブはログイン要求モーダルを出す', async ({ guestPage }) => {
     await guestPage.goto('/');
     await waitForGuest(guestPage);

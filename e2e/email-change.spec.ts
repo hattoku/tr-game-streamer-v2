@@ -42,6 +42,10 @@ test.describe('表示（§4.3）', () => {
     await expect(dialog.getByLabel('新しいメールアドレス（確認用）')).toBeVisible();
     await expect(dialog.getByLabel('現在のパスワード')).toBeVisible();
     await expect(dialog.getByRole('button', { name: '変更メールを送信する' })).toBeVisible();
+    // 変更の流れ（① 申し込む → ② メールのリンクを開く → ③ ログインし直す）。入力中は①が今の段
+    const steps = dialog.getByRole('list', { name: 'メールアドレス変更の流れ' });
+    await expect(steps.getByRole('listitem')).toHaveText([/申し込む/, /メールのリンクを開く/, /ログインし直す/]);
+    await expect(steps.locator('[aria-current="step"]')).toContainText('申し込む');
     await dialog.getByRole('button', { name: 'キャンセル' }).click();
     await expect(dialog).toBeHidden();
   });
@@ -109,6 +113,8 @@ test.describe('送信（§4.3 変更フロー）', () => {
       await submit.click();
       await expect(dialog.getByText('確認メールを送信しました')).toBeVisible();
       await expect(dialog.getByText(newEmail)).toBeVisible();
+      // 送信後は②（メールのリンクを開く）が今の段
+      await expect(dialog.getByRole('list', { name: 'メールアドレス変更の流れ' }).locator('[aria-current="step"]')).toContainText('メールのリンクを開く');
       await dialog.getByRole('button', { name: '閉じる' }).first().click();
       await expect(dialog).toBeHidden();
       // リンクを開くまではアドレスは変わらない

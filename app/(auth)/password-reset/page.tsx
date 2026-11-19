@@ -13,8 +13,8 @@ import { AlertIcon } from '@/components/ui/icons';
 
 // パスワード再発行フォーム。
 // document/specification/page/ページ ログイン アカウント登録・ログイン仕様書.md §9.1・§9.2・§12.4。
-// - メール送信は Firebase の sendPasswordResetEmail。リンク先の「新しいパスワードを入力する画面」は
-//   Firebase 標準のホスト画面を使う（2026-10-14 ユーザー決定。自前の /reset-password は作らない）
+// - メール送信は Firebase の sendPasswordResetEmail。リンク先の「新しいパスワードを入力する画面」は自前の /auth/action（§9.4）。
+//   当初は Firebase 標準のホスト画面だったが、フィッシングに見えるため 2026-11-17 に切り替えた
 // - 入力したメールアドレスが未登録でも送信済み画面を出し、登録有無を明かさない（§9.2）
 // - メール文面・有効期限は Firebase Console のテンプレート設定側（§9.3 の自前文面は未対応）
 
