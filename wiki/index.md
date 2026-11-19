@@ -103,6 +103,7 @@ tr-game-streamer-v2 の**コーディング支援用**Wiki（実装の変更履�
 - [[2026-11-17-collection-flow-refactoring]] — 収集フローの整理。件数の増減を `lib/listing-counts*.ts` の1か所に寄せ、巡回の入口を `sweepChannels` に揃え、「探索」を「掲載チャンネル」に改名（`channel-sweep-run`・`/api/admin/collection/sweep`・`playlist-title-rules`）。DB 名は変えない（PR #61）
 - [[2026-11-17-workflow-api-split-and-spec-cleanup]] — 提案・審査フローの整理。審査 API を種別ごとのファイルに分け（`workflow-decisions`・`workflow-shared`・`workflow-server`）、管理画面の fetch を `lib/admin-api.ts` に、Firestore の直接読み込みを ESLint で禁止。審査ワークフロー仕様書 v14.0、仕様書を `構想/`・`取り下げ/` に分けた（PR #62）
 - [[2026-11-18-admin-notices]] — 運営からのお知らせ。管理 `/admin/notices`（添付の種類・ベル通知・重要の終わり日時・TOP/メールのプレビュー・下書き→公開→非公開）、TOP の一番上に重要なお知らせ・一番下に最新3件、`/notices` 一覧・詳細、通知画面の「お知らせ」タブ。メール送信は後日（PR #65）
+- [[2026-11-19-user-management-and-withdrawal]] — ユーザー管理 `/admin/users`（一覧・絞り込み・登録推移グラフ・詳細で編集・備考・退会させる／解除）と、退会をアカウントを残してログインできなくする方式に（再開の確認、`accountStatus`・`isAuthorWithdrawn`・`admin_user_records`、API とルールで締め出し）（PR #64）
 
 ## Entities
 - [[proxy]] — proxy.ts（旧middleware.ts、Next.js 16のproxy規約対応）。stgゲート。`/collections*` の 404 書き換えは 2026-11-17 にまとめのコード削除で外した
