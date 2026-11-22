@@ -1,6 +1,6 @@
 # プレミテ Firestore データモデル設計書
 
-**バージョン**: v3.4  
+**バージョン**: v3.5  
 **作成日**: 2026年3月30日（更新）  
 **対象**: 開発チーム  
 **関連ドキュメント**: プレミテ企画書 / プレミテ_技術スタック仕様書 / 各機能仕様書
@@ -124,6 +124,8 @@ Firestoreはテーブル結合（JOIN）ができないため、一覧表示や�
 | 32 | `playlist_viewers` | 再生リストを見始めた人の記録（1ユーザー×1再生リストで1件、v2.8） | 共通 人気のチャンネル 集計 仕様書 §2.3 |
 | 33 | `batch_state` | 定期処理の続きの位置（前回の集計時刻など、v2.8） | 共通 人気のチャンネル 集計 仕様書 §3 |
 | 34 | `admin_user_records` | ユーザーごとの運営用の記録（備考・管理者が退会させた理由。管理者のみR、v3.4） | 管理 ユーザー管理仕様書 §3.4・§3.6 |
+| 35 | `withdrawal_reasons` | 本人が退会したときの理由（UID を付けない。管理者のみR、v3.5） | ページ 設定 仕様書 §8.3 |
+| 36 | `account_deletions` | 本人の退会の途中経過（再計算する再生リスト等の控え。サーバーのみ。消去が終わると消える、v3.5） | ページ 設定 仕様書 §8.3 |
 
 ---
 
@@ -165,7 +167,7 @@ Firestoreはテーブル結合（JOIN）ができないため、一覧表示や�
 | `accountStatus` | string? | — | `"active"`（利用中）／`"withdrawn"`（退会中）。未設定は利用中（v3.4）。退会はアカウントを残してログインできなくする（管理 ユーザー管理仕様書 §3.0）。書き込みは API（Admin SDK）のみ |
 | `withdrawnAt` | Timestamp? | — | 退会した日時（退会中だけ。v3.4） |
 | `withdrawnBy` | string? | — | 退会させた者。`"self"`（本人。自分で再開できる）／`"admin"`（管理者。本人では再開できない）（退会中だけ。v3.4） |
-| `withdrawReason` | string? | — | 本人が退会時に選んだ・書いた理由（任意。500文字以内。本人の退会のときだけ。v3.4）。管理者が書いた理由は `admin_user_records` に置く |
+| `withdrawReason` | string? | — | 本人が退会時に選んだ・書いた理由（v3.4 の本人の退会のときだけ。v3.5 以降の本人の退会は `users` ごと消すので書かれず、理由は `withdrawal_reasons` に残す）。管理者が書いた理由は `admin_user_records` に置く |
 | `restoredAt` | Timestamp? | — | 最後に退会を解除（再開）した日時（v3.4） |
 | `isTestUser` | boolean | ✅ | テストモード用会員フラグ（デフォルト：`false`） |
 | `fcmTokens` | string[] | ✅ | FCMプッシュ通知トークン一覧（複数デバイス対応） |
@@ -1057,6 +1059,27 @@ AI運営者（審査AI）の設定。プラットフォーム共通で1体のみ
 | `noteUpdatedByName` | string? | — | 同じ管理者の表示名（保存時点） |
 | `adminWithdrawReason` | string? | — | 管理者が退会させたときの理由（任意。解除で消す） |
 
+### 3.38 `withdrawal_reasons`
+
+本人が退会したときに選んだ・書いた理由（v3.5）。**誰のものか分からない**ようにするため、UID・メールアドレス・表示名は持たない。
+ドキュメントIDは自動採番。管理者のみR、書き込みは API（Admin SDK。本人の退会 `POST /api/account/withdraw`）のみ（firestore.rules の既定の拒否）。
+
+| フィールド | 型 | 必須 | 説明 |
+|-----------|-----|:---:|------|
+| `reason` | string | ✅ | 理由（選択肢と自由記述を「：」でつないだもの。500文字以内） |
+| `withdrawnAt` | Timestamp | ✅ | 退会した日時 |
+
+### 3.39 `account_deletions`
+
+本人の退会（データの消去）の途中経過の控え（v3.5）。ドキュメントIDはユーザーの UID。消去を始めるときに作り、**消去が終わると消す**。途中で失敗したときだけ残り、やり直しで引き継ぐ。クライアントからは読み書きできない（Admin SDK のみ）。
+
+| フィールド | 型 | 必須 | 説明 |
+|-----------|-----|:---:|------|
+| `playlistIds` | string[] | ✅ | スコアと件数を計算し直す再生リストID（消すレビュー・取り消す「参考になった」に関係するもの） |
+| `reviewIds` | string[] | ✅ | 消す本人のレビューID（そのレビューへの通報・「参考になった」を整理するため） |
+| `reasonDocId` | string | ✅ | `withdrawal_reasons` に入れる文書のID（やり直しても理由が1件になるよう最初に決める） |
+| `startedAt` | Timestamp | ✅ | 消去を始めた日時 |
+
 ---
 
 ## 4. リレーション図
@@ -1133,12 +1156,16 @@ ai_operators ──── (1) users
 
 ## 7. データ整合性・削除ポリシー
 
-### 7.1 退会時の扱い（v3.4 で物理削除をやめた）
-- **v3.4（2026-11-17）**: 退会はアカウントとデータを残し、ログインできなくする（ユーザー決定。管理 ユーザー管理仕様書 §3.0、ページ 設定 仕様書 §8.3）。どのコレクションも消さない。
+### 7.1 退会時の扱い（v3.4 で物理削除をやめ、v3.5 で本人の退会だけ消去に戻した）
+- **管理者が退会させたとき（v3.4）**: アカウントとデータを残し、ログインできなくする（管理 ユーザー管理仕様書 §3.0）。どのコレクションも消さない。
   - `users` に `accountStatus: "withdrawn"` ほか（3.1節）。Firebase Auth のアカウントは消さず無効化もしない（トークンは失効させる）。
   - `reviews` に `isAuthorWithdrawn: true` を付け、関係する再生リストのスコア・件数を計算し直す。公開プロフィール・アイコンの配信は 404 にする。
-  - 再開・解除で上記をすべて戻す。
-- 旧版（〜v3.2）の物理削除（`users`, `reviews`, `mylist`, `watch_history`, `watch_progress`, `helpful_votes`, `collections`, `playlist_viewers`、Storage の `avatars/{uid}/`、`saved_collections`）は実装されないまま廃止した。
+  - 解除で上記をすべて戻す。
+- **本人が退会したとき（v3.5、2026-11-19 ユーザー決定）**: 本人の作成データとアカウントを消去する。戻せない（ページ 設定 仕様書 §8.3 が手順の正）。
+  - 消す: `reviews`（と、それに付いた `helpful_votes`）・本人が押した `helpful_votes`（相手のレビューの `helpfulCount`・`trustScore`・投稿者の `users.helpfulReceivedCount` を戻す）・`mylist`・`watch_progress`・`watch_history`・`playlist_viewers`・`notifications`・`saved_collections`・`collections`・`inquiry_upload_counters`・`game_link_counters`・`fraud_alerts`・`inquiries`（`messages` と Storage の `inquiries/{inquiryId}/` を含む）・Storage の `avatars/{uid}/`・`admin_user_records/{uid}`・Firebase Auth のアカウント・`users/{uid}`。
+  - 残して本人を外す: 審査済みの `workflows`（`submittedBy` を空にし、通報で非表示にしたレビューの内容の控え `reportData.hiddenReviewSnapshot` は消す。審査中のものは消す）、`playlists.proposedBy`・`tags.createdBy`・`playlist_game_changes.userId`（null にする）、`operation_logs` の対象の ID と名前（空にする）。
+  - 退会の理由は `withdrawal_reasons`（3.38節）に UID なしで保存する。消えたレビューの分、関係する再生リストのスコア・件数を計算し直す。
+- 旧版（〜v3.2）の物理削除は実装されないまま廃止し、v3.5 で本人の退会について、上記の範囲で実装した。
 
 ### 7.2 マスタ削除時の影響
 - `genres` 物理削除時: `games.genreId` を null 化。AI運営者への影響なし。
@@ -1205,3 +1232,4 @@ ai_operators ──── (1) users
 | v3.3 | 2026-11-17 | §3.16 `notices` を運営からのお知らせの形に作り直し（管理 お知らせ管理仕様書 v2.0 §4）。クライアントから読めるのは管理者だけに。§3.30 `notifications` に `type: "notice"`・`noticeId` を追加 |
 | v3.2 | 2026-11-17 | リファクタリング②。`games.playlistCount`・`tags.usagePlaylistCount` が掲載中の再生リストだけを数えることを明記。一般ユーザーのタグの付け外しも、掲載中の再生リストのときだけ `usagePlaylistCount` を動かすように揃えた（これまでは掲載状態を見ずに数えていたため、掲載していない再生リストにタグを付けてから掲載すると二重に数えていた） |
 | v2.8 | 2026-11-08 | 段階5 人気のチャンネル。§3.4 `channels.popularity`、§3.32 `featuredOrder` をピン留めの順に、§3.21 `batch_logs` に `channel_popularity`、§3.35 `playlist_viewers`・§3.36 `batch_state` を追加。§7.1 退会時の削除に `playlist_viewers` を追加（共通 人気のチャンネル 集計 仕様書） |
+| v3.5 | 2026-11-19 | 本人の退会を、本人の作成データとアカウントの消去に変更（§7.1）。§3.38 `withdrawal_reasons`（UID なしの退会理由）を追加。`withdrawnBy = self` は v3.5 より前の退会だけ |

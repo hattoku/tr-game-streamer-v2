@@ -299,7 +299,7 @@ function WithdrawSection({ user, onChanged }: { user: AdminUserDetailJson; onCha
       {withdrawn ? (
         <dl className="mb-4 flex flex-col gap-3">
           <InfoRow label="退会日時">{formatDateTime(user.withdrawnAt)}</InfoRow>
-          <InfoRow label="退会させた人">{user.withdrawnBy === 'admin' ? '運営（本人では再開できません）' : '本人（同じメールアドレス・パスワードでログインすれば再開できます）'}</InfoRow>
+          <InfoRow label="退会させた人">{user.withdrawnBy === 'admin' ? '運営（本人では再開できません）' : '本人（2026-11-19 より前の退会。データは残っています）'}</InfoRow>
           {user.withdrawnBy === 'self' && <InfoRow label="本人の理由">{user.withdrawReason ?? '（未記入）'}</InfoRow>}
           {user.withdrawnBy === 'admin' && <InfoRow label="運営の理由">{user.adminWithdrawReason ?? '（未記入）'}</InfoRow>}
         </dl>
