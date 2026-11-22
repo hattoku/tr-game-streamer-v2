@@ -25,8 +25,8 @@ import { AlertIcon } from '@/components/ui/icons';
 // - `?next=<サイト内パス>` があれば、ロールに関わらずログイン・アカウント作成後にそこへ戻す（§5.4 v1.9。再生リストの提案画面から）。
 //   モード切替リンクでも引き継ぐ
 // - 退会中のアカウント（§5.5・§5.6、2026-11-17）: ログイン自体は通り、components/layout/WithdrawnAccountGate.tsx が
-//   再開の確認を出す。その間はここで遷移しない（再開すれば遷移、再開しなければログアウトしてフォームに戻る）。
-//   アカウント作成で使用中のアドレスが入力されたら、同じパスワードでログインを試す。退会中のアカウントなら同じ確認に進む
+//   「ログインできません」の案内を出す（管理者が退会させたアカウント）。その間はここで遷移しない。
+//   本人が退会したアカウントは消去済みなので、同じメールアドレスでも新しいアカウントとして作成する（2026-11-19）
 // - ログアウトはヘッダーのユーザードロップダウン（components/layout/UserDropdown.tsx）
 // 据え置き（HANDOFF.md 未解決事項 8・9、および計画書 §2.2）:
 // - 「パスワードをお忘れの方はこちら」（§5.1・§9）は /password-reset（フェーズ7ステップ7-2）へのリンクとして実装済み
@@ -72,9 +72,8 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const REQUIRED = '入力してください';
 const INVALID_EMAIL = '正しいメールアドレスの形式で入力してください';
 const SHORT_PASSWORD = 'パスワードは8文字以上で入力してください';
-/** 使用中のアドレスでのアカウント作成（§8.2）。退会済みのアカウントも含むため、再開の方法を添える（§5.5、2026-11-17） */
-const EMAIL_IN_USE =
-  'このメールアドレスはすでに登録されています。退会済みのアカウントは、以前のパスワードでログインすると利用を再開できます';
+/** 使用中のアドレスでのアカウント作成（§8.2） */
+const EMAIL_IN_USE = 'このメールアドレスはすでに登録されています';
 
 /** Firebase Auth のエラーコードを仕様書の文言（§5.3・§8.2）に対応づける。無いものは汎用文（generic: トーストも出す） */
 function mapAuthError(e: unknown, mode: Mode): { errors: FieldErrors; generic: boolean } {
@@ -176,20 +175,7 @@ function LoginForm({ mode, next }: { mode: Mode; next: string | null }) {
     setBusy(true);
     try {
       if (isSignup) {
-        let credential;
-        try {
-          credential = await createUserWithEmailAndPassword(auth, email.trim(), password);
-        } catch (e) {
-          // 使用中のアドレス: 同じパスワードならそのアカウントでログインする（退会中なら再開の確認に進む。§5.5）。
-          // パスワードが違えば「すでに登録されています」を出す（元のエラーを投げ直す）
-          if (!(e instanceof FirebaseError) || e.code !== 'auth/email-already-in-use') throw e;
-          try {
-            await signInWithEmailAndPassword(auth, email.trim(), password);
-            return;
-          } catch {
-            throw e;
-          }
-        }
+        const credential = await createUserWithEmailAndPassword(auth, email.trim(), password);
         const idToken = await credential.user.getIdToken();
         const res = await fetch('/api/auth/init-user', {
           method: 'POST',

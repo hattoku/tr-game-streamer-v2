@@ -2,7 +2,10 @@
 // 管理 ユーザー管理仕様書 §3・ページ 設定 仕様書 §8・ページ ログイン アカウント登録・ログイン仕様書 §5.5〜5.6。
 
 export type AccountStatus = 'active' | 'withdrawn';
-/** 退会させた者。self＝本人（自分で再開できる）／admin＝管理者（本人では再開できない。2026-11-17 ユーザー決定） */
+/**
+ * 退会させた者。admin＝管理者（本人では再開できない。2026-11-17 ユーザー決定）。
+ * self＝本人は 2026-11-19 より前の退会だけ（それ以降の本人の退会はデータごと消去するので、この状態は作られない）
+ */
 export type WithdrawnBy = 'self' | 'admin';
 
 /** users ドキュメントから状態を読む。フィールドが無い古いアカウントは利用中 */
@@ -77,7 +80,7 @@ export interface AdminUserDetailJson extends AdminUserRowJson {
 // ---------------------------------------------------------------------------
 
 export type StatusFilter = 'all' | 'active' | 'withdrawn';
-export type RoleFilter = 'all' | 'user' | 'admin';
+export type RoleFilter = 'all' | 'user' | 'owner' | 'operator';
 export type SortKey = 'createdDesc' | 'createdAsc' | 'lastLoginDesc' | 'lastLoginAsc' | 'nameAsc';
 
 export interface UserFilter {
@@ -130,8 +133,7 @@ export function filterUsers(rows: AdminUserRowJson[], filter: UserFilter): Admin
   const result = rows.filter((r) => {
     if (keyword && !r.displayName.toLowerCase().includes(keyword) && !(r.email ?? '').toLowerCase().includes(keyword)) return false;
     if (filter.status !== 'all' && r.accountStatus !== filter.status) return false;
-    if (filter.role === 'user' && r.role !== 'user') return false;
-    if (filter.role === 'admin' && r.role === 'user') return false;
+    if (filter.role !== 'all' && r.role !== filter.role) return false;
     if (!inRange(r.createdAt, filter.createdFrom, filter.createdTo)) return false;
     if (!inRange(r.lastLoginAt, filter.lastLoginFrom, filter.lastLoginTo)) return false;
     return true;

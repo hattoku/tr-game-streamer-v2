@@ -25,7 +25,7 @@ import { Input } from '@/components/ui/Input';
 import { Pagination } from '@/components/ui/Pagination';
 import { SelectMenu } from '@/components/ui/DropdownMenu';
 import { SkeletonText } from '@/components/ui/Skeleton';
-import { UserIcon } from '@/components/ui/icons';
+import { ChevronDownIcon, ChevronUpIcon, UserIcon } from '@/components/ui/icons';
 import { SignupChart } from '@/components/admin/users/SignupChart';
 import { RoleBadge, StatusTag, formatDateTime } from '@/components/admin/users/labels';
 
@@ -39,7 +39,8 @@ const STATUS_OPTIONS: Array<{ value: StatusFilter; label: string }> = [
 const ROLE_OPTIONS: Array<{ value: RoleFilter; label: string }> = [
   { value: 'all', label: 'すべて' },
   { value: 'user', label: '一般ユーザー' },
-  { value: 'admin', label: '管理者' },
+  { value: 'owner', label: 'オーナー' },
+  { value: 'operator', label: '運営者' },
 ];
 const SORT_OPTIONS: Array<{ value: SortKey; label: string }> = [
   { value: 'createdDesc', label: '登録が新しい順' },
@@ -54,6 +55,7 @@ export default function AdminUsersPage() {
   const [loadError, setLoadError] = useState(false);
   const [filter, setFilter] = useState<UserFilter>(DEFAULT_USER_FILTER);
   const [page, setPage] = useState(1);
+  const [filterOpen, setFilterOpen] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -99,7 +101,7 @@ export default function AdminUsersPage() {
         <>
           <SignupChart createdAts={signupDates} />
 
-          {/* 絞り込み（§3.1。複数条件は AND） */}
+          {/* 絞り込み（§3.1。複数条件は AND）。検索欄は常に見せ、そのほかの条件はじゃばらに畳む */}
           <Card>
             <div className="flex flex-col gap-3">
               <Input
@@ -110,63 +112,82 @@ export default function AdminUsersPage() {
                 onChange={(e) => update('keyword', e.target.value)}
                 data-testid="user-search"
               />
-              <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center">
-                <SelectMenu
-                  value={filter.status}
-                  onValueChange={(v) => update('status', v)}
-                  options={STATUS_OPTIONS}
-                  prefix="状態:"
-                  aria-label="状態で絞り込み"
-                  align="start"
-                  className="w-full md:w-auto"
-                />
-                <SelectMenu
-                  value={filter.role}
-                  onValueChange={(v) => update('role', v)}
-                  options={ROLE_OPTIONS}
-                  prefix="種別:"
-                  aria-label="種別で絞り込み"
-                  align="start"
-                  className="w-full md:w-auto"
-                />
-                <SelectMenu
-                  value={filter.sort}
-                  onValueChange={(v) => update('sort', v)}
-                  options={SORT_OPTIONS}
-                  prefix="並び:"
-                  aria-label="並び替え"
-                  align="start"
-                  className="w-full md:w-auto"
-                />
-              </div>
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                <DateRange
-                  label="登録日"
-                  from={filter.createdFrom}
-                  to={filter.createdTo}
-                  onFrom={(v) => update('createdFrom', v)}
-                  onTo={(v) => update('createdTo', v)}
-                />
-                <DateRange
-                  label="最終ログイン日"
-                  from={filter.lastLoginFrom}
-                  to={filter.lastLoginTo}
-                  onFrom={(v) => update('lastLoginFrom', v)}
-                  onTo={(v) => update('lastLoginTo', v)}
-                />
-              </div>
-              {isFiltered && (
-                <div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setFilter((prev) => ({ ...DEFAULT_USER_FILTER, sort: prev.sort }));
-                      setPage(1);
-                    }}
-                  >
-                    条件をクリア
-                  </Button>
+              <button
+                type="button"
+                className="flex w-full items-center justify-between gap-2 text-left"
+                aria-expanded={filterOpen}
+                aria-controls="user-filter-panel"
+                onClick={() => setFilterOpen((v) => !v)}
+                data-testid="user-filter-toggle"
+              >
+                <span className="text-xl font-medium text-text-primary">
+                  絞り込み
+                  {isFiltered && <span className="ml-2 text-md font-normal text-text-muted">（条件あり）</span>}
+                </span>
+                {filterOpen ? <ChevronUpIcon size={16} /> : <ChevronDownIcon size={16} />}
+              </button>
+              {filterOpen && (
+                <div id="user-filter-panel" className="flex flex-col gap-3" data-testid="user-filter-panel">
+                  <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center">
+                    <SelectMenu
+                      value={filter.status}
+                      onValueChange={(v) => update('status', v)}
+                      options={STATUS_OPTIONS}
+                      prefix="状態:"
+                      aria-label="状態で絞り込み"
+                      align="start"
+                      className="w-full md:w-auto"
+                    />
+                    <SelectMenu
+                      value={filter.role}
+                      onValueChange={(v) => update('role', v)}
+                      options={ROLE_OPTIONS}
+                      prefix="種別:"
+                      aria-label="種別で絞り込み"
+                      align="start"
+                      className="w-full md:w-auto"
+                    />
+                    <SelectMenu
+                      value={filter.sort}
+                      onValueChange={(v) => update('sort', v)}
+                      options={SORT_OPTIONS}
+                      prefix="並び:"
+                      aria-label="並び替え"
+                      align="start"
+                      className="w-full md:w-auto"
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <DateRange
+                      label="登録日"
+                      from={filter.createdFrom}
+                      to={filter.createdTo}
+                      onFrom={(v) => update('createdFrom', v)}
+                      onTo={(v) => update('createdTo', v)}
+                    />
+                    <DateRange
+                      label="最終ログイン日"
+                      from={filter.lastLoginFrom}
+                      to={filter.lastLoginTo}
+                      onFrom={(v) => update('lastLoginFrom', v)}
+                      onTo={(v) => update('lastLoginTo', v)}
+                    />
+                  </div>
+                  {isFiltered && (
+                    <div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setFilter((prev) => ({ ...DEFAULT_USER_FILTER, sort: prev.sort }));
+                          setPage(1);
+                        }}
+                      >
+                        条件をクリア
+                      </Button>
+                    </div>
+                  )}
+    
                 </div>
               )}
             </div>
