@@ -106,6 +106,7 @@ tr-game-streamer-v2 の**コーディング支援用**Wiki（実装の変更履�
 - [[2026-11-18-admin-notices]] — 運営からのお知らせ。管理 `/admin/notices`（添付の種類・ベル通知・重要の終わり日時・TOP/メールのプレビュー・下書き→公開→非公開）、TOP の一番上に重要なお知らせ・一番下に最新3件、`/notices` 一覧・詳細、通知画面の「お知らせ」タブ。メール送信は後日（PR #65）
 - [[2026-11-19-user-management-and-withdrawal]] — ユーザー管理 `/admin/users`（一覧・絞り込み・登録推移グラフ・詳細で編集・備考・退会させる／解除）と、退会をアカウントを残してログインできなくする方式に（再開の確認、`accountStatus`・`isAuthorWithdrawn`・`admin_user_records`、API とルールで締め出し）（PR #64）
 - [[2026-11-19-admin-header-mobile-menu]] — 管理画面ヘッダーのスマホ表示を、横スクロールで見切れるナビからハンバーガー＋左ドロワーに（ページ一覧・サービスへ戻る・件数バッジ、未処理は赤ドット）。デザイントークン v2.16 §14.1（PR #68）
+- [[2026-11-22-self-withdrawal-data-deletion]] — 本人の退会を、データとアカウントを消去する方式に変更（再開を廃止、2段階の確認、途中失敗のやり直し、管理者の退会は従来どおり締め出し）
 
 ## Entities
 - [[proxy]] — proxy.ts（旧middleware.ts、Next.js 16のproxy規約対応）。stgゲート。`/collections*` の 404 書き換えは 2026-11-17 にまとめのコード削除で外した
