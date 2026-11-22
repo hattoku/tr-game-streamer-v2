@@ -10,7 +10,7 @@
 
 import { useEffect, useState } from 'react';
 import { Card, CardTitle } from '@/components/ui/Card';
-import { Button, LinkButton } from '@/components/ui/Button';
+import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Pagination } from '@/components/ui/Pagination';
 import { Skeleton } from '@/components/ui/Skeleton';
@@ -18,6 +18,8 @@ import { SelectMenu } from '@/components/ui/DropdownMenu';
 import { InventoryIcon } from '@/components/ui/icons';
 import { cn } from '@/components/ui/cn';
 import { PlaylistCardGrid } from '@/components/playlists/PlaylistGrid';
+import { LoginGateLink } from '@/components/layout/LoginGateLink';
+import { LOGIN_PROMPTS } from '@/components/layout/login-prompts';
 import { fetchPlaylistPage, useCatalogQuery } from '@/lib/catalog';
 import type { PlaylistSort } from '@/lib/catalog-shared';
 
@@ -91,7 +93,11 @@ export function PlaylistListSection({ title, filter, addHref, addLabel = '再生
           icon={<InventoryIcon />}
           title="まだ登録されている再生リストがありません"
           description="最初の再生リストを登録してみませんか？"
-          action={<LinkButton href={addHref}>{addLabel}</LinkButton>}
+          action={
+            <LoginGateLink href={addHref} variant="secondary" size="md" prompt={LOGIN_PROMPTS.addPlaylist}>
+              {addLabel}
+            </LoginGateLink>
+          }
         />
       ) : (
         <>
@@ -100,9 +106,9 @@ export function PlaylistListSection({ title, filter, addHref, addLabel = '再生
               <span className="text-md text-text-muted">{data.total.toLocaleString()}件</span>
               <SelectMenu value={sort} onValueChange={setSort} options={SORT_OPTIONS} prefix="ソート:" aria-label="並び替え" />
             </div>
-            <LinkButton href={addHref} variant="secondary" size="sm">
+            <LoginGateLink href={addHref} variant="secondary" size="sm" prompt={LOGIN_PROMPTS.addPlaylist}>
               {addLabel}
-            </LinkButton>
+            </LoginGateLink>
           </div>
           {error && <LoadError onRetry={retry} />}
           <div aria-busy={loading} className={cn('transition-opacity', loading && 'opacity-60')}>
