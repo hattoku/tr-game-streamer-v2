@@ -279,7 +279,7 @@ export default function NotificationsPage() {
                       <span className="flex min-w-0 flex-1 flex-col gap-1">
                         <span className="flex items-center justify-between gap-3">
                           <span className="flex min-w-0 items-center gap-2">
-                            <Tag tone={notificationTypeTone(n.type)} className={cn('shrink-0 whitespace-nowrap', n.isRead && 'opacity-60')}>{TYPE_LABEL[n.type] ?? '通知'}</Tag>
+                            <Tag tone={notificationTypeTone(n.type)} className={cn('shrink-0 whitespace-nowrap', n.isRead && 'opacity-80')}>{TYPE_LABEL[n.type] ?? '通知'}</Tag>
                             {n.type === 'series_new_episode' && n.channelName && (
                               <span className="min-w-0 truncate text-md text-text-tertiary" data-testid="notification-channel">
                                 {n.channelName}

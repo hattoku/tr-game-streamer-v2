@@ -11,12 +11,13 @@ import { cn } from './cn';
 export type TagTone = 'neutral' | 'success' | 'info' | 'warning' | 'danger';
 
 const TONE_CLASS: Record<Exclude<TagTone, 'neutral'>, string> = {
-  success: 'border border-tone-success-border bg-tone-success-bg text-tone-success',
-  info: 'border border-tone-info-border bg-tone-info-bg text-tone-info',
-  warning: 'border border-tone-warning-border bg-tone-warning-bg text-tone-warning',
-  danger: 'border border-tone-danger-border bg-tone-danger-bg text-tone-danger',
+  success: 'bg-tone-success-bg text-tone-success ring-1 ring-inset ring-tone-success-border',
+  info: 'bg-tone-info-bg text-tone-info ring-1 ring-inset ring-tone-info-border',
+  warning: 'bg-tone-warning-bg text-tone-warning ring-1 ring-inset ring-tone-warning-border',
+  danger: 'bg-tone-danger-bg text-tone-danger ring-1 ring-inset ring-tone-danger-border',
 };
 
+/* 枠は ring（内側）で描く。border だと tone 付きだけ高さが2px増え、隣のグレーのラベルと上下がずれるため */
 /** Tag を使えない要素（data-testid 付きの span など）に同じ色を当てるためのクラス。neutral は空 */
 export function toneClassName(tone: TagTone): string {
   return tone === 'neutral' ? '' : TONE_CLASS[tone];
