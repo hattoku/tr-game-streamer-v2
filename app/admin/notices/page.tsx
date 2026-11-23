@@ -18,6 +18,7 @@ import { BellIcon, InfoIcon, PlusIcon } from '@/components/ui/icons';
 import { ImportantLabel } from '@/components/notices/NoticeParts';
 import { fetchAdminNoticeRows, fetchUserDisplayNames, type AdminNoticeRow } from '@/lib/notice-admin';
 import { NOTICE_STATUSES, formatNoticeDate, isImportantActive, noticeStatusLabel, type NoticeStatus } from '@/lib/notice-shared';
+import { noticeStatusTone } from '@/lib/label-tone-shared';
 
 const PAGE_SIZE = 20;
 type Filter = 'all' | NoticeStatus;
@@ -112,7 +113,7 @@ export default function AdminNoticesPage() {
                       <Link href={`/admin/notices/${r.id}`} className="flex w-full min-w-0 flex-col gap-1 px-4 py-3 md:px-[18px] md:py-[14px]">
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div className="flex min-w-0 flex-wrap items-center gap-2">
-                            <Tag emphasis={r.status === 'published'}>{noticeStatusLabel(r.status)}</Tag>
+                            <Tag tone={noticeStatusTone(r.status)}>{noticeStatusLabel(r.status)}</Tag>
                             {r.notifyBell && (
                               <span className="inline-flex items-center gap-1 text-sm text-text-tertiary" title="ベルで通知">
                                 <BellIcon size={14} />

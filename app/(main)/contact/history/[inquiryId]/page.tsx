@@ -29,6 +29,7 @@ import { ChevronLeftIcon, ExternalLinkIcon } from '@/components/ui/icons';
 import { ThreadMessage, formatInquiryDate } from '@/components/contact/ThreadMessage';
 import { InquiryAttachments } from '@/components/contact/InquiryAttachments';
 import { AttachmentPicker, type PickedImage } from '@/components/contact/AttachmentPicker';
+import { inquiryStatusTone } from '@/lib/label-tone-shared';
 
 export default function ContactThreadPage() {
   const { inquiryId } = useParams<{ inquiryId: string }>();
@@ -146,7 +147,7 @@ export default function ContactThreadPage() {
       {backLink}
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <SectionHeading>{inquiryCategoryLabel(inquiry.category)}</SectionHeading>
-        <Tag emphasis={!isClosed}>{inquiryStatusLabel(inquiry.status)}</Tag>
+        <Tag tone={inquiryStatusTone(inquiry.status)}>{inquiryStatusLabel(inquiry.status)}</Tag>
       </div>
 
       <Card className="flex flex-col gap-4">

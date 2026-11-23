@@ -89,6 +89,20 @@
   --color-notice-important-border: rgba(240, 165, 0, 0.45);
   --color-notice-important-on: #000000;
 
+  /* 状態ラベル色（デザイントークン仕様書 §5.4）。表示専用ラベルの tone。色だけに頼らず文言も添える */
+  --color-tone-success: #1db37a;
+  --color-tone-success-bg: rgba(29, 179, 122, 0.14);
+  --color-tone-success-border: rgba(29, 179, 122, 0.4);
+  --color-tone-info: #38a8f5;
+  --color-tone-info-bg: rgba(56, 168, 245, 0.14);
+  --color-tone-info-border: rgba(56, 168, 245, 0.4);
+  --color-tone-warning: #f0a500;
+  --color-tone-warning-bg: rgba(240, 165, 0, 0.14);
+  --color-tone-warning-border: rgba(240, 165, 0, 0.4);
+  --color-tone-danger: #f05a5a;
+  --color-tone-danger-bg: rgba(224, 48, 48, 0.16);
+  --color-tone-danger-border: rgba(224, 48, 48, 0.45);
+
   /* §16 奥行き・演出: 影 */
   --shadow-card: 0 6px 18px rgba(0, 0, 0, 0.45);
   --shadow-card-hover: 0 14px 32px rgba(0, 0, 0, 0.6);

@@ -24,6 +24,8 @@ test('お問い合わせの送信から再オープンまで', async ({ userPage
     const item = userPage.getByRole('link').filter({ hasText: body });
     await expect(item).toBeVisible();
     await expect(item).toContainText('未対応');
+    // 状態ラベルの色（デザイントークン仕様書 §5.4）: 未対応＝赤
+    await expect(item.locator('[data-tone="danger"]')).toHaveText('未対応');
     await expect(item).not.toContainText('運営から新しい返信があります');
     expect(await hasHorizontalScroll(userPage)).toBe(false);
     inquiryId = (await item.getAttribute('href'))!.split('/').pop()!;
@@ -56,6 +58,7 @@ test('お問い合わせの送信から再オープンまで', async ({ userPage
     await expect(item).toContainText('運営から新しい返信があります');
     // 管理者が返信すると「未対応」から「対応中」になる（管理 お問い合わせ管理仕様書 §4.5）
     await expect(item).toContainText('対応中');
+    await expect(item.locator('[data-tone="info"]')).toHaveText('対応中'); // 対応中＝青
 
     await item.click();
     await expect(userPage.getByText(adminReply)).toBeVisible();
@@ -90,6 +93,7 @@ test('お問い合わせの送信から再オープンまで', async ({ userPage
     await userPage.getByRole('button', { name: '再オープンする' }).click();
     await expect(userPage.getByLabel('メッセージ', { exact: true })).toBeVisible();
     await expect(userPage.getByText('未対応', { exact: true })).toBeVisible();
+    await expect(userPage.locator('[data-tone="danger"]', { hasText: '未対応' })).toBeVisible();
   });
 
   await test.step('API は本人以外に 404・未ログインに 401 を返し、対応メモを含めない', async () => {

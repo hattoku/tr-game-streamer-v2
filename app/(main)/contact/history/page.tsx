@@ -20,6 +20,7 @@ import { Tag } from '@/components/ui/Tag';
 import { UnreadDot } from '@/components/ui/Badge';
 import { CommentIcon } from '@/components/ui/icons';
 import { formatInquiryDate } from '@/components/contact/ThreadMessage';
+import { inquiryStatusTone } from '@/lib/label-tone-shared';
 
 export default function ContactHistoryPage() {
   const { user, loading } = useAuth();
@@ -77,7 +78,7 @@ export default function ContactHistoryPage() {
                   <span className="flex min-w-0 flex-1 flex-col gap-1">
                     <span className="flex flex-wrap items-center justify-between gap-2">
                       <span className="flex min-w-0 flex-wrap items-center gap-2">
-                        <Tag emphasis={r.status !== 'resolved'}>{inquiryStatusLabel(r.status)}</Tag>
+                        <Tag tone={inquiryStatusTone(r.status)}>{inquiryStatusLabel(r.status)}</Tag>
                         <span className="text-base text-text-primary">{inquiryCategoryLabel(r.category)}</span>
                       </span>
                       <time className="text-sm text-text-muted">{formatInquiryDate(r.submittedAt)}</time>

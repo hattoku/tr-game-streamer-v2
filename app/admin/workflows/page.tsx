@@ -21,6 +21,7 @@ import { SkeletonText } from '@/components/ui/Skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { Tag } from '@/components/ui/Tag';
 import { AlertIcon, InventoryIcon } from '@/components/ui/icons';
+import { workflowStatusTone } from '@/lib/label-tone-shared';
 
 type Filter = 'all' | 'pending' | 'approved' | 'rejected';
 
@@ -150,7 +151,7 @@ function WorkflowSection({
                   <Card interactive flush>
                     <Link href={`/admin/workflows/${r.id}`} className="flex w-full flex-col gap-1 px-4 py-3 md:px-[18px] md:py-[14px]">
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <Tag emphasis={isPending(r.status)}>{workflowStatusLabel(r.status)}</Tag>
+                        <Tag tone={workflowStatusTone(r.status)}>{workflowStatusLabel(r.status)}</Tag>
                         <time className="text-sm text-text-muted">{formatDate(r.submittedAt)}</time>
                       </div>
                       <p className="text-base text-text-primary">{r.summary}</p>
