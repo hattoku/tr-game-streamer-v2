@@ -49,6 +49,8 @@ import {
   type NoticeInputErrors,
   type NoticeStatus,
 } from '@/lib/notice-shared';
+import { toneClassName } from '@/components/ui/Tag';
+import { noticeStatusTone } from '@/lib/label-tone-shared';
 import { NoticePreview } from './NoticePreview';
 
 /** ミリ秒 → datetime-local の値（端末の時刻で） */
@@ -266,7 +268,7 @@ export function NoticeEditor({ initial }: { initial: AdminNoticeDetail | null })
         <span
           className={cn(
             'inline-flex items-center rounded-[4px] px-2 py-[2px] text-sm font-medium',
-            status === 'published' ? 'bg-brand-watching-bg text-brand-watching' : 'bg-bg-hover text-text-secondary',
+            noticeStatusTone(status) === 'neutral' ? 'bg-bg-hover text-text-secondary' : toneClassName(noticeStatusTone(status)),
           )}
           data-testid="notice-status"
         >

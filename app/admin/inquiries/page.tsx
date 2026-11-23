@@ -28,6 +28,7 @@ import { SkeletonText } from '@/components/ui/Skeleton';
 import { Tag } from '@/components/ui/Tag';
 import { StatusBadge } from '@/components/ui/Badge';
 import { CommentIcon } from '@/components/ui/icons';
+import { inquiryStatusTone } from '@/lib/label-tone-shared';
 
 type InquiryRow = AdminInquiryRow;
 
@@ -143,7 +144,7 @@ export default function AdminInquiriesPage() {
                     <Link href={`/admin/inquiries/${r.id}`} className="flex w-full min-w-0 flex-col gap-1 px-4 py-3 md:px-[18px] md:py-[14px]">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="flex min-w-0 flex-wrap items-center gap-2">
-                          <Tag emphasis={r.status === 'open'}>{inquiryStatusLabel(r.status)}</Tag>
+                          <Tag tone={inquiryStatusTone(r.status)}>{inquiryStatusLabel(r.status)}</Tag>
                           <span className="text-base text-text-primary">{inquiryCategoryLabel(r.category)}</span>
                           {r.awaitingAdminReply && <StatusBadge>ユーザー返信あり</StatusBadge>}
                         </div>

@@ -29,6 +29,7 @@ import { PlaylistSummary } from '@/components/playlists/PlaylistSummary';
 import { CHANNEL_APPLICATION_STEPS, ProposalSteps } from '@/components/playlists/ProposalSteps';
 import { CHANGE_TARGET_LABEL, describeChangeReason, type ChangeTargetType } from '@/lib/change-proposal-shared';
 import { FallbackImage } from '@/components/ui/FallbackImage';
+import { proposalStatusTone } from '@/lib/label-tone-shared';
 
 interface ChannelApplicationItem {
   kind: 'channel_application';
@@ -231,7 +232,7 @@ export default function ProposalHistoryPage() {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="flex items-center gap-2">
                     {unseenWorkflowIds.has(p.id) && <UnreadDot />}
-                    <Tag emphasis={p.status === 'reviewing'}>{STATUS_LABEL[p.status]}</Tag>
+                    <Tag tone={proposalStatusTone(p.status)}>{STATUS_LABEL[p.status]}</Tag>
                   </span>
                   <span className="text-md text-text-muted">提案日時: {formatDate(p.submittedAt)}</span>
                 </div>
@@ -274,7 +275,7 @@ function ChannelApplicationCard({ item, unseen }: { item: ChannelApplicationItem
         <div className="flex items-center gap-2">
           {unseen && <UnreadDot />}
           <Tag>チャンネル申請</Tag>
-          <Tag emphasis={item.status === 'reviewing'}>{item.status === 'reviewing' ? '確認待ち' : item.status === 'approved' ? '承認' : '見送り'}</Tag>
+          <Tag tone={proposalStatusTone(item.status)}>{item.status === 'reviewing' ? '確認待ち' : item.status === 'approved' ? '承認' : '見送り'}</Tag>
         </div>
         <span className="text-md text-text-muted">申請日時: {formatDate(item.submittedAt)}</span>
       </div>
@@ -327,7 +328,7 @@ function ChangeProposalCard({ item, unseen }: { item: ChangeProposalItem; unseen
         <div className="flex items-center gap-2">
           {unseen && <UnreadDot />}
           <Tag>変更の提案（{CHANGE_TARGET_LABEL[item.targetType]}）</Tag>
-          <Tag emphasis={item.status === 'reviewing'}>{item.status === 'reviewing' ? '確認待ち' : item.status === 'approved' ? '反映済み' : '見送り'}</Tag>
+          <Tag tone={proposalStatusTone(item.status)}>{item.status === 'reviewing' ? '確認待ち' : item.status === 'approved' ? '反映済み' : '見送り'}</Tag>
         </div>
         <span className="text-md text-text-muted">提案日時: {formatDate(item.submittedAt)}</span>
       </div>

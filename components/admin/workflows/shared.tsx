@@ -16,6 +16,7 @@ import { Modal } from '@/components/ui/Modal';
 import { Tag } from '@/components/ui/Tag';
 import { useToast } from '@/components/ui/Toast';
 import { AdminApiError } from '@/lib/admin-api';
+import { workflowStatusTone } from '@/lib/label-tone-shared';
 
 const MAX_MEMO_LENGTH = MAX_OPERATOR_MEMO_LENGTH;
 
@@ -52,7 +53,7 @@ export function WorkflowHeader({
         <p className="text-md text-text-tertiary">提出日時: {submittedAt ? new Date(submittedAt).toLocaleString('ja-JP') : '-'}</p>
         {submittedBy && <p className="text-md text-text-tertiary">提出者: {submitterName ?? '…'}</p>}
       </div>
-      <Tag emphasis={isPendingStatus(status)}>{workflowStatusLabel(status)}</Tag>
+      <Tag tone={workflowStatusTone(status)}>{workflowStatusLabel(status)}</Tag>
     </div>
   );
 }
